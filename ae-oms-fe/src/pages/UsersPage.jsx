@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { userService } from '../services/userService';
+import { stageService } from '../services/stageService';
 import {
   ROLES,
   ROLE_LABELS,
@@ -126,6 +127,12 @@ export function UsersPage() {
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
+  // Stage Template states (FR-STG-02)
+  const [stageTemplate, setStageTemplate] = useState([]);
+  const [isStageModalOpen, setIsStageModalOpen] = useState(false);
+  const [editingStage, setEditingStage] = useState(null);
+  const [stageFormData, setStageFormData] = useState({ name: '', description: '', durationDays: 10, defaultAgencyTrade: '' });
+
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -140,6 +147,7 @@ export function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
+    stageService.getStageTemplate().then((d) => setStageTemplate(d));
     setCustomRoles(getCustomRoles());
     setCustomPermissions(getCustomRolePermissions());
   }, []);
@@ -320,6 +328,87 @@ export function UsersPage() {
     setCustomPermissions(getCustomRolePermissions());
     setIsRoleModalOpen(false);
     toast.success(`Role "${newRole.label}" successfully created!`);
+  };
+
+  // Stage Template Handlers (FR-STG-02)
+  const handleOpenAddStage = () => {
+    setEditingStage(null);
+    setStageFormData({
+      name: '',
+      description: '',
+      durationDays: 10,
+      defaultAgencyTrade: '',
+    });
+    setIsStageModalOpen(true);
+  };
+
+  const handleOpenEditStage = (stage) => {
+    setEditingStage(stage);
+    setStageFormData({
+      name: stage.name,
+      description: stage.description || '',
+      durationDays: stage.durationDays || 10,
+      defaultAgencyTrade: stage.defaultAgencyTrade || '',
+    });
+    setIsStageModalOpen(true);
+  };
+
+  const handleSaveStage = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!stageFormData.name.trim()) {
+      toast.error('Stage name is required');
+      return;
+    }
+
+    try {
+      let updated = [];
+      if (editingStage) {
+        updated = stageTemplate.map((s) =>
+          s.order === editingStage.order ? { ...s, ...stageFormData, durationDays: Number(stageFormData.durationDays) || 10 } : s
+        );
+      } else {
+        const newStage = {
+          order: stageTemplate.length + 1,
+          ...stageFormData,
+          durationDays: Number(stageFormData.durationDays) || 10,
+        };
+        updated = [...stageTemplate, newStage];
+      }
+      await stageService.updateStageTemplate(updated);
+      setStageTemplate(updated);
+      setIsStageModalOpen(false);
+      toast.success(editingStage ? `Stage "${stageFormData.name}" updated` : `Stage "${stageFormData.name}" added to template`);
+    } catch (err) {
+      toast.error('Failed to save stage template');
+    }
+  };
+
+  const handleMoveStage = async (index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= stageTemplate.length) return;
+
+    const copy = [...stageTemplate];
+    const [moved] = copy.splice(index, 1);
+    copy.splice(targetIndex, 0, moved);
+
+    const reordered = copy.map((s, idx) => ({ ...s, order: idx + 1 }));
+    await stageService.updateStageTemplate(reordered);
+    setStageTemplate(reordered);
+    toast.success(`Reordered: "${moved.name}" moved ${direction}`);
+  };
+
+  const handleDeleteStage = async (stage) => {
+    const remaining = stageTemplate.filter((s) => s.order !== stage.order);
+    const reordered = remaining.map((s, idx) => ({ ...s, order: idx + 1 }));
+    await stageService.updateStageTemplate(reordered);
+    setStageTemplate(reordered);
+    toast.success(`Stage "${stage.name}" removed from template`);
+  };
+
+  const handleResetDefaultStages = async () => {
+    const defaults = await stageService.resetDefaultTemplate();
+    setStageTemplate(defaults);
+    toast.success('Template reset to BeForth 12 canonical stages');
   };
 
   const handleToggleStatus = async () => {
@@ -537,7 +626,7 @@ export function UsersPage() {
             emptyDescription={searchTerm || roleFilter !== 'ALL' ? "Try modifying the search term or clear the role filter." : "Click 'Add New User' to add a personnel or client record."}
           />
         </>
-      ) : (
+      ) : activeTab === 'matrix' ? (
         /* Role Permissions Matrix Tab */
         <Card
           title="System Permission Matrix"
@@ -597,6 +686,81 @@ export function UsersPage() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : (
+        <Card
+          title="12-Stage Master Template (FR-STG-01 & FR-STG-02)"
+          subtitle="BeForth SRS Section 3.5: Default sequential workflow for interior fit-out projects. Changes apply to newly created projects."
+        >
+          <div className="overflow-x-auto border border-border rounded-lg">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-brand-50 text-text-muted uppercase font-semibold border-b">
+                <tr>
+                  <th className="p-3 w-16 text-center">Order</th>
+                  <th className="p-3">Stage Name</th>
+                  <th className="p-3">Scope Description</th>
+                  <th className="p-3">Default Trade</th>
+                  <th className="p-3 text-center">Duration</th>
+                  {isAdmin && <th className="p-3 text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {stageTemplate.map((stage, idx) => (
+                  <tr key={stage.order} className="hover:bg-brand-50/50">
+                    <td className="p-3 text-center">
+                      <span className="w-6 h-6 inline-flex items-center justify-center rounded-full bg-brand-100 text-brand-800 font-bold text-[11px]">
+                        {stage.order}
+                      </span>
+                    </td>
+                    <td className="p-3 font-bold text-text-main text-sm">{stage.name}</td>
+                    <td className="p-3 text-text-muted max-w-sm">{stage.description}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-medium border border-brand-200">
+                        {stage.defaultAgencyTrade || 'General'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-center font-mono font-semibold text-text-main">
+                      {stage.durationDays} days
+                    </td>
+                    {isAdmin && (
+                      <td className="p-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <IconButton
+                            icon="chevron-up"
+                            size="xs"
+                            disabled={idx === 0}
+                            ariaLabel="Move stage up"
+                            onClick={() => handleMoveStage(idx, 'up')}
+                          />
+                          <IconButton
+                            icon="chevron-down"
+                            size="xs"
+                            disabled={idx === stageTemplate.length - 1}
+                            ariaLabel="Move stage down"
+                            onClick={() => handleMoveStage(idx, 'down')}
+                          />
+                          <IconButton
+                            icon="edit"
+                            size="xs"
+                            ariaLabel={`Edit stage ${stage.name}`}
+                            onClick={() => handleOpenEditStage(stage)}
+                          />
+                          <IconButton
+                            icon="trash"
+                            size="xs"
+                            variant="ghost"
+                            className="text-danger hover:bg-danger-light"
+                            ariaLabel={`Delete stage ${stage.name}`}
+                            onClick={() => handleDeleteStage(stage)}
+                          />
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -821,6 +985,60 @@ export function UsersPage() {
         </form>
       </Modal>
 
+      {/* Add / Edit Stage Modal */}
+      <Modal
+        isOpen={isStageModalOpen}
+        onClose={() => setIsStageModalOpen(false)}
+        title={editingStage ? `Edit Stage: ${editingStage.name}` : 'Add Master Stage'}
+        subtitle="Configure default stage parameters inherited by new interior fit-out projects"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setIsStageModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleSaveStage}>
+              {editingStage ? 'Save Changes' : 'Add Stage'}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSaveStage} className="space-y-3">
+          <Input
+            label="Stage Name"
+            required
+            value={stageFormData.name}
+            onChange={(e) => setStageFormData({ ...stageFormData, name: e.target.value })}
+            placeholder="e.g. Acoustic Treatment"
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Default Trade / Agency Type"
+              value={stageFormData.defaultAgencyTrade}
+              onChange={(e) => setStageFormData({ ...stageFormData, defaultAgencyTrade: e.target.value })}
+              placeholder="e.g. Acoustic"
+            />
+
+            <Input
+              label="Standard Duration (Days)"
+              type="number"
+              min="1"
+              max="90"
+              required
+              value={stageFormData.durationDays}
+              onChange={(e) => setStageFormData({ ...stageFormData, durationDays: e.target.value })}
+            />
+          </div>
+
+          <Input
+            label="Stage Scope & Execution Description"
+            value={stageFormData.description}
+            onChange={(e) => setStageFormData({ ...stageFormData, description: e.target.value })}
+            placeholder="e.g. Fabric wall panels, ceiling sound insulation, and acoustic baffling"
+          />
+        </form>
+      </Modal>
+
       {/* Deactivate/Reactivate Confirm Dialog */}
       <ConfirmDialog
         isOpen={!!confirmTarget}
@@ -847,3 +1065,5 @@ export function UsersPage() {
 }
 
 export default UsersPage;
+
+

@@ -14,6 +14,7 @@ import ClientDetailPage from '../pages/ClientDetailPage';
 import ProjectsPage from '../pages/ProjectsPage';
 import ProjectDetailPage from '../pages/ProjectDetailPage';
 import AgenciesPage from '../pages/AgenciesPage';
+import AttendancePage from '../pages/AttendancePage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 
@@ -101,12 +102,7 @@ export function AppRoutes() {
           path="attendance"
           element={
             <RoleRoute permissions={['attendance.markOwn', 'attendance.viewBoard']}>
-              <PlaceholderPage
-                title="Attendance"
-                subtitle="Daily site punch-in/out, biometric logs, overtime records, and site muster roll"
-                icon="attendance"
-                phase="Phase 3"
-              />
+              <AttendancePage />
             </RoleRoute>
           }
         />
@@ -224,5 +220,6 @@ export function AppRoutes() {
 }
 
 export default AppRoutes;
+
 
 
