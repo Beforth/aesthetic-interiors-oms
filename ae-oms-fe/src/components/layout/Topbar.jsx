@@ -95,7 +95,6 @@ export function Topbar({ onToggleMobileMenu }) {
         <Link
           to="/components"
           className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors border border-border"
-          title="Component showcase and design tokens"
         >
           <Icon name="layers" size={14} className="text-brand-500" />
           <span>Showcase</span>

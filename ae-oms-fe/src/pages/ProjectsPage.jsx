@@ -22,7 +22,9 @@ import PermissionGate from '../components/ui/PermissionGate';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const { currentUser, role } = useAuth();
+  const { currentUser, role, hasPermission } = useAuth();
+  const isClientView = hasPermission('projects.viewOwn');
+  const isAssignedView = hasPermission('projects.viewAssigned');
   const toast = useToast();
   const canCreateProject = usePermission('projects.create');
 
@@ -144,9 +146,9 @@ export function ProjectsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={role === ROLES.CLIENT ? 'My Project Overview' : 'Fit-Out Projects'}
+        title={isClientView ? 'My Project Overview' : 'Fit-Out Projects'}
         subtitle={
-          role === ROLES.CLIENT
+          isClientView
             ? 'Execution milestones, stage progress, and site inspection status'
             : `All active fit-out sites (${projects.length} sites accessible to ${ROLE_LABELS[role] || role})`
         }
@@ -225,7 +227,7 @@ export function ProjectsPage() {
           description={
             projects.length === 0
               ? 'No fit-out projects have been initiated yet. Click below to create your first project.'
-              : role === ROLES.SUPERVISOR || role === ROLES.WORKER
+              : isAssignedView
               ? 'You are not assigned to any active site projects matching this filter.'
               : 'Try clearing the search query or initiate a new project contract.'
           }

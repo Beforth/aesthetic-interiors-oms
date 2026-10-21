@@ -12,11 +12,11 @@ import Button from '../ui/Button';
  * @param {Object} props
  * @param {string} [props.permission] - Single required permission key
  * @param {string[]} [props.permissions] - Multiple permission keys (allowed if has ANY)
- * @param {string[]} [props.allowedRoles] - Deprecated fallback for role list
  * @param {React.ReactNode} props.children
  */
-export function RoleRoute({ permission, permissions, allowedRoles, children }) {
+export function RoleRoute({ permission, permissions, children }) {
   const { hasPermission, role } = useAuth();
+  const homePath = hasPermission('projects.viewOwn') ? '/projects' : '/dashboard';
 
   let isAllowed = false;
 
@@ -24,8 +24,6 @@ export function RoleRoute({ permission, permissions, allowedRoles, children }) {
     isAllowed = hasPermission(permission);
   } else if (permissions && Array.isArray(permissions)) {
     isAllowed = permissions.some((perm) => hasPermission(perm));
-  } else if (allowedRoles && Array.isArray(allowedRoles)) {
-    isAllowed = allowedRoles.includes(role);
   } else {
     isAllowed = true;
   }
@@ -38,7 +36,7 @@ export function RoleRoute({ permission, permissions, allowedRoles, children }) {
           title="Access Restricted"
           description={`Your account permissions do not allow access to this section. Current role: ${ROLE_LABELS[role] || role}. Switch to an authorized profile using the top right menu to view.`}
           action={
-            <Link to={role === 'client' ? '/projects' : '/dashboard'}>
+            <Link to={homePath}>
               <Button variant="primary" size="sm">
                 Return to Safe Screen
               </Button>

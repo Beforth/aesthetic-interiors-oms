@@ -19,7 +19,7 @@ import EmptyState from '../components/ui/EmptyState';
 import Button from '../components/ui/Button';
 
 export function DashboardPage() {
-  const { currentUser, role } = useAuth();
+  const { currentUser, role, hasPermission } = useAuth();
 
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -46,11 +46,11 @@ export function DashboardPage() {
     loadDashboardData();
   }, [currentUser]);
 
-  const isSupervisorOrWorker = role === ROLES.SUPERVISOR || role === ROLES.WORKER;
+  const isSupervisorOrWorker = hasPermission('projects.viewAssigned');
 
   // Filter tasks if worker/supervisor
   const displayedTasks = isSupervisorOrWorker
-    ? tasks.filter((t) => t.assignedToId === currentUser?.id || role === ROLES.SUPERVISOR).slice(0, 5)
+    ? tasks.filter((t) => t.assignedToId === currentUser?.id || hasPermission('tasks.create')).slice(0, 5)
     : tasks.slice(0, 5);
 
   const activeProjects = projects.filter((p) => p.status === 'in progress');

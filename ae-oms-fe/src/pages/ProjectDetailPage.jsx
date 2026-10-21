@@ -27,6 +27,7 @@ import StageStatusControl from '../components/domain/StageStatusControl';
 import AssigneePicker from '../components/domain/AssigneePicker';
 import AgencySelect from '../components/domain/AgencySelect';
 import PermissionGate from '../components/ui/PermissionGate';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 export function ProjectDetailPage() {
   const { id } = useParams();
@@ -44,6 +45,7 @@ export function ProjectDetailPage() {
   const [users, setUsers] = useState([]);
   const [agencies, setAgencies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [stagePendingDelete, setStagePendingDelete] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
 
   // Stage Edit Modal State
@@ -236,8 +238,10 @@ export function ProjectDetailPage() {
   };
 
   // Delete Stage for this project only
-  const handleDeleteStage = async (stageId, stageName) => {
-    if (!window.confirm(`Remove "${stageName}" from this project timeline?`)) return;
+  const handleDeleteStage = async () => {
+    if (!stagePendingDelete) return;
+    const { id: stageId, name: stageName } = stagePendingDelete;
+    setStagePendingDelete(null);
     const filtered = stages.filter((s) => s.id !== stageId);
     await projectService.updateProjectStages(project.id, filtered);
     setProject((prev) => ({ ...prev, stages: filtered }));
@@ -593,7 +597,7 @@ export function ProjectDetailPage() {
                                 size="sm"
                                 ariaLabel={`Remove ${stage.name}`}
                                 className="text-danger hover:bg-danger-light"
-                                onClick={() => handleDeleteStage(stage.id, stage.name)}
+                                onClick={() => setStagePendingDelete({ id: stage.id, name: stage.name })}
                               />
                             )}
                           </div>
@@ -816,6 +820,15 @@ export function ProjectDetailPage() {
           />
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!stagePendingDelete}
+        title="Remove stage?"
+        message={`Remove "${stagePendingDelete?.name}" from this project timeline?`}
+        confirmText="Remove"
+        onConfirm={handleDeleteStage}
+        onCancel={() => setStagePendingDelete(null)}
+      />
     </div>
   );
 }

@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { authService } from '../services/authService';
-import { ROLES } from '../config/roles';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
@@ -58,7 +57,7 @@ export function LoginPage() {
     toast.success(`Welcome back, ${user.name}`);
     const destination =
       location.state?.from?.pathname ||
-      (user.role === ROLES.CLIENT ? '/projects' : '/dashboard');
+      '/';
     navigate(destination, { replace: true });
   };
 
@@ -85,9 +84,9 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-[#FAF8F5]">
+    <div className="min-h-screen w-full flex bg-brand-canvas">
       {/* Left Column: Luxury Architectural Showcase (Visible on Large Screens) */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-[#241711] via-[#3B251A] to-[#634533] text-surface p-12 xl:p-16 flex-col justify-between overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-brand-espresso via-brand-umber to-brand-bark text-surface p-12 xl:p-16 flex-col justify-between overflow-hidden">
         {/* Subtle Architectural Grid Background Accent */}
         <div
           className="absolute inset-0 opacity-10 pointer-events-none"
@@ -98,8 +97,8 @@ export function LoginPage() {
         />
 
         {/* Ambient Warm Glow */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-[#9E7356]/20 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-[#7D5A44]/30 blur-3xl pointer-events-none" />
+        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-brand-clay/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-brand-500/30 blur-3xl pointer-events-none" />
 
         {/* Brand Header */}
         <div className="relative z-10 flex items-center gap-3.5">

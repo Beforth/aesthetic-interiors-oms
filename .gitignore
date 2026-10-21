@@ -12,9 +12,10 @@ staticfiles/
 .env.local
 
 # Node & React
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+ae-oms-fe/node_modules/
+ae-oms-fe/dist/
+ae-oms-fe/dev-dist/
+ae-oms-fe/.vite/
 npm-debug.log*
 yarn-debug.log*
 
@@ -23,4 +24,3 @@ yarn-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
-ae-oms-fe/

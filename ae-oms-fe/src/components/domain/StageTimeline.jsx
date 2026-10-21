@@ -169,7 +169,7 @@ export function StageTimeline({ stages = [], today = TODAY_STR, onStageClick }) 
                         left: `${leftPercent}%`,
                         width: `${Math.max(widthPercent, 5)}%`,
                       }}
-                      title={`${stage.name} (${formatDate(stage.startDate)} - ${formatDate(
+                      data-tooltip={`${stage.name} (${formatDate(stage.startDate)} - ${formatDate(
                         stage.endDate
                       )})`}
                     >

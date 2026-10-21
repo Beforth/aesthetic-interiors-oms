@@ -4,8 +4,6 @@ This is the **single source of truth** for how this codebase is built. Every dev
 
 If a new convention is agreed in chat, in review, or in code, **add it here in the same change**. Do not leave a rule only in conversation.
 
-> **Using this template:** replace `<placeholders>`, delete sections that do not apply, and keep the rest. The stack below is Django + DRF (backend) and React + Vite + TypeScript (frontend). If your stack differs, keep the *shape* of each rule and swap the tools.
-
 ---
 
 ## How to add a future rule
@@ -33,11 +31,12 @@ Rule entry template:
 
 | Project | Tech | Purpose |
 |---|---|---|
-| `<backend>/` | Django 5 + DRF + Simple JWT | REST API |
-| `Aesthetic Interiors OSM/` | React 18 + Vite + Tailwind CSS | Operations & CRM web client |
+| `ae-oms-be/` | Django 6 + DRF + Simple JWT + PostgreSQL | REST API |
+| `ae-oms-fe/` | React 18 + Vite + Tailwind CSS (JavaScript) | Operations & CRM web client |
 
 - Backend and frontend are independent projects. They talk **only** through the versioned HTTP API.
 - In local dev the frontend proxies `/api` and `/media` to the backend (`vite.config.js`), so the frontend `.env` can stay empty.
+- Backend local setup: `docker compose --env-file ae-oms-be/.env up -d` (Postgres), then in `ae-oms-be/`: `pip install -r requirements.txt`, `python manage.py migrate`, `python manage.py runserver`. Run `python manage.py check` and `python manage.py makemigrations --check` before committing.
 - Secrets live in `.env` (gitignored). Commit only `.env.example`. Never hardcode `SECRET_KEY`, DB passwords, tokens, or API keys.
 
 ---
@@ -69,14 +68,14 @@ request → urls → view → serializer (validate) → service (business logic)
 ### Backend folder layout
 
 ```
-<backend>/
+ae-oms-be/
 ├── core/                  # project module: settings, root urls, shared utils
 │   ├── settings.py
 │   ├── api_urls.py        # mounts every app under /api/<version>/
 │   ├── responses.py       # success_response(...)
 │   ├── exceptions.py      # custom_exception_handler
 │   ├── pagination.py
-│   └── ids.py             # (optional) opaque/encrypted id helpers
+│   └── models.py          # BaseModel: timestamps + soft delete
 ├── <app>/                 # one Django app per feature area
 │   ├── models.py
 │   ├── serializers.py
@@ -88,9 +87,11 @@ request → urls → view → serializer (validate) → service (business logic)
 │   ├── tasks.py           # background jobs (if any)
 │   ├── migrations/
 │   └── tests/
-├── docs/STANDARDS.md      # this file
 ├── manage.py
+├── requirements.txt
 └── .env.example
+
+(docs/STANDARDS.md — this file — lives at the repo root, not inside either project.)
 ```
 
 - New feature area → its own app (`python manage.py startapp <name>`), then register it in `INSTALLED_APPS` and mount its URLs in `core/api_urls.py`.
@@ -149,7 +150,7 @@ Error:
 - `data` is the payload (object, list, or `null`). `errors` is `null` on success, a dict/list on failure.
 - `message` is a short human-readable sentence. On field validation errors it names the field so clients can toast it directly.
 - Never leak stack traces or internals in `message`/`errors`. Unexpected errors return a generic 500 envelope and are logged server-side.
-- Exceptions to the envelope (file downloads, third-party webhooks that require their own shape) must be listed here explicitly.
+- Exceptions to the envelope must be listed here explicitly. Current exceptions: `GET /health/` (plain `{"status": "ok"}`), file downloads, and third-party webhooks that require their own shape. Token refresh must be wrapped by our own view so it uses the envelope.
 
 ### Versioning
 
@@ -172,7 +173,7 @@ Error:
 |---|---|
 | 200 | OK (read, update) |
 | 201 | Created |
-| 204 | Deleted with no body (or 200 with envelope — pick one and stay consistent) |
+| 200 | Also used for delete: return the envelope with `data: null` (never 204, so the envelope is always present) |
 | 400 | Validation error |
 | 401 | Missing/invalid/expired token |
 | 403 | Authenticated but not allowed |
@@ -190,7 +191,7 @@ Error:
 - Issue tokens in one function in `accounts/services.py` (e.g. `issue_tokens(user, ...)`). Never build tokens in views.
 - All user/auth logic lives in the `accounts` app and is reached through `accounts.services`.
 - **Authorization** is permission-based, not role-name-based. Code checks a permission codename (`clients.view`), never `if user.role == "admin"`. Roles/groups are just bundles of permissions.
-- Permission codenames are defined in one place (`src/config/permissions.js`) and referenced by constant.
+- Permission codenames are defined once per side: `accounts/permissions.py` (authoritative, enforced by the backend via `HasPermission`) and `src/config/permissions.js` (UI gating). Keep them identical; add a codename to both in the same change.
 - Do **not** return permissions inside the login/token response. Clients fetch them from a dedicated `GET .../permissions/` endpoint after login.
 - Superuser bypass is allowed and must be implemented in one helper, not repeated per view.
 - Every new endpoint must declare its permission. "Any authenticated user" is a deliberate choice and should be stated in the endpoint table.
@@ -202,14 +203,14 @@ Error:
 3. `GET /api/v1/accounts/permissions/` with the Bearer token; store the result.
 4. UI reads permissions through one hook (`useAuth().hasPermission(codename)`), never from the login payload.
 5. On logout, clear every key under the prefix.
-6. The **only** place that clears the session on `401` is `services/apiClient.ts` / `services/apiClient.js`.
+6. The **only** place that clears the session on `401` is `services/apiClient.js`.
 
 ---
 
 ## 5. Data model and database
 
 - Every model has: primary key, `created_at`, `updated_at` (shared abstract base in `core`).
-- **Soft delete by default** for business data: an `is_deleted`/`deleted_at` field and a default manager that hides deleted rows. Hard delete only for throwaway data and only when stated here.
+- **Soft delete by default** for business data: an `is_deleted`/`deleted_at` field and a default manager that hides deleted rows. Hard delete only for throwaway data and only when stated here. Models inherit `core.models.BaseModel` (timestamps + soft delete); admin uses `all_objects`. Uniqueness on soft-deletable models must use a conditional `UniqueConstraint(condition=Q(is_deleted=False))`; the only exception is `User.email`, which stays globally unique because it is `USERNAME_FIELD`.
 - Enforce rules in the database too: `unique`, `unique_together`/`UniqueConstraint`, `CheckConstraint`, `null=False` by default. Do not rely on serializers alone.
 - Name FKs for what they are (`customer`, not `customer_fk`). Always set `on_delete` deliberately and `related_name` when there is more than one FK to the same model.
 - Money: `DecimalField`, never `float`. Store a currency or document the single currency (INR). Round in one place.
@@ -248,7 +249,7 @@ Run in project root:
 ### Routing and gating
 
 - A route table in `routes/` is the only place routes are declared.
-- Route guards check **permissions** (`hasPermission`), not role names.
+- Route guards check **permissions** (`hasPermission`), not role names. Components and pages must not branch on `role ===`; use `hasPermission(codename)` (role labels may be displayed, never used for logic).
 - Hide UI the user cannot use, but never rely on that — the backend enforces.
 
 ### Components
@@ -257,7 +258,7 @@ Run in project root:
 - Props are validated / documented; no prop drilling beyond 2 levels (use context/hook).
 - Reuse `components/common/*` before building new primitives.
 - Shared patterns (dropdown/select, modal, confirm dialog, toast, tooltip) have **one** implementation each. Do not hand-roll a second one; extend the shared one.
-- Destructive actions (delete, cancel, reset) always ask for confirmation through the shared confirm dialog.
+- Destructive actions (delete, cancel, reset) always ask for confirmation through the shared `ConfirmDialog`. Never use `window.confirm/alert/prompt`.
 - Popovers/menus inside scroll containers are rendered in a portal or click-outside wrapper.
 
 ### UX consistency
@@ -272,7 +273,7 @@ Run in project root:
 - Tailwind utility classes; extract repeated groups into a component, not a custom CSS file.
 - Design tokens (colours, spacing, radii) come from the Tailwind config; no magic hex values in components.
 - Responsive by default; test at mobile and desktop widths.
-- Warm Walnut/Umber theme `#7D5A44` is the single source of truth for brand coloring.
+- Warm Walnut/Umber theme `#7D5A44` is the single source of truth for brand coloring. Every brand shade (including `brand-espresso`, `brand-umber`, `brand-bark`, `brand-clay`, `brand-canvas`) is a token in `tailwind.config.js`; no arbitrary `bg-[#hex]` values in components.
 
 ### Accessibility
 
@@ -283,3 +284,4 @@ Run in project root:
 ## Changelog
 
 - `2026-10-19` — Initial standards adopted for Aesthetic Interiors OSM: standardized `osm.auth.*` storage prefix, permission-first route guards, `apiClient` envelope unwrapping, and tooltip `data-tooltip` conventions.
+- `2026-10-21` — Cleaned up template leftovers; named projects `ae-oms-be`/`ae-oms-fe`; delete returns 200 + envelope; permissions defined on backend and frontend; soft-delete uniqueness rule; brand colour tokens; no `window.confirm`; role-name branching banned in UI; backend env-driven settings with Postgres.

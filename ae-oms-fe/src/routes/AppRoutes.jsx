@@ -1,8 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ROLES } from '../config/roles';
-import { permissionMatrix } from '../config/permissions';
 
 import ProtectedRoute from '../components/layout/ProtectedRoute';
 import RoleRoute from '../components/layout/RoleRoute';
@@ -20,10 +18,10 @@ import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 
 export function AppRoutes() {
-  const { role } = useAuth();
+  const { hasPermission } = useAuth();
 
-  // Root redirect destination depending on role
-  const defaultDestination = role === ROLES.CLIENT ? '/projects' : '/dashboard';
+  // Root redirect destination depending on permissions
+  const defaultDestination = hasPermission('projects.viewOwn') ? '/projects' : '/dashboard';
 
   return (
     <Routes>

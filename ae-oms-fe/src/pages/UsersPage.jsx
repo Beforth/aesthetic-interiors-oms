@@ -77,11 +77,8 @@ const PERMISSION_GROUPS = [
 
 export function UsersPage() {
   const toast = useToast();
-  const { currentUser } = useAuth();
-  const isAdmin =
-    currentUser?.role === ROLES.ADMIN ||
-    currentUser?.role === 'owner' ||
-    currentUser?.role === 'admin';
+  const { hasPermission } = useAuth();
+  const isAdmin = hasPermission('users.manage');
 
   const [activeTab, setActiveTab] = useState('directory');
   const [users, setUsers] = useState([]);
