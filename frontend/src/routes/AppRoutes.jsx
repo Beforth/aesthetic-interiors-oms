@@ -190,6 +190,7 @@ export function AppRoutes() {
 
         {/* 11. Settings & Sub-routes (Admin only) */}
         <Route path="settings" element={<Navigate to="/settings/users" replace />} />
+        <Route path="users" element={<Navigate to="/settings/users" replace />} />
         <Route
           path="settings/users"
           element={
@@ -225,3 +226,5 @@ export function AppRoutes() {
 }
 
 export default AppRoutes;
+
+

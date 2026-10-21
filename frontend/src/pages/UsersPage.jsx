@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { userService } from '../services/userService';
-import { ROLES, ROLE_LABELS } from '../config/roles';
-import { permissionMatrix } from '../config/permissions';
+import {
+  ROLES,
+  ROLE_LABELS,
+  getCustomRoles,
+  saveCustomRole,
+} from '../config/roles';
+import {
+  permissionMatrix,
+  getCustomRolePermissions,
+  saveCustomRolePermissions,
+} from '../config/permissions';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatDate } from '../utils/formatters';
 
@@ -20,20 +30,73 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Input from '../components/ui/Input';
 import Switch from '../components/ui/Switch';
 import Icon from '../components/ui/Icon';
+import Checkbox from '../components/ui/Checkbox';
+
+const PERMISSION_GROUPS = [
+  {
+    category: 'Clients',
+    keys: ['clients.view', 'clients.manage', 'clients.import'],
+  },
+  {
+    category: 'Projects',
+    keys: [
+      'projects.viewAll',
+      'projects.viewAssigned',
+      'projects.viewOwn',
+      'projects.create',
+      'projects.assignPeople',
+    ],
+  },
+  {
+    category: 'Site Stages',
+    keys: ['stages.updateStatus', 'stages.editDates', 'stages.editProjectStages'],
+  },
+  {
+    category: 'Tasks & Field',
+    keys: ['tasks.viewAll', 'tasks.create', 'tasks.updateOwn', 'agencies.manage'],
+  },
+  {
+    category: 'Attendance',
+    keys: ['attendance.markOwn', 'attendance.viewBoard', 'attendance.correct', 'geofence.manage'],
+  },
+  {
+    category: 'Reports & DSR',
+    keys: ['dsr.submit', 'dsr.viewAll', 'dsr.manageClientLink', 'reports.view', 'reports.profitLoss'],
+  },
+  {
+    category: 'Financials & Admin',
+    keys: [
+      'payments.client.manage',
+      'payments.client.viewOwn',
+      'payments.labour.manage',
+      'users.manage',
+      'roles.change',
+    ],
+  },
+];
 
 export function UsersPage() {
   const toast = useToast();
+  const { currentUser } = useAuth();
+  const isAdmin =
+    currentUser?.role === ROLES.ADMIN ||
+    currentUser?.role === 'owner' ||
+    currentUser?.role === 'admin';
+
   const [activeTab, setActiveTab] = useState('directory');
   const [users, setUsers] = useState([]);
+  const [customRoles, setCustomRoles] = useState(() => getCustomRoles());
+  const [customPermissions, setCustomPermissions] = useState(() => getCustomRolePermissions());
   const [loading, setLoading] = useState(true);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
 
-  // Modal states
+  // User Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -41,9 +104,26 @@ export function UsersPage() {
     title: '',
     notes: '',
     role: ROLES.WORKER,
+    password: 'demo123',
     status: 'active',
   });
   const [formErrors, setFormErrors] = useState({});
+
+  // Role Creation Modal states
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [roleFormData, setRoleFormData] = useState({
+    name: '',
+    key: '',
+    description: '',
+    defaultPassword: 'demo123',
+    selectedPermissions: [
+      'projects.viewAssigned',
+      'tasks.updateOwn',
+      'attendance.markOwn',
+      'dsr.submit',
+    ],
+  });
+  const [roleFormErrors, setRoleFormErrors] = useState({});
 
   // Confirm dialog state
   const [confirmTarget, setConfirmTarget] = useState(null);
@@ -63,7 +143,24 @@ export function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
+    setCustomRoles(getCustomRoles());
+    setCustomPermissions(getCustomRolePermissions());
   }, []);
+
+  const roleSelectOptions = useMemo(() => {
+    const base = [
+      { value: ROLES.ADMIN, label: 'Owner (Rohit Kumar)' },
+      { value: ROLES.MANAGER, label: 'Manager (Operations & Estimation)' },
+      { value: ROLES.SUPERVISOR, label: 'Site Supervisor' },
+      { value: ROLES.WORKER, label: 'Site Worker' },
+      { value: ROLES.CLIENT, label: 'Client (Project Owner)' },
+    ];
+    const custom = customRoles.map((r) => ({
+      value: r.key,
+      label: `${r.label} (Custom Role)`,
+    }));
+    return [...base, ...custom];
+  }, [customRoles]);
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
@@ -75,7 +172,10 @@ export function UsersPage() {
         (u.phone && u.phone.includes(q)) ||
         (u.notes && u.notes.toLowerCase().includes(q));
 
-      const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+      const matchesRole =
+        roleFilter === 'ALL' ||
+        u.role === roleFilter ||
+        (roleFilter === ROLES.ADMIN && (u.role === 'admin' || u.role === 'owner'));
 
       return matchesSearch && matchesRole;
     });
@@ -89,10 +189,12 @@ export function UsersPage() {
       phone: '',
       title: '',
       notes: '',
-      role: ROLES.SUPERVISOR,
+      role: ROLES.WORKER,
+      password: 'demo123',
       status: 'active',
     });
     setFormErrors({});
+    setShowPassword(false);
     setIsModalOpen(true);
   };
 
@@ -104,14 +206,16 @@ export function UsersPage() {
       phone: user.phone || '',
       title: user.title || '',
       notes: user.notes || '',
-      role: user.role,
+      role: user.role === 'admin' ? ROLES.ADMIN : user.role,
+      password: user.password || '',
       status: user.status || 'active',
     });
     setFormErrors({});
+    setShowPassword(false);
     setIsModalOpen(true);
   };
 
-  const validateForm = () => {
+  const validateUserForm = () => {
     const errors = {};
     if (!formData.name.trim()) errors.name = 'Full name is required';
     if (!formData.email.trim()) {
@@ -119,27 +223,106 @@ export function UsersPage() {
     } else if (!formData.email.includes('@')) {
       errors.email = 'Enter a valid email address';
     }
+    if (!editingUser && !formData.password.trim()) {
+      errors.password = 'Account password is required';
+    } else if (formData.password && formData.password.length < 3) {
+      errors.password = 'Password must be at least 3 characters';
+    }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
+  const handleUserSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!validateUserForm()) return;
 
     try {
       if (editingUser) {
-        await userService.updateUser(editingUser.id, formData);
+        const payload = { ...formData };
+        // If password was left blank when editing, retain current password
+        if (!payload.password) {
+          delete payload.password;
+        }
+        await userService.updateUser(editingUser.id, payload);
         toast.success(`User ${formData.name} updated successfully`);
       } else {
         await userService.createUser(formData);
-        toast.success(`New user ${formData.name} created successfully`);
+        toast.success(`New user ${formData.name} created with assigned password`);
       }
       setIsModalOpen(false);
-      fetchUsers();
+      await fetchUsers();
     } catch (err) {
       toast.error('Failed to save user details');
     }
+  };
+
+  // Create Role handlers
+  const handleOpenCreateRole = () => {
+    setRoleFormData({
+      name: '',
+      key: '',
+      description: '',
+      defaultPassword: 'demo123',
+      selectedPermissions: [
+        'projects.viewAssigned',
+        'tasks.updateOwn',
+        'attendance.markOwn',
+        'dsr.submit',
+      ],
+    });
+    setRoleFormErrors({});
+    setIsRoleModalOpen(true);
+  };
+
+  const handleRoleNameChange = (val) => {
+    const slug = val
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    setRoleFormData((prev) => ({
+      ...prev,
+      name: val,
+      key: prev.key === '' || prev.key === prev.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') ? slug : prev.key,
+    }));
+  };
+
+  const togglePermission = (permKey) => {
+    setRoleFormData((prev) => {
+      const exists = prev.selectedPermissions.includes(permKey);
+      const updated = exists
+        ? prev.selectedPermissions.filter((p) => p !== permKey)
+        : [...prev.selectedPermissions, permKey];
+      return { ...prev, selectedPermissions: updated };
+    });
+  };
+
+  const handleRoleSubmit = (e) => {
+    e.preventDefault();
+    const errors = {};
+    if (!roleFormData.name.trim()) errors.name = 'Role name is required';
+    if (!roleFormData.key.trim()) errors.key = 'Role identifier key is required';
+    if (!roleFormData.defaultPassword.trim()) errors.defaultPassword = 'Default password is required';
+
+    if (Object.keys(errors).length > 0) {
+      setRoleFormErrors(errors);
+      return;
+    }
+
+    const key = roleFormData.key.trim().toLowerCase();
+    const newRole = {
+      key,
+      label: roleFormData.name.trim(),
+      description: roleFormData.description.trim() || 'Custom operational role',
+      defaultPassword: roleFormData.defaultPassword.trim(),
+    };
+
+    saveCustomRole(newRole);
+    saveCustomRolePermissions(key, roleFormData.selectedPermissions);
+
+    setCustomRoles(getCustomRoles());
+    setCustomPermissions(getCustomRolePermissions());
+    setIsRoleModalOpen(false);
+    toast.success(`Role "${newRole.label}" successfully created!`);
   };
 
   const handleToggleStatus = async () => {
@@ -158,18 +341,10 @@ export function UsersPage() {
     }
   };
 
-  const roleSelectOptions = [
-    { value: ROLES.ADMIN, label: 'Admin (Managing Director)' },
-    { value: ROLES.MANAGER, label: 'Manager (Operations & Estimation)' },
-    { value: ROLES.SUPERVISOR, label: 'Site Supervisor' },
-    { value: ROLES.WORKER, label: 'Site Worker / Artisan' },
-    { value: ROLES.CLIENT, label: 'Client (Project Owner)' },
-  ];
-
   const columns = [
     {
       key: 'name',
-      header: 'Staff / Client',
+      header: 'Personnel / Client',
       render: (u) => (
         <div className="flex items-center gap-3">
           <Avatar name={u.name} size="sm" />
@@ -186,11 +361,18 @@ export function UsersPage() {
     },
     {
       key: 'contact',
-      header: 'Contact Details',
+      header: 'Credentials & Contact',
       render: (u) => (
         <div className="text-xs">
           <div className="text-text-main font-mono">{u.email}</div>
-          <div className="text-text-muted mt-0.5">{u.phone}</div>
+          <div className="text-text-muted mt-0.5 flex items-center gap-1.5">
+            <span>{u.phone}</span>
+            {isAdmin && u.password && (
+              <span className="font-mono text-[10px] bg-brand-50 text-brand-700 px-1 py-0.2 rounded border border-border">
+                pwd: {u.password}
+              </span>
+            )}
+          </div>
         </div>
       ),
     },
@@ -221,32 +403,38 @@ export function UsersPage() {
       align: 'right',
       render: (u) => (
         <div className="flex items-center justify-end gap-1">
-          <IconButton
-            icon="edit"
-            size="sm"
-            ariaLabel={`Edit ${u.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenEdit(u);
-            }}
-          />
-          <IconButton
-            icon={u.status === 'active' ? 'user-x' : 'user-check'}
-            size="sm"
-            variant="ghost"
-            className={
-              u.status === 'active'
-                ? 'text-danger hover:bg-danger-light'
-                : 'text-success hover:bg-success-light'
-            }
-            ariaLabel={
-              u.status === 'active' ? `Deactivate ${u.name}` : `Activate ${u.name}`
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmTarget(u);
-            }}
-          />
+          {isAdmin && (
+            <>
+              <IconButton
+                icon="edit"
+                size="sm"
+                ariaLabel={`Edit ${u.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenEdit(u);
+                }}
+              />
+              {u.role !== ROLES.ADMIN && (
+                <IconButton
+                  icon={u.status === 'active' ? 'user-x' : 'user-check'}
+                  size="sm"
+                  variant="ghost"
+                  className={
+                    u.status === 'active'
+                      ? 'text-danger hover:bg-danger-light'
+                      : 'text-success hover:bg-success-light'
+                  }
+                  ariaLabel={
+                    u.status === 'active' ? `Deactivate ${u.name}` : `Activate ${u.name}`
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmTarget(u);
+                  }}
+                />
+              )}
+            </>
+          )}
         </div>
       ),
     },
@@ -254,13 +442,20 @@ export function UsersPage() {
 
   // Permissions matrix rows
   const permissionKeys = Object.keys(permissionMatrix);
-  const matrixRoles = [
-    { key: ROLES.ADMIN, label: 'Admin (A)' },
-    { key: ROLES.MANAGER, label: 'Manager (M)' },
-    { key: ROLES.SUPERVISOR, label: 'Site Sup. (S)' },
-    { key: ROLES.WORKER, label: 'Site Worker (W)' },
-    { key: ROLES.CLIENT, label: 'Client (C)' },
-  ];
+  const matrixRoles = useMemo(() => {
+    const base = [
+      { key: ROLES.ADMIN, label: 'Owner (Rohit)' },
+      { key: ROLES.MANAGER, label: 'Manager (Neha)' },
+      { key: ROLES.SUPERVISOR, label: 'Supervisor (Vikram)' },
+      { key: ROLES.WORKER, label: 'Worker (Suresh)' },
+      { key: ROLES.CLIENT, label: 'Client (Amit)' },
+    ];
+    const custom = customRoles.map((r) => ({
+      key: r.key,
+      label: `${r.label}*`,
+    }));
+    return [...base, ...custom];
+  }, [customRoles]);
 
   return (
     <div className="space-y-4">
@@ -269,19 +464,29 @@ export function UsersPage() {
         subtitle="Manage personnel records, site access, and access permission matrix"
         breadcrumbs={[
           { label: 'Operations', path: '/dashboard' },
-          { label: 'Settings', path: '/settings' },
+          { label: 'Settings', path: '/settings/users' },
           { label: 'Users & Roles' },
         ]}
         actions={
-          activeTab === 'directory' && (
-            <Button
-              variant="primary"
-              size="sm"
-              leadingIcon="plus"
-              onClick={handleOpenAdd}
-            >
-              Add New User
-            </Button>
+          isAdmin && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                leadingIcon="shield"
+                onClick={handleOpenCreateRole}
+              >
+                Create New Role
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                leadingIcon="plus"
+                onClick={handleOpenAdd}
+              >
+                Add New User
+              </Button>
+            </div>
           )
         }
       />
@@ -310,17 +515,16 @@ export function UsersPage() {
                 />
               </div>
 
-              <div className="w-full sm:w-56 shrink-0">
+              <div className="w-full sm:w-64 shrink-0">
                 <Select
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value)}
                   options={[
                     { value: 'ALL', label: 'All Roles (All)' },
-                    { value: ROLES.ADMIN, label: 'Admin' },
-                    { value: ROLES.MANAGER, label: 'Manager' },
-                    { value: ROLES.SUPERVISOR, label: 'Site Supervisor' },
-                    { value: ROLES.WORKER, label: 'Site Worker' },
-                    { value: ROLES.CLIENT, label: 'Client' },
+                    ...roleSelectOptions.map((opt) => ({
+                      value: opt.value,
+                      label: opt.label,
+                    })),
                   ]}
                 />
               </div>
@@ -333,16 +537,22 @@ export function UsersPage() {
             data={filteredUsers}
             loading={loading}
             emptyTitle={searchTerm || roleFilter !== 'ALL' ? "No users match your criteria" : "No data available yet"}
-            emptyDescription={searchTerm || roleFilter !== 'ALL' ? "Try modifying the search term or clear the role filter." : "No users found. Click 'Add New User' to add a team member or client."}
+            emptyDescription={searchTerm || roleFilter !== 'ALL' ? "Try modifying the search term or clear the role filter." : "Click 'Add New User' to add a personnel or client record."}
           />
         </>
       ) : (
-        /* Read-only Role Permissions Matrix Tab */
-        <Card title="System Permission Matrix (Read-Only)">
-          <p className="text-xs text-text-muted mb-4">
-            Centrally defined in <code className="text-brand-700 font-mono">src/config/permissions.js</code>.
-            All sidebar navigation, route guards, and action buttons are bound to this matrix.
-          </p>
+        /* Role Permissions Matrix Tab */
+        <Card
+          title="System Permission Matrix"
+          subtitle="Centrally enforced by permissions.js and custom role permissions. Gated by Owner (Rohit Kumar)."
+        >
+          {customRoles.length > 0 && (
+            <div className="mb-3 text-xs text-brand-700 bg-brand-50 p-2.5 rounded border border-brand-200 flex items-center justify-between">
+              <span>
+                <strong>Custom Roles Active:</strong> {customRoles.map((r) => r.label).join(', ')} (*marked with asterisk in matrix)
+              </span>
+            </div>
+          )}
 
           <div className="overflow-x-auto border border-border rounded">
             <table className="w-full text-left text-xs border-collapse">
@@ -350,7 +560,7 @@ export function UsersPage() {
                 <tr className="border-b border-border bg-brand-50 text-text-muted font-semibold uppercase tracking-wider">
                   <th className="p-3 w-72">Permission Key</th>
                   {matrixRoles.map((r) => (
-                    <th key={r.key} className="p-3 text-center">
+                    <th key={r.key} className="p-3 text-center whitespace-nowrap">
                       {r.label}
                     </th>
                   ))}
@@ -366,7 +576,15 @@ export function UsersPage() {
                         {permKey}
                       </td>
                       {matrixRoles.map((r) => {
-                        const isPermitted = allowedRoles.includes(r.key);
+                        let isPermitted = false;
+                        if (r.key === ROLES.ADMIN) {
+                          isPermitted = true;
+                        } else if (customPermissions[r.key]) {
+                          isPermitted = customPermissions[r.key].includes(permKey);
+                        } else {
+                          isPermitted = allowedRoles.includes(r.key);
+                        }
+
                         return (
                           <td key={r.key} className="p-3 text-center">
                             {isPermitted ? (
@@ -393,25 +611,25 @@ export function UsersPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingUser ? `Edit User: ${editingUser.name}` : 'Add New User'}
-        subtitle="Assign roles, contact information, and account status"
+        subtitle="Configure personnel profile, credentials, and access role"
         footer={
           <>
             <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" size="sm" onClick={handleSubmit}>
+            <Button variant="primary" size="sm" onClick={handleUserSubmit}>
               {editingUser ? 'Save Changes' : 'Create User'}
             </Button>
           </>
         }
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleUserSubmit} className="space-y-4">
           <Input
             label="Full Name"
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e.g. Ramesh Shinde"
+            placeholder="e.g. Rahul Patil"
             error={formErrors.name}
           />
 
@@ -422,7 +640,7 @@ export function UsersPage() {
               required
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="e.g. ramesh@aesthetic.demo"
+              placeholder="e.g. rahul@aesthetic.demo"
               error={formErrors.email}
             />
 
@@ -435,27 +653,63 @@ export function UsersPage() {
             />
           </div>
 
-          <Input
-            label="Designation / Department"
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            placeholder="e.g. Master Carpenter"
-          />
+          {/* Admin-only Password Setting */}
+          {isAdmin && (
+            <div className="relative">
+              <Input
+                label={editingUser ? 'Account Password (leave blank to retain current)' : 'Account Password'}
+                type={showPassword ? 'text' : 'password'}
+                required={!editingUser}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Set user password (e.g. demo123)"
+                error={formErrors.password}
+                helperText="Only administrators can set and modify user credentials"
+                leadingIcon="shield"
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-8 text-text-muted hover:text-text-main p-1 rounded"
+              >
+                <Icon name={showPassword ? 'eye-off' : 'eye'} size={15} />
+              </button>
+            </div>
+          )}
 
-          <Input
-            label="Operational Notes / Assignments"
-            value={formData.notes}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            placeholder="e.g. assigned to P1, P2"
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Designation / Department"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="e.g. Quality Auditor"
+            />
+
+            <Input
+              label="Operational Notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="e.g. assigned to P1"
+            />
+          </div>
 
           <Select
             label="System Role"
             required
             value={formData.role}
-            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+            onChange={(e) => {
+              const selectedRole = e.target.value;
+              const customMatch = customRoles.find((r) => r.key === selectedRole);
+              setFormData((prev) => ({
+                ...prev,
+                role: selectedRole,
+                password: !editingUser && customMatch?.defaultPassword ? customMatch.defaultPassword : prev.password,
+              }));
+            }}
             options={roleSelectOptions}
-            helperText="Controls sidebar visibility, project assignments, and matrix permissions"
+            helperText="Controls system permissions and navigation visibility"
           />
 
           <div className="pt-2">
@@ -470,6 +724,102 @@ export function UsersPage() {
                 })
               }
             />
+          </div>
+        </form>
+      </Modal>
+
+      {/* Create New Role Modal (Admin-only) */}
+      <Modal
+        isOpen={isRoleModalOpen}
+        onClose={() => setIsRoleModalOpen(false)}
+        title="Create New System Role"
+        subtitle="Define a custom role, its default login password, and specific permissions"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setIsRoleModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleRoleSubmit}>
+              Create Role
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleRoleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Role Display Name"
+              required
+              value={roleFormData.name}
+              onChange={(e) => handleRoleNameChange(e.target.value)}
+              placeholder="e.g. Quality Auditor"
+              error={roleFormErrors.name}
+            />
+
+            <Input
+              label="Role Key / Identifier"
+              required
+              value={roleFormData.key}
+              onChange={(e) =>
+                setRoleFormData({
+                  ...roleFormData,
+                  key: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+                })
+              }
+              placeholder="e.g. auditor"
+              error={roleFormErrors.key}
+              helperText="Unique internal identifier (lowercase)"
+            />
+          </div>
+
+          <Input
+            label="Role Description"
+            value={roleFormData.description}
+            onChange={(e) => setRoleFormData({ ...roleFormData, description: e.target.value })}
+            placeholder="e.g. Inspects site finishes and approves quality checkpoints"
+          />
+
+          {/* Option to set default password for this role */}
+          <Input
+            label="Default Password for New Users of this Role"
+            required
+            value={roleFormData.defaultPassword}
+            onChange={(e) =>
+              setRoleFormData({ ...roleFormData, defaultPassword: e.target.value })
+            }
+            placeholder="e.g. demo123"
+            error={roleFormErrors.defaultPassword}
+            helperText="Admin default password for newly provisioned users in this role"
+            leadingIcon="shield"
+          />
+
+          {/* Permissions Selection Checklist */}
+          <div className="pt-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">
+              Select Role Permissions
+            </label>
+            <div className="max-h-56 overflow-y-auto border border-border rounded-lg p-3 space-y-3 bg-brand-50/30">
+              {PERMISSION_GROUPS.map((grp) => (
+                <div key={grp.category} className="space-y-1.5">
+                  <div className="text-[11px] font-bold text-brand-800 uppercase tracking-wide">
+                    {grp.category}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
+                    {grp.keys.map((permKey) => {
+                      const isChecked = roleFormData.selectedPermissions.includes(permKey);
+                      return (
+                        <Checkbox
+                          key={permKey}
+                          label={permKey}
+                          checked={isChecked}
+                          onChange={() => togglePermission(permKey)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </form>
       </Modal>

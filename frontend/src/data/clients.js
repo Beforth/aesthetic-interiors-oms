@@ -1,13 +1,13 @@
 export const mockClients = [
   {
     id: 'c1',
-    name: 'Priya Sharma',
-    phone: '+91 98450 99001',
-    email: 'priya@client.demo',
+    name: 'Amit Joshi',
+    phone: '+91 99000 11002',
+    email: 'amit@client.demo',
     address: 'Plot 42, 12th Main, HAL 2nd Stage, Indiranagar, Bengaluru',
     notes: 'Villa client; demands highest quality smoked oak veneer and imported Italian marble finishes.',
     type: 'new',
-    userId: 'u9',
+    userId: 'u5',
     createdAt: '2024-04-10',
   },
   {
@@ -28,7 +28,7 @@ export const mockClients = [
     address: 'Skyline Penthouse, Tower C, EPIP Zone, Whitefield, Bengaluru',
     notes: 'Penthouse renovation client; customized acoustic ceiling and double-glazed fluted glass partitions.',
     type: 'new',
-    userId: 'u10',
+    userId: 'u5',
     createdAt: '2024-05-20',
   },
   {

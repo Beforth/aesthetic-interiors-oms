@@ -3,8 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { authService } from '../services/authService';
-import { ROLES, ROLE_LABELS } from '../config/roles';
-import Card from '../components/ui/Card';
+import { ROLES } from '../config/roles';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
@@ -14,11 +13,11 @@ import Checkbox from '../components/ui/Checkbox';
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginAsUser, isAuthenticated, availableUsers } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const toast = useToast();
 
-  const [usernameOrEmail, setUsernameOrEmail] = useState('admin@aesthetic.demo');
-  const [password, setPassword] = useState('Demo@123');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,7 +43,7 @@ export function LoginPage() {
   const validate = () => {
     const errors = {};
     if (!usernameOrEmail.trim()) {
-      errors.usernameOrEmail = 'Please enter your username or email';
+      errors.usernameOrEmail = 'Please enter your email, username, or role';
     }
     if (!password) {
       errors.password = 'Please enter your password';
@@ -57,7 +56,9 @@ export function LoginPage() {
 
   const handleLoginSuccess = (user) => {
     toast.success(`Welcome back, ${user.name}`);
-    const destination = location.state?.from?.pathname || (user.role === ROLES.CLIENT ? '/projects' : '/dashboard');
+    const destination =
+      location.state?.from?.pathname ||
+      (user.role === ROLES.CLIENT ? '/projects' : '/dashboard');
     navigate(destination, { replace: true });
   };
 
@@ -83,64 +84,186 @@ export function LoginPage() {
     }
   };
 
-  const handleQuickLogin = (user) => {
-    try {
-      const loggedUser = loginAsUser(user);
-      handleLoginSuccess(loggedUser);
-    } catch (err) {
-      setErrorMessage(err.message || 'Quick login failed.');
-    }
-  };
-
-  // Group representative demo profiles across the 5 roles
-  const demoRoleKeys = [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER, ROLES.CLIENT];
-  const demoProfiles = demoRoleKeys
-    .map((roleKey) => (availableUsers || []).find((u) => u.role === roleKey && u.status === 'active'))
-    .filter(Boolean);
-
   return (
-    <div className="min-h-screen bg-brand-50 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-md">
-        {/* Brand Monogram & Title */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-brand-600 text-surface shadow-md mb-3 ring-4 ring-brand-100">
-            <Icon name="brush" size={26} className="text-surface" />
+    <div className="min-h-screen w-full flex bg-[#FAF8F5]">
+      {/* Left Column: Luxury Architectural Showcase (Visible on Large Screens) */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-[#241711] via-[#3B251A] to-[#634533] text-surface p-12 xl:p-16 flex-col justify-between overflow-hidden">
+        {/* Subtle Architectural Grid Background Accent */}
+        <div
+          className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.4) 1px, transparent 0)`,
+            backgroundSize: '32px 32px',
+          }}
+        />
+
+        {/* Ambient Warm Glow */}
+        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-[#9E7356]/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-[#7D5A44]/30 blur-3xl pointer-events-none" />
+
+        {/* Brand Header */}
+        <div className="relative z-10 flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-amber-200 shadow-lg">
+            <Icon name="brush" size={24} className="stroke-[2.2]" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">
-            Aesthetic Interiors
-          </h1>
-          <p className="text-xs uppercase tracking-widest text-text-muted mt-1 font-semibold">
-            Operations Management System
-          </p>
+          <div>
+            <span className="text-xl font-bold tracking-wider uppercase text-white font-serif">
+              Aesthetic Interiors
+            </span>
+            <div className="text-[11px] uppercase tracking-[0.22em] text-amber-200/80 font-medium">
+              Operations & Client Portal
+            </div>
+          </div>
         </div>
 
-        {/* Main Login Card */}
-        <Card className="shadow-lg border-border/80 p-6 sm:p-8 rounded-xl bg-surface backdrop-blur-sm mb-6">
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></span>
-              <span className="text-xs font-bold uppercase tracking-wider text-brand-700">
-                Operations Portal
-              </span>
+        {/* Center Content: Statement & Pillars */}
+        <div className="relative z-10 my-auto py-12 max-w-xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-amber-200 text-xs font-medium mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span>High-End Fit-Out Governance</span>
+          </div>
+
+          <h2 className="text-3xl xl:text-4xl font-extrabold text-white tracking-tight leading-tight mb-4 font-serif">
+            Precision Craftsmanship Meets Seamless Site Operations.
+          </h2>
+
+          <p className="text-sm xl:text-base text-white/80 leading-relaxed mb-8 font-light">
+            An integrated management ecosystem linking design studio visions, artisan site execution, and real-time client milestone oversight.
+          </p>
+
+          {/* Three Operational Pillars */}
+          <div className="space-y-3.5">
+            <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+                <Icon name="projects" size={17} />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-white">Full-Lifecycle Project Tracking</h4>
+                <p className="text-xs text-white/70 leading-relaxed">
+                  Monitor 16 critical fit-out phases with milestones, trade checklists, and snag inspections.
+                </p>
+              </div>
             </div>
-            <h2 className="text-xl font-bold text-text-main tracking-tight">
-              Sign In
-            </h2>
-            <p className="text-xs text-text-muted mt-1 leading-relaxed">
-              Enter credentials below or choose a 1-click demo profile to explore the system. Demo password: <code className="font-mono text-brand-700 font-bold">Demo@123</code>
+
+            <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+                <Icon name="attendance" size={17} />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-white">Field Trade & Artisan Oversight</h4>
+                <p className="text-xs text-white/70 leading-relaxed">
+                  Daily muster rolls, supervisor sign-offs, and agency coordination on active project sites.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-colors">
+              <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+                <Icon name="shield" size={17} />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-white">Dedicated Client Transparency</h4>
+                <p className="text-xs text-white/70 leading-relaxed">
+                  Real-time photo logs, milestone approvals, and secure payment schedule management.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer info */}
+        <div className="relative z-10 flex items-center justify-between text-xs text-white/60 border-t border-white/10 pt-6">
+          <span>&copy; {new Date().getFullYear()} Aesthetic Interiors Studio</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>Operational Portal Active</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Right Column: Modern Aesthetic Sign-In Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 lg:p-16">
+        <div className="w-full max-w-md">
+          {/* Mobile Brand Header */}
+          <div className="lg:hidden text-center mb-8">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-600 text-surface shadow-md mb-3 ring-4 ring-brand-100">
+              <Icon name="brush" size={26} className="text-surface" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-text-main tracking-tight font-serif">
+              Aesthetic Interiors
+            </h1>
+            <p className="text-xs uppercase tracking-widest text-text-muted mt-0.5 font-semibold">
+              Operations Management System
             </p>
           </div>
 
+          {/* Form Card Header */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-brand-700">
+                Operations Portal Access
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">
+              Sign In
+            </h2>
+            <p className="text-xs sm:text-sm text-text-muted mt-1.5 leading-relaxed">
+              Enter your registered work credentials to access projects, sites, and operational reports.
+            </p>
+          </div>
+
+          {/* Supported Roles Indicator */}
+          <div className="mb-6 p-3.5 rounded-xl bg-brand-50/80 border border-brand-200/70">
+            <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Icon name="shield" size={13} className="text-brand-600" />
+                <span>Log in by Email, Username, or Role</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: 'Admin / Owner', key: 'admin' },
+                { label: 'Manager', key: 'manager' },
+                { label: 'Supervisor', key: 'supervisor' },
+                { label: 'Site Worker', key: 'worker' },
+                { label: 'Client', key: 'client' },
+              ].map((item) => (
+                <button
+                  type="button"
+                  key={item.key}
+                  onClick={() => {
+                    setUsernameOrEmail(item.key);
+                    if (validationErrors.usernameOrEmail) {
+                      setValidationErrors((prev) => ({ ...prev, usernameOrEmail: '' }));
+                    }
+                  }}
+                  className={`text-[10px] font-medium px-2 py-1 rounded-md border transition-all cursor-pointer ${
+                    usernameOrEmail.toLowerCase() === item.key
+                      ? 'bg-brand-600 text-surface border-brand-600 shadow-xs'
+                      : 'bg-surface text-brand-800 border-brand-200 hover:border-brand-500 hover:bg-brand-100/50'
+                  }`}
+                  data-tooltip={`Use role "${item.key}" as username`}
+                  aria-label={`Use role ${item.key}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Error Message Alert */}
           {errorMessage && (
             <Alert type="danger" className="mb-5 animate-in fade-in duration-200">
               {errorMessage}
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          {/* Sign In Form */}
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div>
               <Input
-                label="Email or Username"
+                label="Email, Username, or Role"
                 type="text"
                 required
                 autoComplete="username"
@@ -151,7 +274,7 @@ export function LoginPage() {
                     setValidationErrors((prev) => ({ ...prev, usernameOrEmail: '' }));
                   }
                 }}
-                placeholder="e.g. admin@aesthetic.demo"
+                placeholder="e.g. admin, manager, supervisor, worker, client, or your email"
                 leadingIcon="user"
                 error={validationErrors.usernameOrEmail}
                 disabled={loading}
@@ -172,7 +295,7 @@ export function LoginPage() {
                       setValidationErrors((prev) => ({ ...prev, password: '' }));
                     }
                   }}
-                  placeholder="Enter password (Demo@123)"
+                  placeholder="Enter your account password"
                   leadingIcon="shield"
                   error={validationErrors.password}
                   disabled={loading}
@@ -181,7 +304,6 @@ export function LoginPage() {
                   type="button"
                   tabIndex={-1}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  data-tooltip={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword((prev) => !prev)}
                   className="absolute right-3 top-8 text-text-muted hover:text-text-main transition-colors p-1 rounded focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
@@ -190,9 +312,9 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1 pb-1">
+            <div className="flex items-center justify-between pt-1">
               <Checkbox
-                label="Remember my username on this device"
+                label="Remember username on this browser"
                 checked={rememberMe}
                 onChange={setRememberMe}
                 disabled={loading}
@@ -206,63 +328,25 @@ export function LoginPage() {
               size="lg"
               loading={loading}
               disabled={loading}
-              className="mt-3 shadow"
+              className="mt-2 shadow-md hover:shadow-lg transition-all"
             >
-              Sign In to Portal
+              <span className="flex items-center justify-center gap-2">
+                <span>Sign In to Portal</span>
+                <Icon name="arrow-right" size={16} />
+              </span>
             </Button>
           </form>
-        </Card>
 
-        {/* 1-Click Demo Profiles for all 5 Roles */}
-        {demoProfiles.length > 0 && (
-          <div className="bg-surface border border-border rounded-xl p-5 shadow-sm mb-6">
-            <div className="text-xs font-bold uppercase tracking-wider text-text-muted mb-3 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Icon name="sparkles" size={14} className="text-brand-500" />
-                <span>1-Click Demo Profiles</span>
-              </span>
-              <span className="text-[11px] font-normal text-text-muted">Password: Demo@123</span>
+          {/* Security & Access Info */}
+          <div className="mt-8 pt-6 border-t border-border/70 text-center">
+            <div className="inline-flex items-center justify-center gap-2 text-xs text-text-muted">
+              <Icon name="shield" size={14} className="text-brand-600" />
+              <span>Protected by role-based access control & token verification</span>
             </div>
-
-            <div className="space-y-2">
-              {demoProfiles.map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => handleQuickLogin(user)}
-                  className="w-full flex items-center justify-between p-2.5 rounded-lg border border-border hover:border-brand-500 hover:bg-brand-50 transition-colors text-left select-none group"
-                >
-                  <div className="min-w-0 pr-2">
-                    <div className="text-xs font-bold text-text-main leading-tight group-hover:text-brand-700">
-                      {user.name}
-                    </div>
-                    <div className="text-[11px] text-text-muted truncate">
-                      {user.title || user.notes} • {user.email}
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-100 text-brand-700 uppercase">
-                      {ROLE_LABELS[user.role] || user.role}
-                    </span>
-                    <Icon name="arrow-right" size={14} className="text-brand-400 group-hover:text-brand-600 transition-transform group-hover:translate-x-0.5" />
-                  </div>
-                </button>
-              ))}
-            </div>
+            <p className="text-[11px] text-text-muted mt-2">
+              Need account provisioning or password assistance? Please contact your system administrator or project manager.
+            </p>
           </div>
-        )}
-
-        {/* Audit Notice */}
-        <div className="text-center py-2">
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
-            <Icon name="shield" size={13} className="text-brand-600" />
-            <span>Secure Operations Portal. Standard token authentication active.</span>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <div className="text-center mt-4 text-xs text-text-muted">
-          &copy; {new Date().getFullYear()} Aesthetic Interiors OSM. All rights reserved.
         </div>
       </div>
     </div>
