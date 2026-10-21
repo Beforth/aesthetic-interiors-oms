@@ -3,15 +3,15 @@ export const mockProjects = [
     id: 'P1',
     name: 'Indiranagar 4BHK Luxury Villa',
     clientId: 'c1',
-    clientName: 'Priya Sharma',
-    clientEmail: 'priya@client.demo',
+    clientName: 'Amit Joshi',
+    clientEmail: 'amit@client.demo',
     siteAddress: 'Plot 42, 12th Main, HAL 2nd Stage, Indiranagar, Bengaluru',
     startDate: '2026-08-01',
     targetDate: '2026-11-30',
     totalCost: 4850000,
     status: 'in progress',
-    supervisors: ['u4'], // Vikram Jadhav
-    workers: ['u6'], // Ramesh Shinde
+    supervisors: ['u3'], // Vikram Jadhav
+    workers: ['u4'], // Ramesh Shinde
     stages: [
       {
         id: 's1',
@@ -146,8 +146,8 @@ export const mockProjects = [
     targetDate: '2026-12-20',
     totalCost: 2600000,
     status: 'in progress',
-    supervisors: ['u4'], // Vikram Jadhav
-    workers: ['u7'], // Suresh Gaikwad
+    supervisors: ['u3'], // Vikram Jadhav
+    workers: ['u4'], // Suresh Gaikwad
     stages: [
       {
         id: 's201',
@@ -282,8 +282,8 @@ export const mockProjects = [
     targetDate: '2026-11-15',
     totalCost: 6200000,
     status: 'in progress',
-    supervisors: ['u5'], // Santosh More
-    workers: ['u8'], // Mahesh Patil
+    supervisors: ['u3'], // Santosh More
+    workers: ['u4'], // Mahesh Patil
     stages: [
       {
         id: 's301',
@@ -418,8 +418,8 @@ export const mockProjects = [
     targetDate: '2027-01-31',
     totalCost: 1950000,
     status: 'in progress',
-    supervisors: ['u5'], // Santosh More
-    workers: ['u7'], // Suresh Gaikwad
+    supervisors: ['u3'], // Santosh More
+    workers: ['u4'], // Suresh Gaikwad
     stages: [
       {
         id: 's401',
@@ -546,3 +546,4 @@ export const mockProjects = [
 ];
 
 export default mockProjects;
+

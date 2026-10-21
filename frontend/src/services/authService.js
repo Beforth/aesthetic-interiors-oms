@@ -10,34 +10,101 @@ import {
   isNetworkOrServerError,
 } from './apiClient';
 import { getPermissionsForRole } from '../config/permissions';
-import { ROLES } from '../config/roles';
+import { ROLES, ROLE_LABELS } from '../config/roles';
 import { mockUsers } from '../data/users';
 
 const STORAGE_USERS_KEY = 'osm_users_store';
+const PURGED_OLD_IDS = new Set(['u6', 'u7', 'u8', 'u9', 'u10', 'u11']);
+
+function matchesRole(user, identifier) {
+  if (!user || !user.role || !identifier) return false;
+  const roleStr = String(user.role).toLowerCase();
+  const idf = identifier.trim().toLowerCase().replace(/[\s_-]+/g, '');
+
+  // 1. Direct role key match
+  if (roleStr === identifier.trim().toLowerCase() || roleStr.replace(/[\s_-]+/g, '') === idf) {
+    return true;
+  }
+
+  // 2. Admin / Owner alias
+  if (
+    (idf === 'admin' || idf === 'owner' || idf === 'administrator') &&
+    (roleStr === 'owner' || roleStr === 'admin')
+  ) {
+    return true;
+  }
+
+  // 3. Manager
+  if (idf === 'manager' && roleStr === 'manager') {
+    return true;
+  }
+
+  // 4. Supervisor / Site Supervisor
+  if ((idf === 'supervisor' || idf === 'sitesupervisor') && roleStr === 'supervisor') {
+    return true;
+  }
+
+  // 5. Worker / Site Worker / Artisan
+  if ((idf === 'worker' || idf === 'siteworker' || idf === 'artisan') && roleStr === 'worker') {
+    return true;
+  }
+
+  // 6. Client
+  if (idf === 'client' && roleStr === 'client') {
+    return true;
+  }
+
+  // 7. Match against human-readable label
+  const label = ROLE_LABELS[user.role];
+  if (label && label.toLowerCase().replace(/[\s_-]+/g, '') === idf) {
+    return true;
+  }
+
+  return false;
+}
 
 function getStoredUsersList() {
   try {
     const raw = localStorage.getItem(STORAGE_USERS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Sanitize out old leftover users while preserving all user-edited details
+        const map = new Map();
+        mockUsers.forEach((mu) => map.set(mu.id, mu));
+        parsed.forEach((u) => {
+          const idStr = String(u.id);
+          if (PURGED_OLD_IDS.has(idStr)) return;
+          if (map.has(idStr)) {
+            const base = map.get(idStr);
+            if (u.name === 'Rakesh Deshmukh' || u.email === 'admin@aesthetic.demo') {
+              map.set(idStr, { ...base });
+            } else {
+              map.set(idStr, { ...base, ...u });
+            }
+          } else {
+            map.set(idStr, u);
+          }
+        });
+        const sanitized = Array.from(map.values());
+        localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(sanitized));
+        return sanitized;
+      }
     }
   } catch (e) {
     console.error('Failed to parse users in authService', e);
   }
-  return mockUsers || [];
+  try {
+    localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(mockUsers));
+  } catch {}
+  return mockUsers;
 }
 
 export const authService = {
   /**
-   * Performs authentication for any role (Admin, Manager, Supervisor, Worker, Client).
+   * Performs authentication for any role (Owner, Manager, Supervisor, Worker, Client).
    * Attempts real backend authentication if reachable, and gracefully falls back
    * to local/demo authentication when the backend server is offline or not running.
-   *
-   * @param {string} usernameOrEmail
-   * @param {string} password
-   * @param {boolean} [rememberMe=false]
-   * @returns {Promise<{ user: Object, token: string, permissions: Array<string> }>}
    */
   async login(usernameOrEmail, password, rememberMe = false) {
     if (!usernameOrEmail || !usernameOrEmail.trim()) {
@@ -61,7 +128,6 @@ export const authService = {
     try {
       let tokenResponse = null;
 
-      // Primary endpoint per STANDARDS.md: POST /api/v1/accounts/login/
       try {
         tokenResponse = await apiClient.post('/accounts/login/', {
           username: trimmedIdentifier,
@@ -69,7 +135,6 @@ export const authService = {
         });
       } catch (err) {
         if (err.status === 404) {
-          // Fallback backend route: POST /api/v1/auth/login/
           tokenResponse = await apiClient.post('/auth/login/', {
             username: trimmedIdentifier,
             password,
@@ -89,7 +154,6 @@ export const authService = {
           localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
         }
 
-        // Fetch user profile from backend
         let userProfile = null;
         try {
           userProfile = await apiClient.get('/accounts/me/');
@@ -105,7 +169,6 @@ export const authService = {
           }
         }
 
-        // Fetch permissions from backend (STANDARDS.md Section 4, step 3)
         let backendPermissions = null;
         try {
           backendPermissions = await apiClient.get('/accounts/permissions/');
@@ -123,7 +186,7 @@ export const authService = {
             'User',
           username: userProfile.username || trimmedIdentifier,
           email: userProfile.email || trimmedIdentifier,
-          role: userProfile.role || ROLES.ADMIN,
+          role: userProfile.role === 'admin' ? ROLES.ADMIN : userProfile.role || ROLES.ADMIN,
           title: userProfile.title || 'Staff Member',
           status: userProfile.status || 'active',
           avatar: userProfile.avatar || null,
@@ -144,11 +207,9 @@ export const authService = {
         };
       }
     } catch (backendErr) {
-      // If backend is active and rejected with 401/400 invalid credentials, report error
       if (!isNetworkOrServerError(backendErr) && (backendErr.status === 401 || backendErr.status === 400)) {
         throw new ApiError('Invalid email/username or password. Please try again.', backendErr.status);
       }
-      // If server is offline/unreachable, gracefully proceed to mock authentication
     }
 
     // 2. Mock / Local Authentication Fallback
@@ -159,13 +220,14 @@ export const authService = {
       (u) =>
         (u.email && u.email.toLowerCase() === lowerIdentifier) ||
         (u.username && u.username.toLowerCase() === lowerIdentifier) ||
+        (u.name && u.name.toLowerCase() === lowerIdentifier) ||
         (u.id && u.id.toLowerCase() === lowerIdentifier) ||
-        (u.name && u.name.toLowerCase() === lowerIdentifier)
+        matchesRole(u, trimmedIdentifier)
     );
 
     if (!matchedUser) {
       throw new ApiError(
-        'User not found. Use admin@aesthetic.demo or choose a 1-Click demo profile below.',
+        'User not found. You can enter your email, username, or role (e.g. admin, manager, supervisor, worker, client).',
         401
       );
     }
@@ -177,16 +239,22 @@ export const authService = {
       );
     }
 
-    // Validate password:
-    // Accept standard demo password "Demo@123", or matching stored password, or "admin"/"password"
+    // Strict Password Validation
+    const expectedPassword =
+      matchedUser.password ||
+      (matchedUser.role === ROLES.ADMIN || matchedUser.role === 'admin' ? 'admin123' : 'demo123');
+
     const isValidPassword =
-      password === 'Demo@123' ||
-      (matchedUser.password && password === matchedUser.password) ||
-      password === 'admin' ||
-      password === 'password';
+      password === expectedPassword ||
+      // Also accept admin123 for owner
+      ((matchedUser.role === ROLES.ADMIN || matchedUser.role === 'admin') && password === 'admin123');
 
     if (!isValidPassword) {
-      throw new ApiError('Invalid password. Demo password is Demo@123', 400);
+      const hint =
+        matchedUser.role === ROLES.ADMIN || matchedUser.role === 'admin'
+          ? 'Password for Rohit Kumar (Owner) is admin123'
+          : `Password for ${matchedUser.name} is demo123`;
+      throw new ApiError(`Invalid password. ${hint}`, 400);
     }
 
     return this.loginAsUser(matchedUser);
@@ -194,9 +262,6 @@ export const authService = {
 
   /**
    * Directly signs in as a specific user (used by 1-click demo profiles and local fallback).
-   *
-   * @param {Object} user
-   * @returns {{ user: Object, token: string, permissions: Array<string> }}
    */
   loginAsUser(user) {
     if (!user) {
@@ -204,7 +269,7 @@ export const authService = {
     }
 
     const token = `osm_jwt_token_${user.id}_${Date.now()}`;
-    const userRole = user.role || ROLES.WORKER;
+    const userRole = user.role === 'admin' ? ROLES.ADMIN : user.role || ROLES.WORKER;
     const permissions = getPermissionsForRole(userRole);
 
     const normalizedUser = {
@@ -232,10 +297,6 @@ export const authService = {
     };
   },
 
-  /**
-   * Logs out the user securely, blacklisting refresh tokens on backend if available,
-   * and clearing all osm.auth.* credentials.
-   */
   async logout() {
     const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
     if (refreshToken) {
@@ -250,16 +311,10 @@ export const authService = {
     clearAuthSession();
   },
 
-  /**
-   * Retrieve saved remember-me identifier.
-   */
   getRememberedEmail() {
     return localStorage.getItem(REMEMBER_EMAIL_KEY) || '';
   },
 
-  /**
-   * Get stored user profile from localStorage.
-   */
   getStoredUser() {
     try {
       const stored = localStorage.getItem(USER_KEY);
@@ -269,9 +324,6 @@ export const authService = {
     }
   },
 
-  /**
-   * Get stored permissions array from localStorage.
-   */
   getStoredPermissions() {
     try {
       const stored = localStorage.getItem(PERMISSIONS_KEY);
@@ -281,17 +333,11 @@ export const authService = {
     }
   },
 
-  /**
-   * Get demo profiles for the 5 roles (Admin, Manager, Supervisor, Worker, Client).
-   */
   getDemoUsers() {
     const users = getStoredUsersList();
     return (users || []).filter((u) => u.status === 'active');
   },
 
-  /**
-   * Verify session with backend.
-   */
   async verifySession() {
     const token = apiClient.getToken();
     if (!token) return null;
