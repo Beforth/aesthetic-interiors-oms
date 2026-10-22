@@ -34,8 +34,8 @@ export const SearchInput = forwardRef(function SearchInput(
 
   const baseInput = (
     <div className="relative flex items-center w-full">
-      <div className="absolute left-3 text-text-muted pointer-events-none flex items-center">
-        <Icon name="search" size={16} />
+      <div className="absolute left-3.5 text-text-muted pointer-events-none flex items-center">
+        <Icon name="search" size={18} />
       </div>
 
       <input
@@ -48,7 +48,7 @@ export const SearchInput = forwardRef(function SearchInput(
         placeholder={placeholder}
         aria-label={label || placeholder}
         className={`w-full bg-surface border rounded text-sm text-text-main placeholder:text-text-muted/60 transition-colors
-          min-h-[44px] sm:min-h-[38px] pl-9 pr-8 py-2
+          min-h-[44px] pl-10 pr-9 py-2.5
           ${
             error
               ? 'border-danger focus:border-danger focus:ring-1 focus:ring-danger'

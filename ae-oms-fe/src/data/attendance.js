@@ -98,6 +98,23 @@ export const mockTodayAttendance = [
     withinGeofence: true,
     correctionReason: null,
   },
+  {
+    id: 'att-4',
+    userId: 'u1',
+    userName: 'Rohit Kumar',
+    role: 'Owner',
+    siteId: 'OFFICE',
+    site: 'Aesthetic Interiors Head Office & Studio',
+    date: new Date().toISOString().split('T')[0],
+    checkInTime: '08:50 AM',
+    checkOutTime: null,
+    status: 'present',
+    verified: true,
+    coordinates: { lat: 12.9352, lng: 77.6245 },
+    distanceMeters: 5,
+    withinGeofence: true,
+    correctionReason: null,
+  },
 ];
 
 export const mockAttendance = mockTodayAttendance;

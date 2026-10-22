@@ -21,7 +21,21 @@ function getStoredProjects() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Merge any new canonical mock projects that might not exist in cached storage
+        const existingIds = new Set(parsed.map((p) => p.id));
+        let merged = false;
+        mockProjects.forEach((mp) => {
+          if (!existingIds.has(mp.id)) {
+            parsed.push(mp);
+            merged = true;
+          }
+        });
+        if (merged) {
+          saveProjects(parsed);
+        }
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Failed to read projects from localStorage', e);
@@ -155,6 +169,32 @@ export const projectService = {
       saveProjects(updated);
       return updated.find((p) => p.id === id) || null;
     }, 'Project updated successfully');
+  },
+
+  async linkProjectToClient(projectId, client) {
+    return apiClient.execute(async () => {
+      const projects = getStoredProjects();
+      const updated = projects.map((p) => {
+        if (p.id === projectId) {
+          return {
+            ...p,
+            clientId: client.id,
+            clientName: client.name,
+            clientEmail: client.email || p.clientEmail,
+          };
+        }
+        return p;
+      });
+      saveProjects(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('osm_project_updated', {
+            detail: { projectId, clientId: client.id },
+          })
+        );
+      }
+      return updated.find((p) => p.id === projectId) || null;
+    }, 'Project linked to client successfully');
   },
 
   async updateProjectStages(projectId, stages) {

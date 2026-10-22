@@ -29,6 +29,10 @@ function sanitizeUsers(users) {
         map.set(idStr, {
           ...base,
           ...u,
+          birthday:
+            u.birthday && u.birthday !== '1990-08-22' && u.birthday !== '1994-07-25'
+              ? u.birthday
+              : base.birthday,
         });
       }
     } else {
@@ -216,6 +220,19 @@ export const userService = {
     } catch (e) {}
 
     return this.updateUser(id, { status: newStatus });
+  },
+
+  async deleteUser(id) {
+    const localUsers = getLocalUsers();
+    const updated = localUsers.filter((u) => String(u.id) !== String(id));
+    saveLocalUsers(updated);
+    try {
+      await apiClient.delete(`/admin/users/${id}/`);
+    } catch (e) {}
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('osm_users_updated', { detail: { id } }));
+    }
+    return true;
   },
 };
 

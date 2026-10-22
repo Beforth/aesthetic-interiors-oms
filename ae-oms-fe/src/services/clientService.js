@@ -20,14 +20,23 @@ function getStoredClients() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((c) => {
+          const t = c.type || c.status || 'new';
+          return { ...c, type: t, status: t };
+        });
+      }
     }
   } catch (e) {
     console.error('Failed to read clients from localStorage', e);
   }
   if (mockClients && mockClients.length > 0) {
-    saveClients(mockClients);
-    return mockClients;
+    const initialized = mockClients.map((c) => {
+      const t = c.type || c.status || 'new';
+      return { ...c, type: t, status: t };
+    });
+    saveClients(initialized);
+    return initialized;
   }
   return [];
 }
@@ -78,14 +87,19 @@ export const clientService = {
   async createClient(clientData) {
     return apiClient.execute(async () => {
       const clients = getStoredClients();
+      const clientType = clientData.type || clientData.status || 'new';
       const newClient = {
         id: `c${Date.now()}`,
         createdAt: new Date().toISOString().split('T')[0],
-        type: clientData.type || 'new',
+        type: clientType,
+        status: clientType,
         ...clientData,
       };
       const updated = [newClient, ...clients];
       saveClients(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_client_updated', { detail: newClient }));
+      }
       return newClient;
     }, 'Client created successfully');
   },
@@ -93,10 +107,37 @@ export const clientService = {
   async updateClient(id, updateData) {
     return apiClient.execute(async () => {
       const clients = getStoredClients();
-      const updated = clients.map((c) => (c.id === id ? { ...c, ...updateData } : c));
+      const updated = clients.map((c) => {
+        if (c.id === id) {
+          const clientType = updateData.type || updateData.status || c.type || c.status || 'new';
+          return {
+            ...c,
+            ...updateData,
+            type: clientType,
+            status: clientType,
+          };
+        }
+        return c;
+      });
       saveClients(updated);
-      return updated.find((c) => c.id === id) || null;
+      const found = updated.find((c) => c.id === id) || null;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_client_updated', { detail: found }));
+      }
+      return found;
     }, 'Client updated successfully');
+  },
+
+  async deleteClient(id) {
+    return apiClient.execute(async () => {
+      const clients = getStoredClients();
+      const updated = clients.filter((c) => c.id !== id);
+      saveClients(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_client_deleted', { detail: { id } }));
+      }
+      return true;
+    }, 'Client deleted successfully');
   },
 
   async importClients(importedList = []) {

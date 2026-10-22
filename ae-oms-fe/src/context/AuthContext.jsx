@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { authService } from '../services/authService';
 import { getAuthToken } from '../services/apiClient';
 
@@ -16,6 +16,18 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => {
     return getAuthToken();
   });
+
+  // Listen to live permission matrix updates by Admin
+  useEffect(() => {
+    const handleUpdate = () => {
+      const updated = authService.getStoredPermissions();
+      if (Array.isArray(updated)) {
+        setPermissions(updated);
+      }
+    };
+    window.addEventListener('osm_permissions_updated', handleUpdate);
+    return () => window.removeEventListener('osm_permissions_updated', handleUpdate);
+  }, []);
 
   /**
    * Evaluates if the authenticated user has the specified permission.

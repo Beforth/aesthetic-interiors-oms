@@ -52,6 +52,7 @@ import AssigneePicker from '../components/domain/AssigneePicker';
 import AgencySelect from '../components/domain/AgencySelect';
 import { mockUsers } from '../data/users';
 import { mockAgencies } from '../data/agencies';
+import SidebarDemo from '../components/ui/SidebarDemo';
 
 
 export function ComponentsShowcasePage() {
@@ -644,6 +645,15 @@ export function ComponentsShowcasePage() {
                 onPageChange: setTablePage,
               }}
             />
+          </Card>
+
+          <Card
+            title="Interactive Sidebar (Collapsible Rail & Mobile Slide-Over)"
+            subtitle="Collapsible icon rail with hover tooltips on desktop (>=1024px) and slide-over drawer below 1024px"
+          >
+            <div className="pt-2">
+              <SidebarDemo />
+            </div>
           </Card>
 
           <Card title="Breadcrumbs & Tooltips">

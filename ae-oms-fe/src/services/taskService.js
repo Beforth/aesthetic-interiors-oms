@@ -1,7 +1,7 @@
 import { apiClient } from './apiClient';
 import { mockTasks } from '../data/tasks';
 
-const STORAGE_KEY = 'osm_tasks_store';
+const STORAGE_KEY = 'osm_tasks_store_v2';
 
 function getStoredTasks() {
   try {
@@ -13,11 +13,8 @@ function getStoredTasks() {
   } catch (e) {
     console.error('Failed to read tasks from localStorage', e);
   }
-  if (mockTasks && mockTasks.length > 0) {
-    saveTasks(mockTasks);
-    return mockTasks;
-  }
-  return [];
+  saveTasks(mockTasks);
+  return mockTasks;
 }
 
 function saveTasks(tasks) {
@@ -31,37 +28,39 @@ function saveTasks(tasks) {
 export const taskService = {
   async getAllTasks() {
     return apiClient.execute(async () => {
-      return [...getStoredTasks()];
+      const todayStr = new Date().toISOString().split('T')[0];
+      const tasks = getStoredTasks();
+      // Flag overdue dynamically (FR-TSK-07)
+      return tasks.map((t) => ({
+        ...t,
+        isOverdue: t.status !== 'done' && t.dueDate && t.dueDate < todayStr,
+      }));
     }, 'Tasks fetched successfully');
   },
 
   async getTasksByAssignedUser(userId) {
     return apiClient.execute(async () => {
-      const tasks = getStoredTasks();
-      return tasks.filter((t) => t.assignedToId === userId);
+      const tasks = await this.getAllTasks();
+      return tasks.filter((t) => String(t.assignedToId) === String(userId));
     }, 'Assigned tasks fetched');
   },
 
   async getTasksByProject(projectId) {
     return apiClient.execute(async () => {
-      const tasks = getStoredTasks();
-      return tasks.filter((t) => t.projectId === projectId);
+      const tasks = await this.getAllTasks();
+      return tasks.filter((t) => String(t.projectId) === String(projectId));
     }, 'Project tasks fetched');
-  },
-
-  async getTodayTasks() {
-    return apiClient.execute(async () => {
-      const tasks = getStoredTasks();
-      return tasks.slice(0, 5);
-    }, 'Today tasks fetched');
   },
 
   async createTask(taskData) {
     return apiClient.execute(async () => {
       const tasks = getStoredTasks();
       const newTask = {
-        id: `t_${Date.now()}`,
-        status: 'pending',
+        id: `tsk_${Date.now()}`,
+        status: 'todo',
+        priority: taskData.priority || 'medium',
+        type: taskData.type || 'site', // 'site' or 'office' (FR-TSK-02)
+        photos: taskData.photos || [],
         createdAt: new Date().toISOString().split('T')[0],
         ...taskData,
       };
@@ -74,10 +73,45 @@ export const taskService = {
   async updateTaskStatus(id, newStatus) {
     return apiClient.execute(async () => {
       const tasks = getStoredTasks();
-      const updated = tasks.map((t) => (t.id === id ? { ...t, status: newStatus } : t));
+      const updated = tasks.map((t) =>
+        t.id === id ? { ...t, status: newStatus, completedAt: newStatus === 'done' ? new Date().toISOString() : null } : t
+      );
       saveTasks(updated);
       return updated.find((t) => t.id === id) || null;
     }, 'Task status updated');
+  },
+
+  async updateTask(id, updateData) {
+    return apiClient.execute(async () => {
+      const tasks = getStoredTasks();
+      const updated = tasks.map((t) => (t.id === id ? { ...t, ...updateData } : t));
+      saveTasks(updated);
+      return updated.find((t) => t.id === id) || null;
+    }, 'Task updated successfully');
+  },
+
+  async attachPhoto(id, photoUrl) {
+    return apiClient.execute(async () => {
+      const tasks = getStoredTasks();
+      const updated = tasks.map((t) => {
+        if (t.id === id) {
+          const currentPhotos = t.photos || [];
+          return { ...t, photos: [...currentPhotos, photoUrl] };
+        }
+        return t;
+      });
+      saveTasks(updated);
+      return updated.find((t) => t.id === id) || null;
+    }, 'Photo attached to task');
+  },
+
+  async deleteTask(id) {
+    return apiClient.execute(async () => {
+      const tasks = getStoredTasks();
+      const updated = tasks.filter((t) => t.id !== id);
+      saveTasks(updated);
+      return true;
+    }, 'Task deleted successfully');
   },
 };
 

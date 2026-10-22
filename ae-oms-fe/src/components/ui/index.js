@@ -39,3 +39,17 @@ export { DetailList } from './DetailList';
 export { Tag } from './Tag';
 export { FileImportDialog } from './FileImportDialog';
 export { TooltipManager } from './TooltipManager';
+export { PermissionMatrix } from './permission-matrix';
+export { Leaderboard } from './leaderboard';
+export {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarItem,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from './sidebar';
+export { default as SidebarDemo } from './SidebarDemo';

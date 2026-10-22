@@ -1,69 +1,122 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getNavigationForUser } from '../../config/navigation';
-import { ROLE_LABELS } from '../../config/roles';
-import SidebarItem from './SidebarItem';
+import {
+  Sidebar as SidebarPrimitive,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarItem,
+  SidebarFooter,
+} from '../ui/sidebar';
 import Icon from '../ui/Icon';
-import Avatar from '../ui/Avatar';
+import { LogOutIcon } from '../ui/icons';
 
 /**
- * Desktop and mobile sidebar menu for Aesthetic Interiors OSM.
+ * Modern responsive application sidebar for Aesthetic Interiors OSM.
+ * Supports desktop collapsible rail (w-16 on collapsed, w-64 expanded)
+ * with hover tooltips and responsive slide-over drawer below 1024px.
  *
  * @param {Object} props
  * @param {function(): void} [props.onNavigate]
  * @param {string} [props.className]
  */
 export function Sidebar({ onNavigate, className = '' }) {
-  const { currentUser, role, hasPermission } = useAuth();
+  const { hasPermission, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const navItems = getNavigationForUser(hasPermission);
 
+  const handleLogout = async () => {
+    if (onNavigate) {
+      onNavigate();
+    }
+    try {
+      await logout();
+      navigate('/login');
+    } catch {
+      navigate('/login');
+    }
+  };
+
+  // Group items logically for clean visual hierarchy
+  const overviewItems = navItems.filter((i) =>
+    ['dashboard', 'tasks', 'attendance', 'daily-reports'].includes(i.id)
+  );
+  const businessItems = navItems.filter((i) =>
+    ['clients', 'projects', 'agencies', 'website-leads'].includes(i.id)
+  );
+  const financeItems = navItems.filter((i) =>
+    ['payments', 'leave-payslips', 'reports'].includes(i.id)
+  );
+  const settingsItems = navItems.filter((i) =>
+    ['settings'].includes(i.id)
+  );
+
+  const renderGroup = (label, items) => {
+    if (!items || items.length === 0) return null;
+    return (
+      <SidebarGroup label={label}>
+        {items.map((item) => {
+          const isActive =
+            item.path === '/'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path);
+
+          return (
+            <SidebarItem
+              key={item.id}
+              icon={<Icon name={item.icon} size={18} />}
+              label={item.label}
+              badge={item.badge}
+              active={isActive}
+              onClick={() => {
+                navigate(item.path);
+                if (onNavigate) onNavigate();
+              }}
+            />
+          );
+        })}
+      </SidebarGroup>
+    );
+  };
+
   return (
-    <aside
-      className={`w-64 bg-surface border-r border-border flex flex-col h-full select-none ${className}`}
-    >
+    <SidebarPrimitive className={className}>
       {/* Brand Header */}
-      <div className="h-16 px-5 border-b border-border flex items-center gap-3 shrink-0 bg-surface">
-        <div className="w-9 h-9 rounded bg-brand-600 text-surface flex items-center justify-center font-bold tracking-tight shadow-sm">
-          <Icon name="brush" size={18} className="text-surface" />
-        </div>
-        <div className="overflow-hidden">
-          <div className="text-sm font-bold text-text-main leading-tight truncate">
+      <SidebarHeader>
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+          A
+        </span>
+        <div className="overflow-hidden min-w-0">
+          <div className="text-sm font-semibold text-text-main leading-tight truncate">
             Aesthetic Interiors
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-text-muted font-medium">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
             Operations System
           </div>
         </div>
-      </div>
+      </SidebarHeader>
 
-      {/* Navigation List */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1">
-        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Navigation ({ROLE_LABELS[role] || 'User'})
-        </div>
-        {navItems.map((item) => (
-          <SidebarItem key={item.id} item={item} onNavigate={onNavigate} />
-        ))}
-      </nav>
+      {/* Grouped Navigation List */}
+      <SidebarContent>
+        {renderGroup('Overview', overviewItems)}
+        {renderGroup('Projects & Clients', businessItems)}
+        {renderGroup('Finance & HR', financeItems)}
+        {renderGroup('Administration', settingsItems)}
+      </SidebarContent>
 
-      {/* User Info & Quick Switch Indicator */}
-      {currentUser && (
-        <div className="p-3 border-t border-border bg-brand-50/60 shrink-0">
-          <div className="flex items-center gap-3 p-2 rounded bg-surface border border-border">
-            <Avatar name={currentUser.name} size="sm" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-text-main truncate">
-                {currentUser.name}
-              </p>
-              <p className="text-[11px] text-brand-600 font-medium truncate">
-                {ROLE_LABELS[currentUser.role] || currentUser.role}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    </aside>
+      {/* Logout Footer */}
+      <SidebarFooter>
+        <SidebarItem
+          icon={<LogOutIcon className="size-4 text-destructive" />}
+          label="Logout"
+          onClick={handleLogout}
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        />
+      </SidebarFooter>
+    </SidebarPrimitive>
   );
 }
 

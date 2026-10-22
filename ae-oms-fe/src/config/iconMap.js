@@ -39,6 +39,7 @@ import {
   ChevronUp,
   Search,
   Plus,
+  Link2,
   Trash2,
   Edit2,
   MoreVertical,
@@ -66,7 +67,9 @@ import {
   Phone,
   Mail,
   MapPin,
-  CheckCircle
+  CheckCircle,
+  Cake,
+  Gift,
 } from 'lucide-react';
 
 export const iconMap = {
@@ -94,6 +97,8 @@ export const iconMap = {
   folder: FolderKanban,
   clock: Clock,
   calendar: CalendarDays,
+  cake: Cake,
+  gift: Gift,
   receipt: Receipt,
   trending: TrendingUp,
   chart: PieChart,
@@ -112,6 +117,7 @@ export const iconMap = {
   // Actions & Controls
   search: Search,
   plus: Plus,
+  link: Link2,
   trash: Trash2,
   edit: Edit2,
   more: MoreVertical,

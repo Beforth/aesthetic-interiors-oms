@@ -5,12 +5,10 @@ import { ROLES } from '../config/roles';
  *
  * Current Active Records:
  * 1. Rohit Kumar    | Owner (Admin)   | password: admin123
- * 2. Neha Kulkarni   | Manager         | password: demo123
- * 3. Vikram Jadhav   | Site Supervisor | password: demo123
- * 4. Suresh Gaikwad  | Site Worker     | password: demo123
- * 5. Amit Joshi      | Client          | password: demo123
- *
- * All other leftover mock persons have been permanently purged.
+ * 2. Neha Kulkarni   | Manager         | password: demo123 (Birthday: Oct 24)
+ * 3. Vikram Jadhav   | Site Supervisor | password: demo123 (Birthday: Oct 15)
+ * 4. Suresh Gaikwad  | Site Worker     | password: demo123 (Birthday: Oct 28)
+ * 5. Amit Joshi      | Client          | password: demo123 (Birthday: Oct 03)
  */
 export const mockUsers = [
   {
@@ -23,7 +21,7 @@ export const mockUsers = [
     phone: '+91 98201 11223',
     status: 'active',
     joinedOn: '2023-01-10',
-    birthday: '1985-06-15',
+    birthday: '1985-11-12',
     title: 'Managing Director & Owner',
     notes: 'owner',
     assignedProjects: ['P1', 'P2', 'P3', 'P4'],
@@ -38,7 +36,7 @@ export const mockUsers = [
     phone: '+91 98451 22334',
     status: 'active',
     joinedOn: '2023-03-15',
-    birthday: '1990-08-22',
+    birthday: '1992-10-24',
     title: 'Senior Operations Manager',
     notes: 'runs projects & operations',
     assignedProjects: ['P1', 'P2', 'P3', 'P4'],
@@ -53,7 +51,7 @@ export const mockUsers = [
     phone: '+91 94220 44556',
     status: 'active',
     joinedOn: '2023-08-12',
-    birthday: '1992-04-18',
+    birthday: '1990-10-15',
     title: 'Site Supervisor',
     notes: 'field site supervisor',
     assignedProjects: ['P1', 'P2', 'P3', 'P4'],
@@ -68,7 +66,7 @@ export const mockUsers = [
     phone: '+91 97411 77889',
     status: 'active',
     joinedOn: '2024-03-01',
-    birthday: '1994-07-25',
+    birthday: '1994-10-28',
     title: 'Site Worker',
     notes: 'lead site craftsman & artisan',
     assignedProjects: ['P1', 'P2', 'P3', 'P4'],

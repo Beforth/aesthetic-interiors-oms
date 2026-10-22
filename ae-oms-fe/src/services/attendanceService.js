@@ -24,7 +24,18 @@ function getStoredAttendance() {
     const raw = localStorage.getItem(STORAGE_ATTENDANCE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const existingIds = new Set(parsed.map((a) => a.id));
+        let added = false;
+        mockTodayAttendance.forEach((m) => {
+          if (!existingIds.has(m.id)) {
+            parsed.push(m);
+            added = true;
+          }
+        });
+        if (added) saveAttendance(parsed);
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Failed to read attendance from localStorage', e);

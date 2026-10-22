@@ -15,6 +15,7 @@ import ProjectsPage from '../pages/ProjectsPage';
 import ProjectDetailPage from '../pages/ProjectDetailPage';
 import AgenciesPage from '../pages/AgenciesPage';
 import AttendancePage from '../pages/AttendancePage';
+import TasksPage from '../pages/TasksPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 
@@ -112,12 +113,7 @@ export function AppRoutes() {
           path="tasks"
           element={
             <RoleRoute permissions={['tasks.updateOwn', 'tasks.create', 'tasks.viewAll']}>
-              <PlaceholderPage
-                title="Tasks"
-                subtitle="Daily site trade checklists, subcontractor inspection tickets, and snag list tracking"
-                icon="tasks"
-                phase="Phase 3"
-              />
+              <TasksPage />
             </RoleRoute>
           }
         />
@@ -220,6 +216,7 @@ export function AppRoutes() {
 }
 
 export default AppRoutes;
+
 
 
 

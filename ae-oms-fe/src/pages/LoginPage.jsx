@@ -86,15 +86,8 @@ export function LoginPage() {
   return (
     <div className="min-h-screen w-full flex bg-brand-canvas">
       {/* Left Column: Luxury Architectural Showcase (Visible on Large Screens) */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-brand-espresso via-brand-umber to-brand-bark text-surface p-12 xl:p-16 flex-col justify-between overflow-hidden">
-        {/* Subtle Architectural Grid Background Accent */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
-          style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.4) 1px, transparent 0)`,
-            backgroundSize: '32px 32px',
-          }}
-        />
+      <div className="hidden lg:flex lg:w-1/2 relative bg-brand-espresso text-surface p-12 xl:p-16 flex-col justify-between overflow-hidden">
+        
 
         {/* Ambient Warm Glow */}
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-brand-clay/20 blur-3xl pointer-events-none" />
@@ -102,14 +95,14 @@ export function LoginPage() {
 
         {/* Brand Header */}
         <div className="relative z-10 flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-amber-200 shadow-lg">
+          <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-brand-200 shadow-lg">
             <Icon name="brush" size={24} className="stroke-[2.2]" />
           </div>
           <div>
             <span className="text-xl font-bold tracking-wider uppercase text-white font-serif">
               Aesthetic Interiors
             </span>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-amber-200/80 font-medium">
+            <div className="text-[11px] uppercase tracking-[0.22em] text-brand-200/80 font-medium">
               Operations & Client Portal
             </div>
           </div>
@@ -117,8 +110,8 @@ export function LoginPage() {
 
         {/* Center Content: Statement & Pillars */}
         <div className="relative z-10 my-auto py-12 max-w-xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-amber-200 text-xs font-medium mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-brand-200 text-xs font-medium mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
             <span>High-End Fit-Out Governance</span>
           </div>
 
@@ -133,7 +126,7 @@ export function LoginPage() {
           {/* Three Operational Pillars */}
           <div className="space-y-3.5">
             <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-colors">
-              <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-8 h-8 rounded-lg bg-brand-400/20 text-brand-200 flex items-center justify-center shrink-0 mt-0.5">
                 <Icon name="projects" size={17} />
               </div>
               <div>
@@ -145,7 +138,7 @@ export function LoginPage() {
             </div>
 
             <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-colors">
-              <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-8 h-8 rounded-lg bg-brand-400/20 text-brand-200 flex items-center justify-center shrink-0 mt-0.5">
                 <Icon name="attendance" size={17} />
               </div>
               <div>
@@ -157,7 +150,7 @@ export function LoginPage() {
             </div>
 
             <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-colors">
-              <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-8 h-8 rounded-lg bg-brand-400/20 text-brand-200 flex items-center justify-center shrink-0 mt-0.5">
                 <Icon name="shield" size={17} />
               </div>
               <div>
