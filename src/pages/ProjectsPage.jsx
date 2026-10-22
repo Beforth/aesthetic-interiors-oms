@@ -24,8 +24,10 @@ import PermissionGate from '../components/ui/PermissionGate';
 export function ProjectsPage() {
   const navigate = useNavigate();
   const { currentUser, role, hasPermission } = useAuth();
-  const isClientView = hasPermission('projects.viewOwn');
-  const isAssignedView = hasPermission('projects.viewAssigned');
+  // The widest permission wins: the Owner holds all three, so only "viewAll" decides for them.
+  const canViewAll = hasPermission('projects.viewAll');
+  const isClientView = hasPermission('projects.viewOwn') && !canViewAll;
+  const isAssignedView = hasPermission('projects.viewAssigned') && !canViewAll;
   const toast = useToast();
   const canCreateProject = usePermission('projects.create');
 

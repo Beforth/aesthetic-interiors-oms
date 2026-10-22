@@ -25,8 +25,10 @@ import PlaceholderPage from '../pages/PlaceholderPage';
 export function AppRoutes() {
   const { hasPermission } = useAuth();
 
-  // Root redirect destination depending on permissions
-  const defaultDestination = hasPermission('projects.viewOwn') ? '/projects' : '/dashboard';
+  // Root redirect destination depending on permissions. A "client" sees their own projects but not all of
+  // them; the Owner holds every permission, so it must not be mistaken for one.
+  const isClientOnly = hasPermission('projects.viewOwn') && !hasPermission('projects.viewAll');
+  const defaultDestination = isClientOnly ? '/projects' : '/dashboard';
 
   return (
     <Routes>
