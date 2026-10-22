@@ -31,12 +31,13 @@ Rule entry template:
 
 | Project | Tech | Purpose |
 |---|---|---|
-| `ae-oms-be/` | Django 6 + DRF + Simple JWT + PostgreSQL | REST API |
-| `ae-oms-fe/` | React 18 + Vite + Tailwind CSS (JavaScript) | Operations & CRM web client |
+| `ae-oms-be` (separate repo) | Django 6 + DRF + Simple JWT + PostgreSQL | REST API |
+| `ae-oms-fe` (this repo) | React 18 + Vite + Tailwind CSS (JavaScript) | Operations & CRM web client |
 
-- Backend and frontend are independent projects. They talk **only** through the versioned HTTP API.
+- Backend and frontend are **separate repositories**, kept side by side in one parent folder (`Aesthetic-Interior/`). They talk **only** through the versioned HTTP API. This repo holds the frontend only; the backend sections below are the rules the backend repo follows.
 - In local dev the frontend proxies `/api` and `/media` to the backend (`vite.config.js`), so the frontend `.env` can stay empty.
-- Backend local setup: `docker compose --env-file ae-oms-be/.env up -d` (Postgres), then in `ae-oms-be/`: `pip install -r requirements.txt`, `python manage.py migrate`, `python manage.py runserver`. Run `python manage.py check` and `python manage.py makemigrations --check` before committing.
+- Frontend local setup, from the root of this repo: `npm install`, then `npm run dev` (Vite on http://localhost:5173; it proxies `/api` and `/media` to the backend on http://127.0.0.1:8000, so start the backend first). `npm run build` makes a production build. The backend's own setup steps live in the `ae-oms-be` repo.
+- Git: never commit directly to `main`. Work on a `feat/...` branch and merge through a pull request. Swagger UI is at `http://127.0.0.1:8000/api/docs/` (schema at `/api/schema/`). Run `python manage.py check` and `python manage.py makemigrations --check` before committing.
 - Secrets live in `.env` (gitignored). Commit only `.env.example`. Never hardcode `SECRET_KEY`, DB passwords, tokens, or API keys.
 
 ---
@@ -68,7 +69,7 @@ request → urls → view → serializer (validate) → service (business logic)
 ### Backend folder layout
 
 ```
-ae-oms-be/
+ae-oms-be/                 # repo root
 ├── core/                  # project module: settings, root urls, shared utils
 │   ├── settings.py
 │   ├── api_urls.py        # mounts every app under /api/<version>/
@@ -165,7 +166,7 @@ Error:
 - Verbs map to HTTP methods: `GET` read, `POST` create, `PATCH` partial update, `PUT` full replace (rare), `DELETE` remove.
 - Non-CRUD actions are sub-resources with `POST`: `/orders/{id}/cancel/`.
 - Use query params for filtering/search/pagination: `?search=&status=&page=&page_size=`.
-- Lists are paginated with one shared paginator (`count`, `next`, `previous`, `results`). Define default and max page size once in `core/pagination.py`.
+- Lists are paginated with one shared paginator (`count`, `next`, `previous`, `results`). Define default and max page size once in `core/pagination.py`. Views return lists through `core.views.paginated_response`; the frontend reads every page through `apiClient.getAll(...)`.
 
 ### Status codes
 
@@ -187,14 +188,15 @@ Error:
 
 - Auth transport: JWT (Simple JWT). Clients send `Authorization: Bearer <access>`.
 - Default permission class is `IsAuthenticated`. Public endpoints (login, refresh) explicitly set `AllowAny` and empty `authentication_classes`.
-- Token lifetimes come from `.env`.
+- Token lifetimes come from `.env`. **Sliding idle session:** the access token is short (`JWT_ACCESS_MINUTES`, 5) and the refresh token lives `JWT_REFRESH_MINUTES` (10). Every refresh rotates and blacklists the old refresh token and restarts the 10-minute window. The frontend (`AuthContext`) refreshes only while the user is active (mouse, keys, scroll, touch) and signs the user out after 10 idle minutes; `apiClient` also refreshes once and retries on a 401. Keep the two numbers in sync.
 - Issue tokens in one function in `accounts/services.py` (e.g. `issue_tokens(user, ...)`). Never build tokens in views.
 - All user/auth logic lives in the `accounts` app and is reached through `accounts.services`.
 - **Authorization** is permission-based, not role-name-based. Code checks a permission codename (`clients.view`), never `if user.role == "admin"`. Roles/groups are just bundles of permissions.
-- Permission codenames are defined once per side: `accounts/permissions.py` (authoritative, enforced by the backend via `HasPermission`) and `src/config/permissions.js` (UI gating). Keep them identical; add a codename to both in the same change.
+- Permission codenames: `accounts/defaults.py` lists them and seeds the system roles; the live source of truth is `Role.permissions` in the database (admins edit it through `/accounts/roles/`). `accounts/permissions.py` enforces it via `HasPermission` (set `required_permissions = {'GET': [...any of...], 'POST': 'x.manage'}` on the view). `src/config/permissions.js` mirrors the codenames for UI gating. Add a new codename to both files in the same change.
+- **Row-level access** (which clients/projects a caller sees) lives in the app's `services.py` (`accessible_projects`, `accessible_clients`), never in the view. The widest permission wins: `projects.viewAll`, then `viewAssigned`, then `viewOwn`. The Owner role holds every codename, so UI code must test `viewOwn && !viewAll` to detect a client.
 - Do **not** return permissions inside the login/token response. Clients fetch them from a dedicated `GET .../permissions/` endpoint after login.
 - Superuser bypass is allowed and must be implemented in one helper, not repeated per view.
-- Every new endpoint must declare its permission. "Any authenticated user" is a deliberate choice and should be stated in the endpoint table.
+- Every new endpoint must declare its permission and an `@extend_schema` (request, and `core.schema.responses(...)` for the envelope) so Swagger stays accurate. "Any authenticated user" is a deliberate choice and should be stated in the endpoint table.
 
 ### Client login flow
 
@@ -210,7 +212,7 @@ Error:
 ## 5. Data model and database
 
 - Every model has: primary key, `created_at`, `updated_at` (shared abstract base in `core`).
-- **Soft delete by default** for business data: an `is_deleted`/`deleted_at` field and a default manager that hides deleted rows. Hard delete only for throwaway data and only when stated here. Models inherit `core.models.BaseModel` (timestamps + soft delete); admin uses `all_objects`. Uniqueness on soft-deletable models must use a conditional `UniqueConstraint(condition=Q(is_deleted=False))`; the only exception is `User.email`, which stays globally unique because it is `USERNAME_FIELD`.
+- **Soft delete by default** for business data: an `is_deleted`/`deleted_at` field and a default manager that hides deleted rows. Hard delete only for throwaway data and only when stated here. Models inherit `core.models.BaseModel` (timestamps + soft delete); admin uses `all_objects`. Uniqueness on soft-deletable models must use a conditional `UniqueConstraint(condition=Q(is_deleted=False))`; the only exceptions are `User.email` (it is `USERNAME_FIELD`) and the optional `User.username`: both identify who is signing in, so they stay globally unique even after a soft delete. `Role.key` uses the conditional constraint.
 - Enforce rules in the database too: `unique`, `unique_together`/`UniqueConstraint`, `CheckConstraint`, `null=False` by default. Do not rely on serializers alone.
 - Name FKs for what they are (`customer`, not `customer_fk`). Always set `on_delete` deliberately and `related_name` when there is more than one FK to the same model.
 - Money: `DecimalField`, never `float`. Store a currency or document the single currency (INR). Round in one place.
@@ -285,3 +287,14 @@ Run in project root:
 
 - `2026-10-19` — Initial standards adopted for Aesthetic Interiors OSM: standardized `osm.auth.*` storage prefix, permission-first route guards, `apiClient` envelope unwrapping, and tooltip `data-tooltip` conventions.
 - `2026-10-21` — Cleaned up template leftovers; named projects `ae-oms-be`/`ae-oms-fe`; delete returns 200 + envelope; permissions defined on backend and frontend; soft-delete uniqueness rule; brand colour tokens; no `window.confirm`; role-name branching banned in UI; backend env-driven settings with Postgres.
+- `2026-10-21` — Phase 1 backend (accounts/roles/users, clients, agencies, projects/stages/template) built to the frontend's shapes; sliding 10-minute idle session with refresh rotation; role permissions stored in the database; Swagger via drf-spectacular; row-level access in services.
+- `2026-10-22` - Backend moved to its own repo (`ae-oms-be`) beside the frontend repo; setup steps, committed `requirements.txt` and the no-direct-commits-to-main rule added.
+- `2026-10-22` - Custom `User` (email sign-in, optional username) and `Role` models created before the first migration; the five system roles are seeded by a data migration from `accounts/defaults.py`. Every backend step is tested before it is committed.
+- `2026-10-22` - Sign-in, rotating refresh token (sliding 10-minute idle session, old token blacklisted), logout, `me` and `permissions` endpoints added. Tests that depend on time use `accounts/tests/utils.py` (`at(minutes)` freezes the clock) and use the fast password hasher.
+- `2026-10-22` - Swagger UI at `/api/docs/` and schema at `/api/schema/`. Every endpoint is described with `@extend_schema` and `core.schema.responses(...)` (the success and error envelopes). Tests fail if a new endpoint is undocumented or if `spectacular --validate --fail-on-warn` reports anything. Serializer method fields need a return type hint.
+- `2026-10-22` - Roles and permissions: `HasPermission` guard (declare `required_permissions = {'GET': [...any of...], 'POST': 'x.manage'}` on every view; undeclared methods are denied, `IsAuthenticated` goes first so anonymous gets 401), role CRUD at `/accounts/roles/` and the codename list at `/accounts/permissions/catalog/`. Role changes apply on the user's next request. Operations on one resource that share a name need an explicit `operation_id`. Aggregate queries must be ordered explicitly before paginating.
+- `2026-10-22` - Users API at `/accounts/users/` (list, create, edit, activate/deactivate, soft delete) plus the minimal `/accounts/users/directory/` for pickers. Rules: nobody can assign a role with more permissions than they hold or manage a user who holds more than they do (superusers exempt); nobody can change their own role or deactivate/delete themselves; passwords must pass Django's validators; email and username stay reserved after a soft delete; a deactivated or deleted user's tokens stop working immediately.
+- `2026-10-22` - Clients app at `/clients/clients/` (list, create, edit, soft delete) and spreadsheet import at `/clients/clients/import/`. Row-level access lives in `clients/services.py`: `clients.view` sees every client, a client login sees only the records linked to it, and a record the caller may not see is a 404, never a 403. A client login means a role with `projects.viewOwn` and without `projects.viewAll` (the widest permission wins; the Owner holds both). The import skips bad rows and duplicates (same email, or same phone ignoring spaces and dashes, against existing clients and earlier rows) and reports each skipped row with its position and reason. A client with projects will be refused deletion once the projects app exists.
+- `2026-10-22` - Agencies app at `/agencies/agencies/`. Contact details of subcontractors need `agencies.manage` or `projects.viewAll`; names are unique among live agencies ignoring capitals (database constraint plus a friendly 409); rating is 0-5 with one decimal and 0 means not rated.
+- `2026-10-22` - Projects app at `/projects/projects/` (list, create, edit, soft delete, replace stages, edit one stage) and the master stage template at `/projects/stage-template/`. Creating a project generates one stage per template row. Row-level access in `projects/services.py`: `projects.viewAll` sees all, `viewAssigned` the projects the user is assigned to, `viewOwn` a client's own projects. Changing assignees needs `projects.assignPeople`; other project fields `projects.create`; stage status `stages.updateStatus`; stage name/dates/agency `stages.editDates` or `stages.editProjectStages`. Clients with projects and agencies allocated to stages cannot be deleted. Assigned staff now also see their projects' clients and their project team in the directory. Apps may call each other only through `services.py`; a function-level import breaks an import cycle. Projects were implemented before their tests: the tests for projects/stages are the first job when testing resumes.
+- `2026-10-22` - Frontend repo flattened: the app now sits at the repo root (no `ae-oms-fe/` subfolder) and holds no backend files. Frontend and backend are separate repos side by side in one parent folder. This file is a copy of the backend repo's standards; keep the two in sync.

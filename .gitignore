@@ -1,25 +1,22 @@
-# Python & Django
-venv/
-__pycache__/
-*.py[cod]
-*$py.class
-*.sqlite3
-media/
-staticfiles/
+# Dependencies and build output
+node_modules/
+dist/
+dist-ssr/
+dev-dist/
+.vite/
 
-# Environment Variables (Secrets)
+# Environment files (secrets); commit only .env.example
 .env
-.env.local
+.env.*
+!.env.example
+*.local
 
-# Node & React
-ae-oms-fe/node_modules/
-ae-oms-fe/dist/
-ae-oms-fe/dev-dist/
-ae-oms-fe/.vite/
+# Logs
 npm-debug.log*
 yarn-debug.log*
+pnpm-debug.log*
 
-# IDE & OS
+# Editor and OS
 .vscode/
 .idea/
 .DS_Store
