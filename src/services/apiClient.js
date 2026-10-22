@@ -186,6 +186,9 @@ export async function apiRequest(endpoint, options = {}) {
         } else {
           message = payload;
         }
+      } else if (res.status >= 500) {
+        // An empty 5xx is what the dev proxy returns when nothing answers on the backend port
+        message = 'Unable to reach the backend server. Please make sure it is running.';
       }
 
       throw new ApiError(message, res.status, errors);
