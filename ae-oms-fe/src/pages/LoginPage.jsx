@@ -8,6 +8,7 @@ import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
 import Alert from '../components/ui/Alert';
 import Checkbox from '../components/ui/Checkbox';
+import { validateEmail } from '../utils/validators';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -41,8 +42,14 @@ export function LoginPage() {
 
   const validate = () => {
     const errors = {};
-    if (!usernameOrEmail.trim()) {
+    const identifier = usernameOrEmail.trim();
+    if (!identifier) {
       errors.usernameOrEmail = 'Please enter your email, username, or role';
+    } else if (identifier.includes('@')) {
+      const emailErr = validateEmail(identifier);
+      if (emailErr) {
+        errors.usernameOrEmail = emailErr;
+      }
     }
     if (!password) {
       errors.password = 'Please enter your password';

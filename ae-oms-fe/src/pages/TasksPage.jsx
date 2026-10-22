@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { formatDate } from '../utils/formatters';
+import { validateRequired } from '../utils/validators';
 
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
@@ -46,9 +47,11 @@ export function TasksPage() {
   const [projectFilter, setProjectFilter] = useState('ALL');
   const [assigneeFilter, setAssigneeFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL'); // 'site' or 'office'
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   // Create Task Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -110,11 +113,23 @@ export function TasksPage() {
 
   // Create Task Submit
   const handleCreateTask = async (e) => {
-    e.preventDefault();
-    if (!formData.title.trim()) {
-      toast.error('Please enter a task title');
+    if (e && e.preventDefault) e.preventDefault();
+    const titleErr = validateRequired(formData.title, 'Task Title', 3);
+    const projErr = validateRequired(formData.projectId, 'Assigned Project');
+    const userErr = validateRequired(formData.assignedToId, 'Assigned Person');
+    const dateErr = validateRequired(formData.dueDate, 'Due Date');
+
+    if (titleErr || projErr || userErr || dateErr) {
+      setFormErrors({
+        title: titleErr,
+        projectId: projErr,
+        assignedToId: userErr,
+        dueDate: dateErr,
+      });
+      toast.error(titleErr || projErr || userErr || dateErr);
       return;
     }
+    setFormErrors({});
 
     try {
       const targetProj = projects.find((p) => p.id === formData.projectId);
@@ -128,6 +143,16 @@ export function TasksPage() {
 
       toast.success(`Task "${formData.title}" assigned successfully`);
       setIsModalOpen(false);
+      setFormData({
+        title: '',
+        description: '',
+        projectId: projects[0]?.id || 'P1',
+        stageName: 'Carpenter',
+        assignedToId: users[0]?.id || '',
+        type: 'site',
+        priority: 'medium',
+        dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+      });
       loadData();
     } catch (err) {
       toast.error('Failed to create task');
@@ -160,6 +185,17 @@ export function TasksPage() {
       loadData();
     } catch (err) {
       toast.error('Failed to update status');
+    }
+  };
+
+  // Drag and drop task status changer
+  const handleDropTask = async (taskId, targetStatus) => {
+    try {
+      await taskService.updateTaskStatus(taskId, targetStatus);
+      toast.success(`Task moved to "${targetStatus}"`);
+      loadData();
+    } catch (err) {
+      toast.error('Failed to update task status');
     }
   };
 
@@ -378,9 +414,28 @@ export function TasksPage() {
                 t.status === col.key ||
                 (col.key === 'todo' && (t.status === 'pending' || t.status === 'to do'))
             );
+            const isTarget = dragOverCol === col.key;
 
             return (
-              <div key={col.key} className="space-y-3">
+              <div
+                key={col.key}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragOverCol !== col.key) setDragOverCol(col.key);
+                }}
+                onDragLeave={() => {
+                  if (dragOverCol === col.key) setDragOverCol(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverCol(null);
+                  const taskId = e.dataTransfer.getData('text/plain');
+                  if (taskId) handleDropTask(taskId, col.key);
+                }}
+                className={`space-y-3 p-1 rounded-xl transition-all ${
+                  isTarget ? 'bg-brand-50/80 ring-2 ring-brand-400' : ''
+                }`}
+              >
                 <div
                   className={`flex items-center justify-between p-2.5 rounded-lg border bg-surface border-t-4 ${col.color}`}
                 >
@@ -402,12 +457,20 @@ export function TasksPage() {
 
                 <div className="space-y-2.5 min-h-[400px]">
                   {colTasks.map((t) => (
-                    <Card
+                    <div
                       key={t.id}
-                      className={`p-3.5 space-y-2.5 shadow-2xs hover:shadow-sm transition-all border ${
-                        t.isOverdue ? 'border-danger/60 bg-danger-light/10' : ''
-                      }`}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', t.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      className="cursor-grab active:cursor-grabbing"
                     >
+                      <Card
+                        className={`p-3.5 space-y-2.5 shadow-2xs hover:shadow-md transition-all border ${
+                          t.isOverdue ? 'border-danger/60 bg-danger-light/10' : ''
+                        }`}
+                      >
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
                           {t.stageName || t.type}
@@ -476,6 +539,7 @@ export function TasksPage() {
                         </div>
                       </div>
                     </Card>
+                    </div>
                   ))}
 
                   {colTasks.length === 0 && (
@@ -580,16 +644,25 @@ export function TasksPage() {
           <Input
             label="Task Title / Snag Description"
             required
+            error={formErrors.title}
             value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            onChange={(e) => {
+              setFormData({ ...formData, title: e.target.value });
+              if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: null }));
+            }}
             placeholder="e.g. Master bedroom veneer grain continuity inspection"
           />
 
           <div className="grid grid-cols-2 gap-3">
             <Select
               label="Assigned Project"
+              required
+              error={formErrors.projectId}
               value={formData.projectId}
-              onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, projectId: e.target.value });
+                if (formErrors.projectId) setFormErrors((prev) => ({ ...prev, projectId: null }));
+              }}
               options={projects.map((p) => ({ value: p.id, label: p.name }))}
             />
 
@@ -607,8 +680,13 @@ export function TasksPage() {
           <div className="grid grid-cols-2 gap-3">
             <Select
               label="Assigned Person (FR-TSK-01)"
+              required
+              error={formErrors.assignedToId}
               value={formData.assignedToId}
-              onChange={(e) => setFormData({ ...formData, assignedToId: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, assignedToId: e.target.value });
+                if (formErrors.assignedToId) setFormErrors((prev) => ({ ...prev, assignedToId: null }));
+              }}
               options={users.map((u) => ({
                 value: String(u.id),
                 label: `${u.name} (${u.role})`,
@@ -628,8 +706,12 @@ export function TasksPage() {
               label="Due Date (FR-TSK-07)"
               type="date"
               required
+              error={formErrors.dueDate}
               value={formData.dueDate}
-              onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, dueDate: e.target.value });
+                if (formErrors.dueDate) setFormErrors((prev) => ({ ...prev, dueDate: null }));
+              }}
             />
 
             <Select

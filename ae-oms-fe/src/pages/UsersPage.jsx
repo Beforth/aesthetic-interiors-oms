@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatDate } from '../utils/formatters';
+import { validatePhone, sanitizePhone, validateEmail, validateRequired, validatePassword } from '../utils/validators';
 
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
@@ -256,10 +257,20 @@ export function UsersPage() {
 
   const validateUserForm = () => {
     const errors = {};
-    if (!formData.name.trim()) errors.name = 'Full name is required';
-    if (!formData.email.trim()) errors.email = 'Email address is required';
-    if (!formData.phone.trim()) errors.phone = 'Phone number is required';
-    if (!editingUser && !formData.password.trim()) errors.password = 'Initial password is required';
+    const nameErr = validateRequired(formData.name, 'Full name', 2);
+    if (nameErr) errors.name = nameErr;
+
+    const emailErr = validateEmail(formData.email, { required: true, fieldLabel: 'Email address' });
+    if (emailErr) errors.email = emailErr;
+
+    const phoneErr = validatePhone(formData.phone, { required: true, fieldLabel: 'Phone number' });
+    if (phoneErr) errors.phone = phoneErr;
+
+    if (!editingUser) {
+      const pwdErr = validatePassword(formData.password, { minLength: 4, required: true });
+      if (pwdErr) errors.password = pwdErr;
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -838,19 +849,40 @@ export function UsersPage() {
               required
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData({ ...formData, email: val });
+                if (formErrors.email) {
+                  setFormErrors((prev) => ({
+                    ...prev,
+                    email: validateEmail(val, { required: true, fieldLabel: 'Email address' }),
+                  }));
+                }
+              }}
               placeholder="rahul@aesthetic.demo"
               error={formErrors.email}
+              helperText="Must contain @ and domain"
             />
 
             <Input
-              label="Phone Number"
+              label="Phone Number (10 digits)"
               required
               type="tel"
+              maxLength={10}
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="+91 98450 12345"
+              onChange={(e) => {
+                const clean = sanitizePhone(e.target.value);
+                setFormData({ ...formData, phone: clean });
+                if (formErrors.phone) {
+                  setFormErrors((prev) => ({
+                    ...prev,
+                    phone: validatePhone(clean, { required: true, fieldLabel: 'Phone number' }),
+                  }));
+                }
+              }}
+              placeholder="9845012345"
               error={formErrors.phone}
+              helperText="Only 10 digits allowed"
             />
           </div>
 

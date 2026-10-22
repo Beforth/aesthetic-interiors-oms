@@ -9,6 +9,7 @@ import { userService } from '../services/userService';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { calculateProgress } from '../utils/progress';
 import { useToast } from '../context/ToastContext';
+import { mockUsers } from '../data/users';
 
 import ProgressBar from '../components/ui/ProgressBar';
 import Avatar from '../components/ui/Avatar';
@@ -27,10 +28,9 @@ export function DashboardPage() {
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [attendance, setAttendance] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState(mockUsers);
   const [loading, setLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [birthdayTab, setBirthdayTab] = useState('upcoming'); // 'upcoming' | 'all'
   const [trackerTab, setTrackerTab] = useState('leaderboard'); // 'leaderboard' | 'cards'
 
   const loadDashboardData = async () => {
@@ -77,11 +77,6 @@ export function DashboardPage() {
     }
   };
 
-  // Birthday greeting toast trigger
-  const handleSendBirthdayWishes = (empName) => {
-    toast.success(`🎉 Birthday greetings and team card sent to ${empName}!`);
-  };
-
   // Metric computations
   const activeProjects = useMemo(() => {
     return projects.filter((p) => p.status !== 'completed' && p.status !== 'done');
@@ -98,6 +93,20 @@ export function DashboardPage() {
   const pendingTasks = useMemo(() => {
     return tasks.filter((t) => t.status !== 'done');
   }, [tasks]);
+
+  const totalStaffCount = useMemo(() => {
+    return attendance.length > 0 ? attendance.length : users.filter((u) => u.role !== 'client').length;
+  }, [attendance, users]);
+
+  const presentCount = useMemo(() => {
+    return attendance.filter((a) => a.status === 'present').length;
+  }, [attendance]);
+
+  const absentCount = useMemo(() => {
+    return Math.max(0, totalStaffCount - presentCount);
+  }, [totalStaffCount, presentCount]);
+
+  const onDutyPercentage = totalStaffCount > 0 ? Math.round((presentCount / totalStaffCount) * 100) : 0;
 
   const presentStaff = useMemo(() => {
     return attendance.filter((a) => a.status === 'present');
@@ -165,55 +174,25 @@ export function DashboardPage() {
     };
   }, [projects, activeProjects, completedProjects]);
 
-  // Current month & employee birthday calculations
-  const now = new Date();
-  const currentMonthIndex = now.getMonth(); // 0 = Jan, 9 = Oct
-  const currentDay = now.getDate();
-  const currentMonthName = now.toLocaleString('default', { month: 'long' });
-
-  const currentMonthBirthdays = useMemo(() => {
-    // Only internal personnel/employees (exclude clients)
-    const staff = users.filter((u) => u.role !== 'client');
-
-    const list = staff
-      .map((emp) => {
-        if (!emp.birthday) return null;
-        const parts = emp.birthday.split('-');
-        if (parts.length < 3) return null;
-        const bMonth = parseInt(parts[1], 10) - 1;
-        const bDay = parseInt(parts[2], 10);
-
-        if (bMonth !== currentMonthIndex) return null;
-
-        const isToday = bDay === currentDay;
-        const isUpcoming = bDay >= currentDay;
-        const daysRemaining = bDay - currentDay;
-
-        return {
-          ...emp,
-          birthDay: bDay,
-          isToday,
-          isUpcoming,
-          daysRemaining,
-          formattedDate: `${now.toLocaleString('default', { month: 'short' })} ${bDay}`,
-        };
-      })
-      .filter(Boolean);
-
-    // Sort upcoming first by nearest day, then earlier celebrated days
-    return list.sort((a, b) => {
-      if (a.isUpcoming && !b.isUpcoming) return -1;
-      if (!a.isUpcoming && b.isUpcoming) return 1;
-      return a.birthDay - b.birthDay;
+  // Live Milestone Hand-offs across active projects
+  const recentHandOffs = useMemo(() => {
+    const list = [];
+    (projects || []).forEach((proj) => {
+      (proj.stages || []).forEach((stg) => {
+        if (stg.status === 'done') {
+          list.push({
+            projectId: proj.id,
+            projectName: proj.name,
+            clientName: proj.clientName,
+            stageName: stg.name,
+            agencyName: stg.agencyName || 'Specialized Agency',
+            date: stg.endDate ? formatDate(stg.endDate) : 'Completed',
+          });
+        }
+      });
     });
-  }, [users, currentMonthIndex, currentDay]);
-
-  const upcomingBirthdays = useMemo(() => {
-    return currentMonthBirthdays.filter((b) => b.isUpcoming);
-  }, [currentMonthBirthdays]);
-
-  const displayedBirthdays =
-    birthdayTab === 'upcoming' ? upcomingBirthdays : currentMonthBirthdays;
+    return list.slice(0, 4);
+  }, [projects]);
 
   const userFirstName = currentUser?.name
     ? currentUser.name.trim().split(/\s+/)[0]
@@ -261,8 +240,8 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* 4 Fresh Clean Stat Cards - Solid Modern Styling */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 3 Fresh Clean Stat Cards - Solid Modern Styling */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Card 1: Active Projects (Brand Indigo) */}
         <div className="p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
@@ -310,45 +289,26 @@ export function DashboardPage() {
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
               Today's Attendance
             </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
-              <Icon name="attendance" size={16} />
-            </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">{presentStaff.length} Present</span>
-            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-              100% On-Duty
+            <span className="text-2xl font-black text-text-main">{presentCount} Present</span>
+            <span className="text-xs text-text-muted font-medium">/ {totalStaffCount} Staff</span>
+            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+              onDutyPercentage >= 80
+                ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                : 'text-amber-700 bg-amber-50 border border-amber-200'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${onDutyPercentage >= 80 ? 'bg-emerald-600' : 'bg-amber-600'} animate-pulse`} />
+              {onDutyPercentage}% On-Duty
             </span>
           </div>
           <p className="text-[11px] text-text-muted mt-1 truncate">
-            All key site supervisors and artisans on-site
-          </p>
-        </div>
-
-        {/* Card 4: Pending Tasks & Velocity (Amber) */}
-        <div className="p-4 rounded-2xl bg-surface border border-border hover:border-amber-300 shadow-2xs transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Pending Tasks
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center">
-              <Icon name="tasks" size={16} />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">{pendingTasks.length} Tasks</span>
-            <span className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
-              In Progress
-            </span>
-          </div>
-          <p className="text-[11px] text-text-muted mt-1 truncate">
-            {tasks.length - pendingTasks.length} tasks completed this sprint
+            {presentCount} on-duty, {absentCount} absent from attendance muster
           </p>
         </div>
       </div>
 
-      {/* Main Grid: Left Column (Project Process + Graphs + Tasks), Right Column (Today's Attendance + Employee Birthdays + Operational Notes) */}
+      {/* Main Grid: Left Column (Project Process + Graphs + Tasks), Right Column (Today's Attendance + Operational Notes) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 Cols wide) */}
         <div className="lg:col-span-2 space-y-6">
@@ -587,9 +547,86 @@ export function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* SECTION 3: Recent Milestone Hand-offs & Site Execution Activity */}
+          <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-text-main flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                  <span>Recent Milestone Hand-offs & Site Activity</span>
+                </h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Live trade transitions, stage completions, and site approvals
+                </p>
+              </div>
+
+              <Link
+                to="/projects"
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline-offset-2 hover:underline"
+              >
+                View All Sites →
+              </Link>
+            </div>
+
+            {recentHandOffs.length === 0 ? (
+              <div className="p-6 text-center text-xs text-text-muted bg-brand-50/50 rounded-xl">
+                No recent stage hand-offs recorded yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentHandOffs.map((item, idx) => (
+                  <div
+                    key={`${item.projectId}-${item.stageName}-${idx}`}
+                    className="p-3.5 rounded-xl border border-border/80 bg-surface hover:border-brand-300 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0 mt-0.5">
+                        <Icon name="check-circle" size={16} className="text-emerald-600" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-text-main truncate">
+                            {item.projectName}
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            {item.stageName}
+                          </span>
+                        </div>
+                        <p className="text-xs text-text-muted mt-0.5">
+                          Stage completed & verified snag-free for next trade handover.
+                        </p>
+                        <div className="flex items-center gap-3 text-[11px] text-text-muted mt-1.5 flex-wrap">
+                          <span className="flex items-center gap-1 font-medium text-brand-700">
+                            <Icon name="wrench" size={11} />
+                            {item.agencyName}
+                          </span>
+                          {item.clientName && (
+                            <>
+                              <span>•</span>
+                              <span>Client: {item.clientName}</span>
+                            </>
+                          )}
+                          <span>•</span>
+                          <span>{item.date}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Link
+                      to={`/projects/${item.projectId}`}
+                      className="self-end sm:self-center px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 hover:bg-slate-100 text-text-main border border-border transition-colors shrink-0"
+                    >
+                      Site Details →
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right Column (1 Col wide): Overall Portfolio Progress + Today Attendance + Employee Birthdays Tab + Operational Notes */}
+        {/* Right Column (1 Col wide): Overall Portfolio Progress + Today Attendance + Operational Notes */}
         <div className="space-y-6">
           {/* OVERALL PORTFOLIO PROGRESS: Fluid Organic Progress Visualizer */}
           <OverallProgressGraph
@@ -625,10 +662,10 @@ export function DashboardPage() {
             <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
               <span className="font-bold text-emerald-900 flex items-center gap-1.5">
                 <Icon name="check-circle" size={15} className="text-emerald-600" />
-                All Staff Present
+                <span>Attendance Status</span>
               </span>
               <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
-                {presentStaff.length} / {presentStaff.length} On Duty
+                {presentCount} / {totalStaffCount} On Duty
               </span>
             </div>
 
@@ -670,122 +707,7 @@ export function DashboardPage() {
             )}
           </div>
 
-          {/* SECTION 5: Employee Birthdays This Month Tab Component */}
-          <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3 flex-wrap gap-2">
-              <div>
-                <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                  <Icon name="cake" size={17} className="text-pink-600" />
-                  <span>Employee Birthdays</span>
-                  <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-pink-50 text-pink-700 border border-pink-200">
-                    {currentMonthName}
-                  </span>
-                </h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Team members celebrating birthdays this month
-                </p>
-              </div>
-
-              {/* Tab Selector: Upcoming vs All Month */}
-              <div className="flex items-center gap-1 bg-brand-50 p-1 rounded-lg border border-border">
-                <button
-                  type="button"
-                  onClick={() => setBirthdayTab('upcoming')}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
-                    birthdayTab === 'upcoming'
-                      ? 'bg-surface text-brand-700 shadow-2xs'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  Upcoming ({upcomingBirthdays.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBirthdayTab('all')}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
-                    birthdayTab === 'all'
-                      ? 'bg-surface text-brand-700 shadow-2xs'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  All ({currentMonthBirthdays.length})
-                </button>
-              </div>
-            </div>
-
-            {/* Birthdays List */}
-            {displayedBirthdays.length === 0 ? (
-              <div className="p-6 text-center text-xs text-text-muted bg-brand-50/50 rounded-xl space-y-1">
-                <Icon name="cake" size={24} className="mx-auto text-text-muted/60 mb-1" />
-                <p className="font-semibold text-text-main">
-                  {birthdayTab === 'upcoming'
-                    ? `No more upcoming birthdays in ${currentMonthName}.`
-                    : `No employee birthdays scheduled for ${currentMonthName}.`}
-                </p>
-                <p className="text-[11px] text-text-muted">
-                  Birthday celebrations for all staff members will appear here.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {displayedBirthdays.map((emp) => (
-                  <div
-                    key={emp.id}
-                    className={`p-3 rounded-xl border transition-colors shadow-2xs flex items-center justify-between gap-3 ${
-                      emp.isToday
-                        ? 'bg-emerald-50/60 border-emerald-300'
-                        : emp.isUpcoming
-                        ? 'bg-surface border-border hover:border-pink-300'
-                        : 'bg-brand-50/30 border-border/70 opacity-80'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Avatar name={emp.name} size="sm" />
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-text-main truncate flex items-center gap-1.5">
-                          <span>{emp.name}</span>
-                          {emp.isToday && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-bold animate-pulse">
-                              Today! 🎉
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-text-muted truncate">
-                          {emp.title || emp.role?.replace('_', ' ').toUpperCase()}
-                        </div>
-                        <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1 text-pink-700">
-                          <Icon name="cake" size={12} className="text-pink-600 shrink-0" />
-                          <span>{emp.formattedDate}</span>
-                          {emp.isUpcoming && !emp.isToday && (
-                            <span className="text-[10px] text-brand-700 font-medium ml-0.5">
-                              • in {emp.daysRemaining} day{emp.daysRemaining > 1 ? 's' : ''}
-                            </span>
-                          )}
-                          {!emp.isUpcoming && (
-                            <span className="text-[10px] text-text-muted font-normal ml-0.5">
-                              • Celebrated
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSendBirthdayWishes(emp.name)}
-                      title={`Send birthday greetings to ${emp.name}`}
-                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 transition-colors shrink-0 flex items-center gap-1"
-                    >
-                      <Icon name="gift" size={12} />
-                      <span>Wish 🎉</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 6: Non-Technical Friendly Operational Guide (Solid Clean Background) */}
+          {/* SECTION 5: Non-Technical Friendly Operational Guide (Solid Clean Background) */}
           <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 space-y-2 text-xs">
             <div className="flex items-center gap-2 font-bold text-indigo-950">
               <Icon name="sparkles" size={16} className="text-indigo-600" />

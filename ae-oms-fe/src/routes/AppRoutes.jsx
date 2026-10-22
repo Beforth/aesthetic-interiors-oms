@@ -16,6 +16,9 @@ import ProjectDetailPage from '../pages/ProjectDetailPage';
 import AgenciesPage from '../pages/AgenciesPage';
 import AttendancePage from '../pages/AttendancePage';
 import TasksPage from '../pages/TasksPage';
+import DailyReportsPage from '../pages/DailyReportsPage';
+import PaymentsPage from '../pages/PaymentsPage';
+import LeavePayslipsPage from '../pages/LeavePayslipsPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 
@@ -123,12 +126,7 @@ export function AppRoutes() {
           path="daily-reports"
           element={
             <RoleRoute permissions={['dsr.submit', 'dsr.viewAll', 'feedback.submit']}>
-              <PlaceholderPage
-                title="Daily Reports"
-                subtitle="Daily Site Reports (DSR), photo documentation, material arrivals, and client updates"
-                icon="daily-reports"
-                phase="Phase 3"
-              />
+              <DailyReportsPage />
             </RoleRoute>
           }
         />
@@ -138,12 +136,7 @@ export function AppRoutes() {
           path="payments"
           element={
             <RoleRoute permissions={['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage']}>
-              <PlaceholderPage
-                title="Payments"
-                subtitle="Milestone payment schedules, vendor invoices, stage advance approvals, and client receipts"
-                icon="payments"
-                phase="Phase 4"
-              />
+              <PaymentsPage />
             </RoleRoute>
           }
         />
@@ -153,12 +146,7 @@ export function AppRoutes() {
           path="leave-payslips"
           element={
             <RoleRoute permissions={['leave.apply', 'leave.approve', 'payslips.viewOwn']}>
-              <PlaceholderPage
-                title="Leave & Payslips"
-                subtitle="Worker leave requests, supervisor approvals, monthly payslips, and piece-rate artisan payouts"
-                icon="leave-payslips"
-                phase="Phase 4"
-              />
+              <LeavePayslipsPage />
             </RoleRoute>
           }
         />

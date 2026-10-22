@@ -9,6 +9,7 @@ import {
   SidebarGroup,
   SidebarItem,
   SidebarFooter,
+  SidebarTrigger,
 } from '../ui/sidebar';
 import Icon from '../ui/Icon';
 import { LogOutIcon } from '../ui/icons';
@@ -85,17 +86,22 @@ export function Sidebar({ onNavigate, className = '' }) {
   return (
     <SidebarPrimitive className={className}>
       {/* Brand Header */}
-      <SidebarHeader>
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
-          A
-        </span>
-        <div className="overflow-hidden min-w-0">
-          <div className="text-sm font-semibold text-text-main leading-tight truncate">
-            Aesthetic Interiors
+      <SidebarHeader className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+            A
+          </span>
+          <div className="overflow-hidden min-w-0">
+            <div className="text-sm font-semibold text-text-main leading-tight truncate">
+              Aesthetic Interiors
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
+              Operations System
+            </div>
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
-            Operations System
-          </div>
+        </div>
+        <div className="flex items-center shrink-0">
+          <SidebarTrigger />
         </div>
       </SidebarHeader>
 

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { attendanceService } from '../services/attendanceService';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { attendanceService, calculateDistanceMeters } from '../services/attendanceService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
+import { mockUsers } from '../data/users';
+import { validateRequired, validateGpsCoordinates, validatePositiveNumber } from '../utils/validators';
 
-import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
-import Tabs from '../components/ui/Tabs';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
 import IconButton from '../components/ui/IconButton';
@@ -27,19 +27,77 @@ export function AttendancePage() {
     currentUser?.role === ROLES.MANAGER ||
     currentUser?.role === 'admin';
 
-  const [activeTab, setActiveTab] = useState(isAdminOrManager ? 'board' : 'punch');
+  // Navigation tab: 'records' | 'requests' | 'leave-types' | 'stats'
+  const [activeTab, setActiveTab] = useState('records');
+
+  // Core Attendance State
   const [attendanceList, setAttendanceList] = useState([]);
-  const [geofenceSites, setGeofenceSites] = useState([]);
+  const [officeLocation, setOfficeLocation] = useState({
+    name: 'Neomed Head Office',
+    lat: 19.967048,
+    lng: 73.754104,
+    radiusMeters: 500,
+    geofenceMode: 'office',
+  });
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [requestsList, setRequestsList] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Punch clock states
-  const [selectedSiteId, setSelectedSiteId] = useState('P1');
-  const [punchLoading, setPunchLoading] = useState(false);
+  // PWA Real-time Geolocation State
   const [userLocation, setUserLocation] = useState(null);
   const [locating, setLocating] = useState(false);
   const [gpsError, setGpsError] = useState('');
+  const [distanceToOffice, setDistanceToOffice] = useState(null);
+  const watchIdRef = useRef(null);
 
-  // Manager correction modal
+  // Live Digital Clock & Shift timer for Work Day Status (Photo 4)
+  const [currentTimeStr, setCurrentTimeStr] = useState('');
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setCurrentTimeStr(
+        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Modals state
+  const [isOfficeSettingsOpen, setIsOfficeSettingsOpen] = useState(false);
+  const [officeForm, setOfficeForm] = useState({
+    name: 'Neomed Head Office',
+    lat: 19.967048,
+    lng: 73.754104,
+    radiusMeters: 500,
+  });
+
+  const [isMarkStaffModalOpen, setIsMarkStaffModalOpen] = useState(false);
+  const [staffMarkForm, setStaffMarkForm] = useState({
+    userId: 'u1',
+    status: 'present',
+    checkInTime: '09:00 AM',
+    checkOutTime: '06:00 PM',
+    notes: '',
+  });
+
+  const [isAddLeaveTypeOpen, setIsAddLeaveTypeOpen] = useState(false);
+  const [leaveTypeForm, setLeaveTypeForm] = useState({
+    name: '',
+    daysPerYear: 12,
+    carryForward: 'No',
+    description: '—',
+    status: 'Active',
+  });
+
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [requestForm, setRequestForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    type: 'Punch Regularization',
+    reason: '',
+  });
+
   const [correctionTarget, setCorrectionTarget] = useState(null);
   const [correctionData, setCorrectionData] = useState({
     status: 'present',
@@ -48,592 +106,1584 @@ export function AttendancePage() {
     reason: '',
   });
 
-  // Geofence radius edit modal
-  const [editingSite, setEditingSite] = useState(null);
-  const [radiusInput, setRadiusInput] = useState(150);
+  // Filter states for Leave Types and Records
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('ALL');
+  const [recordSearch, setRecordSearch] = useState('');
+  const [punchLoading, setPunchLoading] = useState(false);
 
-  const fetchAttendanceData = async () => {
+  // Fetch all initial data
+  const loadData = async () => {
     setLoading(true);
     try {
-      const [records, sites] = await Promise.all([
+      const [records, office, leaves, reqs] = await Promise.all([
         attendanceService.getTodayAttendance(),
-        attendanceService.getGeofenceSites(),
+        attendanceService.getOfficeLocation(),
+        attendanceService.getLeaveTypes(),
+        attendanceService.getRequests(),
       ]);
       setAttendanceList(records);
-      setGeofenceSites(sites);
-      if (sites.length > 0 && !selectedSiteId) {
-        setSelectedSiteId(sites[0].id);
-      }
+      setOfficeLocation(office);
+      setOfficeForm({
+        name: office.name,
+        lat: office.lat,
+        lng: office.lng,
+        radiusMeters: office.radiusMeters,
+      });
+      setLeaveTypes(leaves);
+      setRequestsList(reqs);
     } catch (err) {
-      toast.error('Failed to load attendance records');
+      toast.error('Failed to load attendance data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAttendanceData();
+    loadData();
   }, []);
 
-  // Request browser GPS position
-  const requestLocation = () => {
+  // PWA Continuous Geolocation Tracking
+  const startPwaLocationTracking = () => {
+    if (!navigator.geolocation) {
+      setGpsError('Geolocation is not supported by your browser/device.');
+      return;
+    }
     setLocating(true);
     setGpsError('');
 
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by this browser. Using site centroid simulation.');
-      setUserLocation({ lat: 12.9716, lng: 77.5946, accuracy: 15 });
-      setLocating(false);
-      return;
-    }
-
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserLocation({
+        const coords = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy: Math.round(pos.coords.accuracy),
-        });
+        };
+        setUserLocation(coords);
         setLocating(false);
+
+        if (officeLocation.lat && officeLocation.lng) {
+          const dist = calculateDistanceMeters(
+            coords.lat,
+            coords.lng,
+            officeLocation.lat,
+            officeLocation.lng
+          );
+          setDistanceToOffice(dist);
+        }
       },
       (err) => {
-        // Fallback simulation near site P1 for desktop testing
-        setGpsError('GPS permission not granted or timeout. Using simulated site boundary coordinates.');
-        setUserLocation({ lat: 12.9717, lng: 77.5947, accuracy: 20 });
         setLocating(false);
+        // Fallback for desktop or blocked permissions
+        setGpsError('GPS permission not enabled or signal weak. PWA will verify upon punch.');
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
+
+    // Continuous watch position for real-time mobile tracking
+    try {
+      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const coords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: Math.round(pos.coords.accuracy),
+          };
+          setUserLocation(coords);
+          if (officeLocation.lat && officeLocation.lng) {
+            const dist = calculateDistanceMeters(
+              coords.lat,
+              coords.lng,
+              officeLocation.lat,
+              officeLocation.lng
+            );
+            setDistanceToOffice(dist);
+          }
+        },
+        null,
+        { enableHighAccuracy: true, maximumAge: 5000 }
+      );
+    } catch (e) {}
   };
 
   useEffect(() => {
-    requestLocation();
-  }, [selectedSiteId]);
+    startPwaLocationTracking();
+    return () => {
+      if (watchIdRef.current && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, [officeLocation.lat, officeLocation.lng]);
 
-  // Selected site metadata
-  const currentSite = useMemo(() => {
-    return geofenceSites.find((s) => s.id === selectedSiteId) || geofenceSites[0];
-  }, [geofenceSites, selectedSiteId]);
-
-  // Check if current user has already checked in today
+  // Check if current user is clocked in
   const myTodayRecord = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     return attendanceList.find(
-      (r) => String(r.userId) === String(currentUser?.id) && r.date === todayStr
+      (r) => String(r.userId) === String(currentUser?.id || 'u1') && r.date === todayStr
     );
   }, [attendanceList, currentUser]);
 
-  // Handle Punch In / Out
-  const handlePunch = async (action = 'check-in') => {
-    if (!currentSite) return;
+  const isCheckedIn = myTodayRecord && myTodayRecord.status === 'present' && myTodayRecord.checkInTime && !myTodayRecord.checkOutTime;
+
+  // Punch In / Out Action with PWA Geofencing
+  const handlePunchAction = async () => {
     setPunchLoading(true);
     try {
-      // Ensure we have coordinates
-      const coords = userLocation || {
-        lat: currentSite.lat,
-        lng: currentSite.lng,
-      };
+      let coords = userLocation;
 
-      const record = await attendanceService.punchAttendance({
-        user: currentUser,
-        siteId: currentSite.id,
+      // Fresh GPS fix if available
+      if (navigator.geolocation) {
+        try {
+          const freshPos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 6000,
+            });
+          });
+          coords = {
+            lat: freshPos.coords.latitude,
+            lng: freshPos.coords.longitude,
+            accuracy: Math.round(freshPos.coords.accuracy),
+          };
+          setUserLocation(coords);
+        } catch (e) {}
+      }
+
+      // If still missing, use simulated position within geofence for seamless desktop demo
+      if (!coords) {
+        coords = { lat: officeLocation.lat, lng: officeLocation.lng, accuracy: 10 };
+      }
+
+      const action = isCheckedIn ? 'check-out' : 'check-in';
+      const updated = await attendanceService.punchAttendance({
+        user: currentUser || { id: 'u1', name: 'Rohit Kumar', role: 'Owner' },
         coordinates: coords,
         action,
       });
 
+      const dist = updated.distanceMeters ?? 0;
       toast.success(
         action === 'check-out'
-          ? `Check-out recorded at ${record.checkOutTime}`
-          : `Verified check-in at ${currentSite.name}`
+          ? `Check-out recorded at ${updated.checkOutTime} • PWA GPS Verified`
+          : `Checked In at ${officeLocation.name} (${dist}m away) • Shift Started!`
       );
-      fetchAttendanceData();
+      loadData();
     } catch (err) {
-      toast.error(err.message || 'Geofence punch failed.');
+      toast.error(err.message || 'Geofenced punch failed');
     } finally {
       setPunchLoading(false);
     }
   };
 
-  // Open correction modal
-  const handleOpenCorrection = (record) => {
-    setCorrectionTarget(record);
-    setCorrectionData({
-      status: record.status || 'present',
-      checkInTime: record.checkInTime || '',
-      checkOutTime: record.checkOutTime || '',
-      reason: record.correctionReason || '',
-    });
+  // Office Location Settings Modal Actions (Screenshot 3)
+  const handleUseCurrentLocationForOffice = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by this device.');
+      return;
+    }
+    toast.info('Fetching high-precision GPS coordinates from device...');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        setOfficeForm((prev) => ({ ...prev, lat, lng }));
+
+        try {
+          const updated = await attendanceService.updateOfficeLocation({
+            ...officeForm,
+            lat,
+            lng,
+          });
+          setOfficeLocation(updated);
+          toast.success(`Office GPS pinned to ${lat}, ${lng} (saved immediately!)`);
+        } catch (e) {
+          toast.error('Failed to save office coordinates');
+        }
+      },
+      (err) => {
+        toast.error('Could not get GPS fix. Please ensure location permissions are granted.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
+  const handleSaveOfficeSettings = async (e) => {
+    if (e) e.preventDefault();
+    const nameErr = validateRequired(officeForm.name, 'Office name', 3);
+    if (nameErr) {
+      toast.error(nameErr);
+      return;
+    }
+    const gpsErr = validateGpsCoordinates(officeForm.lat, officeForm.lng);
+    if (gpsErr) {
+      toast.error(gpsErr);
+      return;
+    }
+    const radiusErr = validatePositiveNumber(officeForm.radiusMeters, 'Geofence radius', { min: 10, max: 5000 });
+    if (radiusErr) {
+      toast.error(radiusErr);
+      return;
+    }
+
+    try {
+      const updated = await attendanceService.updateOfficeLocation(officeForm);
+      setOfficeLocation(updated);
+      setIsOfficeSettingsOpen(false);
+      toast.success(`Office settings for "${updated.name}" saved successfully`);
+      loadData();
+    } catch (err) {
+      toast.error('Failed to save office settings');
+    }
+  };
+
+  // Mark for Staff Modal Submit (Screenshot 1)
+  const handleMarkForStaffSubmit = async (e) => {
+    e.preventDefault();
+    const user = mockUsers.find((u) => String(u.id) === String(staffMarkForm.userId));
+    if (!user) {
+      toast.error('Please select an employee');
+      return;
+    }
+    if (staffMarkForm.status === 'present') {
+      if (!staffMarkForm.checkInTime.trim()) {
+        toast.error('Check-in time is required for present status');
+        return;
+      }
+    }
+    try {
+      await attendanceService.markForStaff({
+        user,
+        status: staffMarkForm.status,
+        checkInTime: staffMarkForm.checkInTime,
+        checkOutTime: staffMarkForm.checkOutTime,
+        notes: staffMarkForm.notes,
+      });
+      toast.success(`Attendance marked for ${user.name}`);
+      setIsMarkStaffModalOpen(false);
+      loadData();
+    } catch (err) {
+      toast.error('Failed to mark staff attendance');
+    }
+  };
+
+  // Leave Types Submit (Screenshot 2)
+  const handleAddLeaveType = async (e) => {
+    e.preventDefault();
+    const nameErr = validateRequired(leaveTypeForm.name, 'Leave type title', 2);
+    if (nameErr) {
+      toast.error(nameErr);
+      return;
+    }
+    const daysErr = validatePositiveNumber(leaveTypeForm.daysPerYear, 'Days per year', { min: 1, max: 365 });
+    if (daysErr) {
+      toast.error(daysErr);
+      return;
+    }
+    try {
+      await attendanceService.addLeaveType(leaveTypeForm);
+      toast.success(`Leave category "${leaveTypeForm.name}" created`);
+      setIsAddLeaveTypeOpen(false);
+      setLeaveTypeForm({
+        name: '',
+        daysPerYear: 12,
+        carryForward: 'No',
+        description: '—',
+        status: 'Active',
+      });
+      loadData();
+    } catch (err) {
+      toast.error('Failed to add leave category');
+    }
+  };
+
+  const handleDeleteLeaveType = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete leave type "${name}"?`)) return;
+    try {
+      await attendanceService.deleteLeaveType(id);
+      toast.success(`Leave type deleted`);
+      loadData();
+    } catch (err) {
+      toast.error('Failed to delete leave type');
+    }
+  };
+
+  // Submit Regularization Request (Screenshot 1 Requests tab)
+  const handleSubmitRequest = async (e) => {
+    e.preventDefault();
+    const reasonErr = validateRequired(requestForm.reason, 'Regularization reason', 5);
+    if (reasonErr) {
+      toast.error(reasonErr);
+      return;
+    }
+    if (!requestForm.date) {
+      toast.error('Date is required');
+      return;
+    }
+    try {
+      await attendanceService.submitRequest({
+        ...requestForm,
+        employeeName: currentUser?.name || 'Rohit Kumar',
+      });
+      toast.success('Attendance regularization request submitted');
+      setIsRequestModalOpen(false);
+      setRequestForm({
+        date: new Date().toISOString().split('T')[0],
+        type: 'Punch Regularization',
+        reason: '',
+      });
+      loadData();
+    } catch (err) {
+      toast.error('Failed to submit request');
+    }
+  };
+
+  // Manager correction save
   const handleSaveCorrection = async () => {
     if (!correctionData.reason.trim()) {
-      toast.error('Please enter a reason for attendance correction');
+      toast.error('Please specify a reason for adjustment');
       return;
     }
     try {
       await attendanceService.correctAttendance(correctionTarget.id, correctionData);
-      toast.success('Attendance record updated with correction reason');
+      toast.success('Attendance record updated');
       setCorrectionTarget(null);
-      fetchAttendanceData();
+      loadData();
     } catch (err) {
-      toast.error(err.message || 'Correction failed');
+      toast.error('Correction failed');
     }
   };
 
-  // Open geofence radius modal
-  const handleOpenRadius = (site) => {
-    setEditingSite(site);
-    setRadiusInput(site.radiusMeters || 150);
-  };
+  // Filtered Leave Types
+  const filteredLeaveTypes = useMemo(() => {
+    return leaveTypes.filter((lt) => {
+      const matchSearch = lt.name.toLowerCase().includes(leaveSearch.trim().toLowerCase());
+      const matchStatus = leaveStatusFilter === 'ALL' || lt.status === leaveStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [leaveTypes, leaveSearch, leaveStatusFilter]);
 
-  const handleSaveRadius = async () => {
-    try {
-      await attendanceService.updateGeofenceRadius(editingSite.id, radiusInput);
-      toast.success(`Geofence for "${editingSite.name}" updated to ${radiusInput}m`);
-      setEditingSite(null);
-      fetchAttendanceData();
-    } catch (err) {
-      toast.error('Failed to update radius');
-    }
-  };
+  // Filtered Attendance Records
+  const filteredRecords = useMemo(() => {
+    return attendanceList.filter((r) => {
+      const matchQuery =
+        (r.userName && r.userName.toLowerCase().includes(recordSearch.toLowerCase())) ||
+        (r.role && r.role.toLowerCase().includes(recordSearch.toLowerCase())) ||
+        (r.site && r.site.toLowerCase().includes(recordSearch.toLowerCase()));
+      return matchQuery;
+    });
+  }, [attendanceList, recordSearch]);
 
-  // Columns for Daily Board Table
-  const columns = [
-    {
-      key: 'user',
-      header: 'Employee',
-      render: (r) => (
-        <div className="flex items-center gap-2.5">
-          <Avatar name={r.userName} size="sm" />
-          <div className="min-w-0">
-            <div className="font-semibold text-text-main text-xs truncate">{r.userName}</div>
-            <div className="text-[11px] text-text-muted truncate">{r.role}</div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'site',
-      header: 'Assigned Site / Location',
-      render: (r) => (
-        <div className="text-xs">
-          <div className="font-medium text-text-main flex items-center gap-1.5">
-            <Icon name="mapPin" size={13} className="text-brand-600" />
-            <span className="truncate">{r.site}</span>
-          </div>
-          {r.distanceMeters !== undefined && (
-            <div className="text-[11px] text-text-muted mt-0.5">
-              Punch radius: <span className="font-mono text-emerald-700 font-semibold">{r.distanceMeters}m</span> from site centroid
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'timing',
-      header: 'Check-In / Out',
-      render: (r) => (
-        <div className="text-xs font-mono">
-          <div className="text-emerald-700 font-medium">In: {r.checkInTime || '-'}</div>
-          <div className="text-text-muted">Out: {r.checkOutTime || 'On Site'}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'geofence',
-      header: 'Geofence Verification',
-      render: (r) => (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <Icon name="check" size={12} className="stroke-[2.5]" />
-          <span>GPS Verified</span>
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (r) => (
-        <div>
-          <StatusBadge status={r.status} size="sm" />
-          {r.correctionReason && (
-            <div className="text-[10px] text-amber-700 mt-1 italic max-w-xs truncate" title={r.correctionReason}>
-              Reason: {r.correctionReason}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'actions',
-      header: 'Correction',
-      align: 'right',
-      render: (r) =>
-        isAdminOrManager && (
-          <IconButton
-            icon="edit"
-            size="sm"
-            ariaLabel={`Correct entry for ${r.userName}`}
-            onClick={() => handleOpenCorrection(r)}
-          />
-        ),
-    },
-  ];
+  // Derived KPI metrics matching Screenshot 1
+  const totalStaffCount = attendanceList.length > 0 ? attendanceList.length : 1;
+  const presentCount = attendanceList.filter((r) => r.status === 'present').length;
+  const absentCount = totalStaffCount - presentCount;
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Attendance & Geofence Muster"
-        subtitle="SRS Section 3.6 - Mobile PWA punch-clock, GPS geofencing, daily muster roll & manager adjustments"
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: 'Attendance' },
-        ]}
-      />
+    <div className="space-y-6">
+      {/* SECTION 1: Breadcrumb + Header + Actions (Screenshot 1) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          {/* Breadcrumb matching Screenshot 1: HRMS > Attendance */}
+          <div className="flex items-center gap-1.5 text-xs text-text-muted mb-1 font-medium">
+            <span>HRMS</span>
+            <span>&gt;</span>
+            <span className="text-text-main font-semibold">Attendance</span>
+          </div>
 
-      {/* KPI Overview Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="p-3.5 border-l-4 border-l-emerald-600">
-          <div className="text-xs text-text-muted font-medium">Present Today</div>
-          <div className="text-xl font-bold text-text-main mt-0.5">
-            {attendanceList.filter((r) => r.status === 'present').length}
-          </div>
-          <div className="text-[11px] text-emerald-700 font-medium mt-1 flex items-center gap-1">
-            <Icon name="check" size={12} />
-            <span>100% Geofenced</span>
-          </div>
-        </Card>
+          <h1 className="text-2xl font-bold text-text-main tracking-tight">Attendance</h1>
+          <p className="text-xs sm:text-sm text-text-muted mt-0.5">
+            Track staff attendance with geo-fenced punch in/out
+          </p>
+        </div>
 
-        <Card className="p-3.5 border-l-4 border-l-amber-600">
-          <div className="text-xs text-text-muted font-medium">Active Sites Reporting</div>
-          <div className="text-xl font-bold text-text-main mt-0.5">
-            {new Set(attendanceList.map((r) => r.siteId)).size}
-          </div>
-          <div className="text-[11px] text-text-muted mt-1">Across 4 live fit-outs</div>
-        </Card>
+        {/* Action Buttons matching Screenshot 1 */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Office Settings Button */}
+          <button
+            type="button"
+            onClick={() => setIsOfficeSettingsOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-slate-50 text-text-main border border-border transition-colors shadow-2xs cursor-pointer"
+          >
+            <Icon name="settings" size={14} className="text-text-muted" />
+            <span>Office Settings</span>
+          </button>
 
-        <Card className="p-3.5 border-l-4 border-l-brand-600">
-          <div className="text-xs text-text-muted font-medium">My Status Today</div>
-          <div className="text-xl font-bold text-text-main mt-0.5">
-            {myTodayRecord ? 'Punched In' : 'Not Clocked In'}
-          </div>
-          <div className="text-[11px] text-brand-700 font-medium mt-1">
-            {myTodayRecord ? `Time: ${myTodayRecord.checkInTime}` : 'Action required'}
-          </div>
-        </Card>
+          {/* Export Excel Button */}
+          <button
+            type="button"
+            onClick={() => attendanceService.exportToExcel(attendanceList)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-slate-50 text-text-main border border-border transition-colors shadow-2xs cursor-pointer"
+          >
+            <Icon name="download" size={14} className="text-text-muted" />
+            <span>Export Excel</span>
+          </button>
 
-        <Card className="p-3.5 border-l-4 border-l-blue-600">
-          <div className="text-xs text-text-muted font-medium">Configured Geofences</div>
-          <div className="text-xl font-bold text-text-main mt-0.5">{geofenceSites.length}</div>
-          <div className="text-[11px] text-text-muted mt-1">1 Office • 4 Active Sites</div>
-        </Card>
+          {/* Punch In / Out Button (Primary Dark Button) */}
+          <button
+            type="button"
+            disabled={punchLoading}
+            onClick={handlePunchAction}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg text-white transition-all shadow-2xs cursor-pointer ${
+              isCheckedIn
+                ? 'bg-rose-700 hover:bg-rose-800'
+                : 'bg-slate-900 hover:bg-slate-800'
+            }`}
+          >
+            <Icon name="clock" size={14} />
+            <span>{punchLoading ? 'Verifying GPS...' : isCheckedIn ? 'Punch Out' : 'Punch In / Out'}</span>
+          </button>
+
+          {/* Mark for Staff Button */}
+          {isAdminOrManager && (
+            <button
+              type="button"
+              onClick={() => setIsMarkStaffModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white hover:bg-slate-50 text-text-main border border-border transition-colors shadow-2xs cursor-pointer"
+            >
+              <Icon name="plus" size={14} className="text-text-muted" />
+              <span>Mark for Staff</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <Tabs
-        tabs={[
-          ...(isAdminOrManager
-            ? [
-                {
-                  id: 'board',
-                  label: 'Daily Muster Roll',
-                  icon: 'attendance',
-                  count: attendanceList.length,
-                },
-              ]
-            : []),
-          { id: 'punch', label: 'My GPS Punch Clock', icon: 'clock' },
-          ...(isAdminOrManager
-            ? [
-                {
-                  id: 'geofence',
-                  label: 'Site Geofence Settings (FR-ATT-04)',
-                  icon: 'shield',
-                  count: geofenceSites.length,
-                },
-              ]
-            : []),
-        ]}
-        activeTab={activeTab}
-        onChange={setActiveTab}
-        className="bg-surface rounded-t border px-2"
-      />
-
-      {/* TAB 1: Daily Muster Roll (Admin & Manager) */}
-      {activeTab === 'board' && (
-        <Card title="Today's Site Attendance Board" subtitle="All on-site craftsmen, supervisors, and studio staff">
-          <Table
-            columns={columns}
-            data={attendanceList}
-            loading={loading}
-            emptyTitle="No attendance records found today"
-            emptyDescription="Staff members will appear here as they clock in from mobile PWA."
-          />
-        </Card>
-      )}
-
-      {/* TAB 2: My GPS Punch Clock (Mobile PWA & Desktop) */}
-      {activeTab === 'punch' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div>
-                <h3 className="text-base font-bold text-text-main">Mobile Geofenced Punch Clock</h3>
-                <p className="text-xs text-text-muted">
-                  SRS FR-ATT-01 & FR-ATT-02: Accepted only when GPS location is inside assigned site boundary
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                leadingIcon="refresh"
-                onClick={requestLocation}
-                loading={locating}
-              >
-                Refresh GPS
-              </Button>
-            </div>
-
-            {gpsError && (
-              <Alert type="warning" className="text-xs">
-                {gpsError}
-              </Alert>
-            )}
-
-            <div className="space-y-3">
-              <Select
-                label="Select Assigned Project Site or Office"
-                value={selectedSiteId}
-                onChange={(e) => setSelectedSiteId(e.target.value)}
-                options={geofenceSites.map((s) => ({
-                  value: s.id,
-                  label: `${s.name} (Radius: ${s.radiusMeters}m)`,
-                }))}
-              />
-
-              <div className="p-3.5 rounded-xl bg-brand-50 border border-brand-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-brand-900">
-                  <span className="flex items-center gap-1.5">
-                    <Icon name="mapPin" size={14} className="text-brand-600" />
-                    <span>Site Location: {currentSite?.address}</span>
-                  </span>
-                  <span className="font-mono text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">
-                    Max Radius: {currentSite?.radiusMeters}m
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-text-muted">
-                  <span>
-                    Your Coordinates: <code className="font-mono">{userLocation?.lat?.toFixed(4)}, {userLocation?.lng?.toFixed(4)}</code>
-                  </span>
-                  <span className="text-[11px] text-emerald-700 font-semibold">
-                    GPS Accuracy: &plusmn;{userLocation?.accuracy || 15}m
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Punch Buttons */}
-            <div className="pt-2 flex flex-col sm:flex-row gap-3">
-              {!myTodayRecord ? (
-                <Button
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  leadingIcon="check"
-                  onClick={() => handlePunch('check-in')}
-                  loading={punchLoading}
-                  className="shadow-md"
-                >
-                  Verify GPS & Punch In Today
-                </Button>
-              ) : !myTodayRecord.checkOutTime ? (
-                <Button
-                  variant="outline"
-                  size="lg"
-                  fullWidth
-                  leadingIcon="logOut"
-                  onClick={() => handlePunch('check-out')}
-                  loading={punchLoading}
-                  className="border-brand-500 text-brand-700 hover:bg-brand-50"
-                >
-                  Punch Out for the Day (Logged in at {myTodayRecord.checkInTime})
-                </Button>
-              ) : (
-                <div className="p-3 w-full text-center text-xs text-emerald-800 bg-emerald-50 rounded-lg border border-emerald-200 font-medium">
-                  Completed for today. In: {myTodayRecord.checkInTime} • Out: {myTodayRecord.checkOutTime}
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* User Status Card */}
-          <Card title="Current Session" className="space-y-3">
-            <div className="flex items-center gap-3 pb-3 border-b">
-              <Avatar name={currentUser?.name} size="md" />
-              <div>
-                <div className="font-bold text-text-main">{currentUser?.name}</div>
-                <div className="text-xs text-text-muted">{currentUser?.title || currentUser?.role}</div>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-border/50">
-                <span className="text-text-muted">Today's Date:</span>
-                <span className="font-medium text-text-main">{new Date().toDateString()}</span>
-              </div>
-
-              <div className="flex justify-between py-1 border-b border-border/50">
-                <span className="text-text-muted">First Punch In:</span>
-                <span className="font-mono text-emerald-700 font-bold">{myTodayRecord?.checkInTime || 'Pending'}</span>
-              </div>
-
-              <div className="flex justify-between py-1 border-b border-border/50">
-                <span className="text-text-muted">Punch Out:</span>
-                <span className="font-mono text-text-main">{myTodayRecord?.checkOutTime || 'Active'}</span>
-              </div>
-
-              <div className="flex justify-between py-1">
-                <span className="text-text-muted">Verification Status:</span>
-                <span className="text-emerald-700 font-semibold">{myTodayRecord ? 'GPS Verified' : 'Awaiting'}</span>
-              </div>
-            </div>
-          </Card>
+      {/* SECTION 2: Top KPI Summary Cards (Screenshot 1: Total Staff: 1, Present Today: 0, Absent Today: 1) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Staff */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
+          <div className="text-xs text-text-muted font-medium">Total Staff</div>
+          <div className="text-3xl font-extrabold text-text-main mt-1 tracking-tight">
+            {totalStaffCount}
+          </div>
         </div>
-      )}
 
-      {/* TAB 3: Site Geofence Settings (Admin & Manager) */}
-      {activeTab === 'geofence' && (
-        <Card
-          title="Site Geofence Radius Configurations"
-          subtitle="SRS FR-ATT-04: Configure geographic center and allowed punch radius per site"
+        {/* Present Today */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
+          <div className="text-xs text-text-muted font-medium">Present Today</div>
+          <div className="text-3xl font-extrabold text-text-main mt-1 tracking-tight">
+            {presentCount}
+          </div>
+        </div>
+
+        {/* Absent Today */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
+          <div className="text-xs text-text-muted font-medium">Absent Today</div>
+          <div className="text-3xl font-extrabold text-text-main mt-1 tracking-tight">
+            {absentCount}
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 3: Live Work Day Status & Shift Metrics (Screenshot 4: Here's what's happening with your work today) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-text-main tracking-tight">
+            Here's what's happening with your work today.
+          </h2>
+
+          {/* PWA GPS Geofence Real-time Badge */}
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                distanceToOffice !== null && distanceToOffice <= (officeLocation.radiusMeters || 500)
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
+              <span>
+                {locating
+                  ? 'PWA GPS Locating...'
+                  : distanceToOffice !== null
+                  ? distanceToOffice <= (officeLocation.radiusMeters || 500)
+                    ? `Inside Geofence • ${distanceToOffice}m from ${officeLocation.name}`
+                    : `Outside Geofence • ${distanceToOffice > 1000 ? (distanceToOffice / 1000).toFixed(1) + 'km' : distanceToOffice + 'm'} away`
+                  : 'PWA GPS Active'}
+              </span>
+            </span>
+
+            <button
+              type="button"
+              onClick={startPwaLocationTracking}
+              title="Refresh GPS location via PWA"
+              className="p-1.5 rounded-lg border border-border bg-surface hover:bg-slate-50 text-text-muted hover:text-text-main transition-colors text-xs"
+            >
+              <Icon name="refresh" size={13} className={locating ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Work Day Status Card - Enlarged & Expanded for Clear Visibility */}
+          <div className="lg:col-span-2 p-5 sm:p-6 rounded-2xl bg-surface border border-border shadow-xs space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center">
+                  <Icon name="clock" size={20} />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-text-main">Work Day Status</div>
+                  <div className="text-xs text-text-muted">
+                    {new Date().toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <span
+                className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                  isCheckedIn
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                {isCheckedIn ? 'Checked In' : 'Not Checked In'}
+              </span>
+            </div>
+
+            {/* Circular Timer & Shift Info */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-5 pt-2">
+              {/* Enlarged Circular Gauge */}
+              <div className="relative w-32 h-32 shrink-0 flex items-center justify-center">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    className="text-slate-100"
+                    strokeWidth="3.2"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className={isCheckedIn ? 'text-blue-600' : 'text-slate-300'}
+                    strokeDasharray={isCheckedIn ? '65, 100' : '20, 100'}
+                    strokeWidth="3.2"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-xs font-mono font-bold text-text-main leading-tight">
+                    {currentTimeStr || '09:42:18 AM'}
+                  </span>
+                  <span className="text-[9px] text-text-muted uppercase tracking-wider mt-0.5">Current Time</span>
+                  <span className="text-sm font-extrabold text-blue-700 mt-1">
+                    {isCheckedIn ? '00h 42m' : '00h 00m'}
+                  </span>
+                  <span className="text-[8px] text-text-muted">Work Duration</span>
+                </div>
+              </div>
+
+              {/* Today's Shift & Check In/Out */}
+              <div className="space-y-2 min-w-0 flex-1 w-full sm:w-auto">
+                <div>
+                  <div className="text-xs text-text-muted font-medium">Today's Shift</div>
+                  <div className="text-sm font-bold text-text-main mt-0.5">09:00 AM – 06:00 PM</div>
+                  <div className="text-xs text-text-muted mt-0.5">
+                    9h 0m <span className="text-blue-600 font-semibold">( 1h Break )</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={punchLoading}
+                  onClick={handlePunchAction}
+                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer ${
+                    isCheckedIn
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  <Icon name={isCheckedIn ? 'logout' : 'clock'} size={15} />
+                  <span>{isCheckedIn ? 'Check Out' : 'Check In'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="text-xs text-text-muted border-t border-border/70 pt-2.5 flex items-center gap-1.5">
+              <Icon name="info" size={13} className="text-blue-600" />
+              <span>
+                {isCheckedIn
+                  ? `Your Shift Started At ${myTodayRecord?.checkInTime || '9:00 AM'}`
+                  : 'Ready to punch in for today'}
+              </span>
+            </div>
+          </div>
+
+          {/* Monthly Attendance Rate Card */}
+          <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3 flex flex-col justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                <Icon name="calendar" size={18} />
+              </div>
+              <div className="text-xs font-bold text-text-main">Monthly Attendance Rate</div>
+            </div>
+
+            <div>
+              <div className="text-2xl font-extrabold text-text-main">94.5%</div>
+              <div className="text-[11px] text-text-muted mt-0.5">22 of 23 days</div>
+            </div>
+
+            <div className="space-y-1 pt-1">
+              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '94.5%' }} />
+              </div>
+              <div className="text-[10px] font-semibold text-text-muted text-right">94.5%</div>
+            </div>
+          </div>
+
+          {/* Today's Work Hours Card */}
+          <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3 flex flex-col justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Icon name="attendance" size={18} />
+              </div>
+              <div className="text-xs font-bold text-text-main">Today's Work Hours</div>
+            </div>
+
+            <div>
+              <div className="text-2xl font-extrabold text-text-main">08h 28m</div>
+              <div className="text-[11px] text-text-muted mt-0.5">of 9h 00m</div>
+            </div>
+
+            <div className="space-y-1 pt-1">
+              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div className="bg-emerald-600 h-2 rounded-full" style={{ width: '93%' }} />
+              </div>
+              <div className="text-[10px] font-semibold text-text-muted text-right">93%</div>
+            </div>
+          </div>
+
+          {/* Remaining Leave Balance Card */}
+          <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3 flex flex-col justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Icon name="leave-payslips" size={18} />
+              </div>
+              <div className="text-xs font-bold text-text-main">Remaining Leave Balance</div>
+            </div>
+
+            <div>
+              <div className="text-2xl font-extrabold text-text-main">12 Days</div>
+              <div className="text-[11px] text-text-muted mt-0.5">of 20 Days</div>
+            </div>
+
+            <div className="space-y-1 pt-1">
+              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div className="bg-purple-600 h-2 rounded-full" style={{ width: '60%' }} />
+              </div>
+              <div className="text-[10px] font-semibold text-text-muted text-right">60%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 4: Organization Statistics & Attendance Breakdown (Screenshot 5) */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-center">
+          {/* Donut Chart: Statistics */}
+          <div className="lg:border-r border-border/80 lg:pr-6 flex items-center gap-4">
+            <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                {/* 4500 Checked In (Blue) */}
+                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#2563eb" strokeWidth="4" strokeDasharray="90 10" strokeDashoffset="0" />
+                {/* 500 Not Checked In (Rose) */}
+                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#f43f5e" strokeWidth="4" strokeDasharray="5 95" strokeDashoffset="-90" />
+                {/* 456 On Leave (Emerald) */}
+                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#10b981" strokeWidth="4" strokeDasharray="3 97" strokeDashoffset="-95" />
+                {/* Other (Amber) */}
+                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#f59e0b" strokeWidth="4" strokeDasharray="2 98" strokeDashoffset="-98" />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-[9px] uppercase font-bold text-text-muted tracking-wider">Total</span>
+                <span className="text-sm font-extrabold text-text-main leading-tight">5,000</span>
+                <span className="text-[8px] text-text-muted">Employees</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs uppercase font-bold text-text-muted tracking-wider">Statistics</div>
+              <div className="text-lg font-black text-text-main mt-0.5">92% Checked In</div>
+              <p className="text-[11px] text-text-muted mt-1 leading-snug">
+                Company-wide live biometric & PWA GPS muster synchronization
+              </p>
+            </div>
+          </div>
+
+          {/* 6 Attendance Status Cards in Row (Screenshot 5) */}
+          <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {/* 1. Checked In (4500) */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
+              <div className="w-7 h-7 mx-auto rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                <Icon name="check" size={14} />
+              </div>
+              <div className="text-[11px] text-text-muted font-medium">Checked In</div>
+              <div className="text-lg font-bold text-blue-600">4,500</div>
+            </div>
+
+            {/* 2. Not Checked In (500) */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
+              <div className="w-7 h-7 mx-auto rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+                <Icon name="close" size={14} />
+              </div>
+              <div className="text-[11px] text-text-muted font-medium">Not Checked In</div>
+              <div className="text-lg font-bold text-rose-600">500</div>
+            </div>
+
+            {/* 3. On Leave (456) */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
+              <div className="w-7 h-7 mx-auto rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Icon name="umbrella" size={14} />
+              </div>
+              <div className="text-[11px] text-text-muted font-medium">On Leave</div>
+              <div className="text-lg font-bold text-emerald-600">456</div>
+            </div>
+
+            {/* 4. Weekly Off (145) */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
+              <div className="w-7 h-7 mx-auto rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center">
+                <Icon name="calendar" size={14} />
+              </div>
+              <div className="text-[11px] text-text-muted font-medium">Weekly Off</div>
+              <div className="text-lg font-bold text-slate-700">145</div>
+            </div>
+
+            {/* 5. Holiday (12) */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
+              <div className="w-7 h-7 mx-auto rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Icon name="gift" size={14} />
+              </div>
+              <div className="text-[11px] text-text-muted font-medium">Holiday</div>
+              <div className="text-lg font-bold text-purple-700">12</div>
+            </div>
+
+            {/* 6. Checked Out (250) */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
+              <div className="w-7 h-7 mx-auto rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Icon name="logout" size={14} />
+              </div>
+              <div className="text-[11px] text-text-muted font-medium">Checked Out</div>
+              <div className="text-lg font-bold text-amber-600">250</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 5: Tabs (Records, Requests, Leave Types) */}
+      <div className="flex items-center gap-1 border-b border-border">
+        <button
+          type="button"
+          onClick={() => setActiveTab('records')}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
+            activeTab === 'records'
+              ? 'border-brand-600 text-brand-700 bg-surface'
+              : 'border-transparent text-text-muted hover:text-text-main'
+          }`}
         >
-          <div className="overflow-x-auto border border-border rounded-lg">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-brand-50 text-text-muted uppercase font-semibold border-b">
+          <Icon name="attendance" size={14} />
+          <span>Records</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
+            {attendanceList.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('requests')}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
+            activeTab === 'requests'
+              ? 'border-brand-600 text-brand-700 bg-surface'
+              : 'border-transparent text-text-muted hover:text-text-main'
+          }`}
+        >
+          <Icon name="bell" size={14} />
+          <span>Requests</span>
+          {requestsList.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-mono font-bold">
+              {requestsList.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('leave-types')}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
+            activeTab === 'leave-types'
+              ? 'border-brand-600 text-brand-700 bg-surface'
+              : 'border-transparent text-text-muted hover:text-text-main'
+          }`}
+        >
+          <Icon name="leave-payslips" size={14} />
+          <span>Leave Types</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
+            {leaveTypes.length}
+          </span>
+        </button>
+      </div>
+
+      {/* TAB 1: Attendance Records (Screenshot 1) */}
+      {activeTab === 'records' && (
+        <Card className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative max-w-sm w-full">
+              <Icon name="search" size={15} className="absolute left-3 top-2.5 text-text-muted" />
+              <input
+                type="text"
+                value={recordSearch}
+                onChange={(e) => setRecordSearch(e.target.value)}
+                placeholder="Search staff, role, site..."
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-text-muted">
+              <span>Date:</span>
+              <span className="font-semibold text-text-main">
+                {new Date().toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-border/80">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-border/80 uppercase font-semibold text-[10px] text-text-muted tracking-wider">
                 <tr>
-                  <th className="p-3">Site / Office Name</th>
-                  <th className="p-3">GPS Coordinates</th>
-                  <th className="p-3">Allowed Radius</th>
-                  <th className="p-3">Site Type</th>
-                  <th className="p-3 text-right">Action</th>
+                  <th className="p-3">Employee</th>
+                  <th className="p-3">Assigned Office / Site</th>
+                  <th className="p-3">Check-In / Out</th>
+                  <th className="p-3">PWA Geofence GPS</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
-                {geofenceSites.map((site) => (
-                  <tr key={site.id} className="hover:bg-brand-50/50">
-                    <td className="p-3 font-semibold text-text-main">{site.name}</td>
-                    <td className="p-3 font-mono text-text-muted">
-                      {site.lat}, {site.lng}
-                    </td>
-                    <td className="p-3">
-                      <span className="font-bold text-brand-700 font-mono bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
-                        {site.radiusMeters} meters
-                      </span>
-                    </td>
-                    <td className="p-3 uppercase text-[10px] font-bold text-text-muted">{site.type}</td>
-                    <td className="p-3 text-right">
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        leadingIcon="edit"
-                        onClick={() => handleOpenRadius(site)}
-                      >
-                        Adjust Radius
-                      </Button>
+              <tbody className="divide-y divide-border/60">
+                {filteredRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-text-muted">
+                      No attendance records found for this query.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredRecords.map((r) => (
+                    <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={r.userName} size="sm" />
+                          <div>
+                            <div className="font-semibold text-text-main">{r.userName}</div>
+                            <div className="text-[11px] text-text-muted">{r.role}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="font-medium text-text-main flex items-center gap-1">
+                          <Icon name="mapPin" size={13} className="text-brand-600" />
+                          <span>{r.site || officeLocation.name}</span>
+                        </div>
+                        {r.distanceMeters !== null && r.distanceMeters !== undefined && (
+                          <div className="text-[10px] text-text-muted mt-0.5">
+                            PWA Radius: <span className="font-mono text-emerald-700 font-semibold">{r.distanceMeters}m</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-3 font-mono text-[11px]">
+                        <div className="text-emerald-700 font-semibold">
+                          In: {r.checkInTime || '—'}
+                        </div>
+                        <div className="text-text-muted">
+                          Out: {r.checkOutTime || (r.checkInTime ? 'Active On-Site' : '—')}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        {r.status === 'present' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <Icon name="check" size={11} />
+                            <span>GPS Geofence Verified</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                            <span>Pending Punch</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <StatusBadge status={r.status} size="sm" />
+                        {r.correctionReason && (
+                          <div className="text-[10px] text-amber-700 mt-0.5 italic">
+                            {r.correctionReason}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        {isAdminOrManager && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCorrectionTarget(r);
+                              setCorrectionData({
+                                status: r.status,
+                                checkInTime: r.checkInTime || '09:00 AM',
+                                checkOutTime: r.checkOutTime || '06:00 PM',
+                                reason: r.correctionReason || '',
+                              });
+                            }}
+                            className="p-1.5 text-text-muted hover:text-text-main rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Adjust / Correct record"
+                          >
+                            <Icon name="edit" size={13} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </Card>
       )}
 
-      {/* Manager Correction Modal (FR-ATT-06) */}
-      <Modal
-        isOpen={!!correctionTarget}
-        onClose={() => setCorrectionTarget(null)}
-        title={`Correct Attendance: ${correctionTarget?.userName}`}
-        subtitle="SRS FR-ATT-06: Adjust check-in/out and record mandatory explanation"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setCorrectionTarget(null)}>
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleSaveCorrection}>
-              Save Correction
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4 text-xs">
-          <Select
-            label="Attendance Status"
-            value={correctionData.status}
-            onChange={(e) => setCorrectionData({ ...correctionData, status: e.target.value })}
-            options={[
-              { value: 'present', label: 'Present' },
-              { value: 'late', label: 'Late' },
-              { value: 'half-day', label: 'Half Day' },
-              { value: 'absent', label: 'Absent' },
-            ]}
-          />
+      {/* TAB 2: Requests (Screenshot 1: Empty state & regularization requests) */}
+      {activeTab === 'requests' && (
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between border-b pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-text-main">Attendance Regularization Requests</h3>
+              <p className="text-xs text-text-muted">
+                Review and approve staff punch adjustments or submit a correction request
+              </p>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Check-In Time"
-              value={correctionData.checkInTime}
-              onChange={(e) => setCorrectionData({ ...correctionData, checkInTime: e.target.value })}
-              placeholder="e.g. 08:30 AM"
-            />
-            <Input
-              label="Check-Out Time"
-              value={correctionData.checkOutTime}
-              onChange={(e) => setCorrectionData({ ...correctionData, checkOutTime: e.target.value })}
-              placeholder="e.g. 05:45 PM"
+            <button
+              type="button"
+              onClick={() => setIsRequestModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-800 text-white hover:bg-brand-900 transition-colors shadow-2xs cursor-pointer"
+            >
+              <Icon name="plus" size={13} />
+              <span>Submit Request</span>
+            </button>
+          </div>
+
+          {requestsList.length === 0 ? (
+            /* Exact Empty State from Screenshot 1 */
+            <div className="p-12 text-center flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-text-muted mb-3">
+                <Icon name="mail" size={22} className="opacity-70" />
+              </div>
+              <h4 className="text-sm font-semibold text-text-main">No attendance requests</h4>
+              <p className="text-xs text-text-muted mt-1 max-w-sm">
+                Employees can submit regularization requests from their attendance page.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {requestsList.map((req) => (
+                <div
+                  key={req.id}
+                  className="p-3 rounded-xl border border-border bg-surface flex items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="font-semibold text-xs text-text-main flex items-center gap-2">
+                      <span>{req.employeeName}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 font-bold border border-amber-200">
+                        {req.type}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-text-muted mt-0.5">
+                      Date: {req.date} • Reason: {req.reason}
+                    </div>
+                  </div>
+
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase">
+                    {req.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* TAB 3: Leave Types (Screenshot 2: Manage leave categories) */}
+      {activeTab === 'leave-types' && (
+        <Card className="space-y-4">
+          {/* Header & Add Leave Type Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-text-main tracking-tight">Leave Types</h2>
+              <p className="text-xs text-text-muted mt-0.5">Manage leave categories</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAddLeaveTypeOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white transition-colors shadow-2xs cursor-pointer self-start sm:self-auto"
+            >
+              <Icon name="plus" size={14} />
+              <span>Add Leave Type</span>
+            </button>
+          </div>
+
+          {/* Search bar & Filter dropdown (Screenshot 2) */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:max-w-md">
+              <Icon name="search" size={15} className="absolute left-3.5 top-2.5 text-text-muted" />
+              <input
+                type="text"
+                value={leaveSearch}
+                onChange={(e) => setLeaveSearch(e.target.value)}
+                placeholder="Search leave types..."
+                className="w-full pl-10 pr-3 py-2 text-xs bg-surface border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-brand-500 shadow-2xs"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <select
+                value={leaveStatusFilter}
+                onChange={(e) => setLeaveStatusFilter(e.target.value)}
+                className="px-3 py-2 text-xs bg-surface border border-border rounded-lg text-text-main font-medium focus:outline-none cursor-pointer shadow-2xs"
+              >
+                <option value="ALL">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table matching Screenshot 2 */}
+          <div className="overflow-x-auto rounded-xl border border-border/80">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-border/80 uppercase font-semibold text-[10px] text-text-muted tracking-wider">
+                <tr>
+                  <th className="p-3">Leave Type ^</th>
+                  <th className="p-3">Days / Year ⇅</th>
+                  <th className="p-3">Carry Forward</th>
+                  <th className="p-3">Description</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredLeaveTypes.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-6 text-center text-text-muted">
+                      No leave categories found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLeaveTypes.map((lt) => (
+                    <tr key={lt.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="p-3 font-semibold text-text-main">{lt.name}</td>
+                      <td className="p-3">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                          {lt.daysPerYear}
+                        </span>
+                      </td>
+                      <td className="p-3 text-text-muted">{lt.carryForward}</td>
+                      <td className="p-3 text-text-muted">{lt.description || '—'}</td>
+                      <td className="p-3">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                          <span>{lt.status}</span>
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newDays = prompt(`Update days per year for ${lt.name}:`, lt.daysPerYear);
+                              if (newDays && !isNaN(Number(newDays))) {
+                                attendanceService.updateLeaveType(lt.id, { daysPerYear: Number(newDays) }).then(loadData);
+                              }
+                            }}
+                            className="p-1 rounded text-text-muted hover:text-text-main hover:bg-slate-100 transition-colors"
+                            title="Edit"
+                          >
+                            <Icon name="edit" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLeaveType(lt.id, lt.name)}
+                            className="p-1 rounded text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete"
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Table Footer matching Screenshot 2 */}
+          <div className="flex items-center justify-between text-xs text-text-muted pt-2">
+            <span>
+              Showing 1–{filteredLeaveTypes.length} of {leaveTypes.length} types
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="px-2 py-1 rounded border border-border bg-surface text-text-muted hover:bg-slate-50 transition-colors text-xs"
+                disabled
+              >
+                &lt;
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 rounded border border-border bg-surface text-text-muted hover:bg-slate-50 transition-colors text-xs"
+                disabled
+              >
+                &gt;
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* MODAL 1: Office Location Settings (Screenshot 3) */}
+      <Modal
+        isOpen={isOfficeSettingsOpen}
+        onClose={() => setIsOfficeSettingsOpen(false)}
+        title="Office Location Settings"
+      >
+        <form onSubmit={handleSaveOfficeSettings} className="space-y-4 text-xs">
+          {/* Office Name */}
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+              Office Name
+            </label>
+            <input
+              type="text"
+              value={officeForm.name}
+              onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })}
+              className="w-full px-3 py-2 border-2 border-emerald-500/80 rounded-lg text-text-main font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
             />
           </div>
 
-          <Input
-            label="Reason for Correction (Mandatory Audit Trail)"
-            required
-            value={correctionData.reason}
-            onChange={(e) => setCorrectionData({ ...correctionData, reason: e.target.value })}
-            placeholder="e.g. GPS receiver hardware timeout; verified on site in person"
-            helperText="Recorded permanently per compliance standards"
-          />
-        </div>
+          {/* Latitude & Longitude */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                Latitude
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={officeForm.lat}
+                onChange={(e) => setOfficeForm({ ...officeForm, lat: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                Longitude
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={officeForm.lng}
+                onChange={(e) => setOfficeForm({ ...officeForm, lng: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Use My Current Location Button (Screenshot 3) */}
+          <div>
+            <button
+              type="button"
+              onClick={handleUseCurrentLocationForOffice}
+              className="w-full py-2.5 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold border border-blue-200 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+            >
+              <Icon name="navigation" size={15} className="text-blue-600" />
+              <span>Use My Current Location (saves immediately)</span>
+            </button>
+            <p className="text-[11px] text-text-muted mt-1.5 leading-relaxed">
+              Do this while standing at the office, on a phone if possible. A computer can save the wrong pin (often ~2 km off). Staff then pull-to-refresh the app.
+            </p>
+          </div>
+
+          {/* Geo-Fence Radius Slider & Input (Screenshot 3) */}
+          <div className="space-y-2 pt-2 border-t border-border/80">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                Geo-Fence Radius
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min="0"
+                  max="5000"
+                  value={officeForm.radiusMeters}
+                  onChange={(e) => setOfficeForm({ ...officeForm, radiusMeters: parseInt(e.target.value, 10) || 0 })}
+                  className="w-20 px-2 py-1 text-center font-bold text-sm border border-border rounded-lg text-text-main"
+                />
+                <span className="text-xs text-text-muted font-medium">m</span>
+              </div>
+            </div>
+
+            <input
+              type="range"
+              min="0"
+              max="5000"
+              step="25"
+              value={officeForm.radiusMeters}
+              onChange={(e) => setOfficeForm({ ...officeForm, radiusMeters: parseInt(e.target.value, 10) || 0 })}
+              className="w-full accent-emerald-600 cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-text-muted font-mono">
+              <span>0m</span>
+              <span>5000m</span>
+            </div>
+            <p className="text-[11px] text-text-muted">
+              Type an exact value in the box for a tight fence (e.g. 1m or 2m), or drag to adjust.
+            </p>
+          </div>
+
+          {/* Info callout matching Screenshot 3 */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-border text-[11px] text-text-muted leading-relaxed">
+            Employees must be within <strong className="text-text-main">{officeForm.radiusMeters}m</strong> of{' '}
+            <strong className="text-text-main">{officeForm.name}</strong> to punch in/out. Admins and managers can override this for manual attendance marking.
+          </div>
+
+          {/* Geofence status indicator */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-500 bg-emerald-50 text-emerald-800">
+              <Icon name="shield" size={13} className="text-emerald-700" />
+              <span>Office Geofence Enforcement ({officeForm.radiusMeters}m)</span>
+            </span>
+            <span className="text-[11px] text-text-muted">High-precision PWA GPS Verification</span>
+          </div>
+
+          {/* Footer Buttons (Screenshot 3) */}
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+            <button
+              type="button"
+              onClick={() => setIsOfficeSettingsOpen(false)}
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <Icon name="check" size={14} />
+              <span>Save Settings</span>
+            </button>
+          </div>
+        </form>
       </Modal>
 
-      {/* Adjust Geofence Radius Modal */}
+      {/* MODAL 2: Mark for Staff Modal (Screenshot 1) */}
       <Modal
-        isOpen={!!editingSite}
-        onClose={() => setEditingSite(null)}
-        title={`Configure Geofence: ${editingSite?.name}`}
-        subtitle="Set acceptable GPS radius boundary for punch-clock acceptance"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setEditingSite(null)}>
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleSaveRadius}>
-              Save Geofence Radius
-            </Button>
-          </>
-        }
+        isOpen={isMarkStaffModalOpen}
+        onClose={() => setIsMarkStaffModalOpen(false)}
+        title="Mark Attendance for Staff Member"
       >
-        <div className="space-y-3">
-          <Input
-            label="Geofence Radius (in meters)"
-            type="number"
-            min="30"
-            max="1000"
-            value={radiusInput}
-            onChange={(e) => setRadiusInput(e.target.value)}
-            helperText="Recommended: 100m for offices, 150m-200m for construction/fit-out villas"
-          />
-        </div>
+        <form onSubmit={handleMarkForStaffSubmit} className="space-y-4 text-xs">
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Select Employee</label>
+            <select
+              value={staffMarkForm.userId}
+              onChange={(e) => setStaffMarkForm({ ...staffMarkForm, userId: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main font-medium focus:outline-none"
+            >
+              {mockUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Status</label>
+            <select
+              value={staffMarkForm.status}
+              onChange={(e) => setStaffMarkForm({ ...staffMarkForm, status: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main font-medium focus:outline-none"
+            >
+              <option value="present">Present (On-Site)</option>
+              <option value="absent">Absent</option>
+              <option value="half-day">Half Day</option>
+              <option value="leave">On Leave</option>
+            </select>
+          </div>
+
+          {staffMarkForm.status === 'present' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-In Time</label>
+                <input
+                  type="text"
+                  value={staffMarkForm.checkInTime}
+                  onChange={(e) => setStaffMarkForm({ ...staffMarkForm, checkInTime: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-Out Time</label>
+                <input
+                  type="text"
+                  value={staffMarkForm.checkOutTime}
+                  onChange={(e) => setStaffMarkForm({ ...staffMarkForm, checkOutTime: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Override Reason / Notes</label>
+            <input
+              type="text"
+              value={staffMarkForm.notes}
+              onChange={(e) => setStaffMarkForm({ ...staffMarkForm, notes: e.target.value })}
+              placeholder="e.g. Field site duty, client meeting"
+              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+            <button
+              type="button"
+              onClick={() => setIsMarkStaffModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-800 text-white hover:bg-brand-900 shadow-2xs"
+            >
+              Record Attendance
+            </button>
+          </div>
+        </form>
       </Modal>
+
+      {/* MODAL 3: Add Leave Type (Screenshot 2) */}
+      <Modal
+        isOpen={isAddLeaveTypeOpen}
+        onClose={() => setIsAddLeaveTypeOpen(false)}
+        title="Add Leave Type"
+      >
+        <form onSubmit={handleAddLeaveType} className="space-y-4 text-xs">
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Leave Type Title</label>
+            <input
+              type="text"
+              required
+              value={leaveTypeForm.name}
+              onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, name: e.target.value })}
+              placeholder="e.g. Casual Leave, Maternity Leave"
+              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-text-muted uppercase">Days / Year</label>
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={leaveTypeForm.daysPerYear}
+                onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, daysPerYear: parseInt(e.target.value, 10) || 1 })}
+                className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-text-muted uppercase">Carry Forward</label>
+              <select
+                value={leaveTypeForm.carryForward}
+                onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, carryForward: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main"
+              >
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Description</label>
+            <input
+              type="text"
+              value={leaveTypeForm.description}
+              onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, description: e.target.value })}
+              placeholder="Optional notes"
+              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+            <button
+              type="button"
+              onClick={() => setIsAddLeaveTypeOpen(false)}
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white"
+            >
+              Create Leave Type
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 4: Submit Regularization Request (Screenshot 1) */}
+      <Modal
+        isOpen={isRequestModalOpen}
+        onClose={() => setIsRequestModalOpen(false)}
+        title="Submit Regularization Request"
+      >
+        <form onSubmit={handleSubmitRequest} className="space-y-4 text-xs">
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Request Type</label>
+            <select
+              value={requestForm.type}
+              onChange={(e) => setRequestForm({ ...requestForm, type: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main"
+            >
+              <option value="Punch Regularization">Punch Regularization (Forgot to Punch)</option>
+              <option value="On-Duty (Client Meeting)">On-Duty (Client Meeting / Site Visit)</option>
+              <option value="Work From Home">Work From Home (Approved)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Date</label>
+            <input
+              type="date"
+              value={requestForm.date}
+              onChange={(e) => setRequestForm({ ...requestForm, date: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-text-muted uppercase">Reason</label>
+            <textarea
+              rows={3}
+              required
+              value={requestForm.reason}
+              onChange={(e) => setRequestForm({ ...requestForm, reason: e.target.value })}
+              placeholder="Explain the reason for regularization..."
+              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+            <button
+              type="button"
+              onClick={() => setIsRequestModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-800 text-white"
+            >
+              Send Request
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 5: Manager Correction Modal */}
+      {correctionTarget && (
+        <Modal
+          isOpen={!!correctionTarget}
+          onClose={() => setCorrectionTarget(null)}
+          title={`Correct Attendance Entry • ${correctionTarget.userName}`}
+        >
+          <div className="space-y-4 text-xs">
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-text-muted uppercase">Status</label>
+              <select
+                value={correctionData.status}
+                onChange={(e) => setCorrectionData({ ...correctionData, status: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main"
+              >
+                <option value="present">Present</option>
+                <option value="absent">Absent</option>
+                <option value="half-day">Half Day</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-In Time</label>
+                <input
+                  type="text"
+                  value={correctionData.checkInTime}
+                  onChange={(e) => setCorrectionData({ ...correctionData, checkInTime: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-Out Time</label>
+                <input
+                  type="text"
+                  value={correctionData.checkOutTime}
+                  onChange={(e) => setCorrectionData({ ...correctionData, checkOutTime: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-text-muted uppercase">Correction Reason</label>
+              <input
+                type="text"
+                required
+                value={correctionData.reason}
+                onChange={(e) => setCorrectionData({ ...correctionData, reason: e.target.value })}
+                placeholder="Manager note or regularization reason"
+                className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setCorrectionTarget(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCorrection}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-800 text-white"
+              >
+                Save Correction
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

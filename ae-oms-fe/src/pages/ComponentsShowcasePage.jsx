@@ -53,6 +53,7 @@ import AgencySelect from '../components/domain/AgencySelect';
 import { mockUsers } from '../data/users';
 import { mockAgencies } from '../data/agencies';
 import SidebarDemo from '../components/ui/SidebarDemo';
+import KanbanDemo from '../components/ui/KanbanDemo';
 
 
 export function ComponentsShowcasePage() {
@@ -653,6 +654,15 @@ export function ComponentsShowcasePage() {
           >
             <div className="pt-2">
               <SidebarDemo />
+            </div>
+          </Card>
+
+          <Card
+            title="Interactive Kanban Board"
+            subtitle="Drag-and-drop task workflow columns with tone indicators, badge tags, and quick-move actions"
+          >
+            <div className="pt-2">
+              <KanbanDemo />
             </div>
           </Card>
 

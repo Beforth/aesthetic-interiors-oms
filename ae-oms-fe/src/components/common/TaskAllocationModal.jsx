@@ -3,26 +3,15 @@ import { projectService } from '../../services/projectService';
 import { userService } from '../../services/userService';
 import { taskService } from '../../services/taskService';
 import { useToast } from '../../context/ToastContext';
+import { BASE_ROLE_LABELS } from '../../config/roles';
+import { defaultStageTemplate } from '../../data/stageTemplate';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 
-const STAGES = [
-  'Demolition & Civil Core',
-  'Electrical Rough-in',
-  'Plumbing & Sanitisation',
-  'HVAC & Low Voltage Ducts',
-  'POP False Ceiling Framing',
-  'Gypsum Sheet Installation',
-  'Waterproofing & Wet Areas',
-  'Flooring & Wall Tiling',
-  'Carpentry & Modular Carcass',
-  'Veneer & Laminate Pressing',
-  'Primer & Premium Painting',
-  'Fixtures & Final Handover',
-];
+const STAGES = defaultStageTemplate.map((s) => s.name);
 
 const PRIORITIES = [
   { value: 'low', label: 'Low Priority' },
@@ -47,7 +36,7 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
     description: '',
     projectId: '',
     assignedToId: '',
-    stageName: 'Carpentry & Modular Carcass',
+    stageName: 'Cleaning',
     priority: 'medium',
     type: 'site',
     dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
@@ -73,6 +62,19 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
       );
     }
   }, [isOpen]);
+
+  // Keep milestone stage aligned with project's sequence
+  useEffect(() => {
+    if (formData.projectId && projects.length > 0) {
+      const selectedProj = projects.find((p) => p.id === formData.projectId);
+      if (selectedProj?.stages?.length > 0) {
+        const hasStage = selectedProj.stages.some((s) => s.name === formData.stageName);
+        if (!hasStage) {
+          setFormData((prev) => ({ ...prev, stageName: selectedProj.stages[0].name }));
+        }
+      }
+    }
+  }, [formData.projectId, projects]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -144,12 +146,28 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
     label: `${p.name} (${p.city || p.clientName || 'Site'})`,
   }));
 
-  const userOptions = users.map((u) => ({
-    value: u.id,
-    label: `${u.name} - ${u.role?.replace('_', ' ').toUpperCase()}`,
-  }));
+  // Show only user role (Owner, Manager, Supervisor, Worker, Client) without names as requested
+  const userOptions = users.map((u) => {
+    const roleLabel = (BASE_ROLE_LABELS[u.role] || u.role?.replace('_', ' ')).toUpperCase();
+    return {
+      value: u.id,
+      label: roleLabel,
+    };
+  });
 
-  const stageOptions = STAGES.map((s) => ({ value: s, label: s }));
+  // Stages displayed in strict sequential order from master template / project execution stages
+  const selectedProject = projects.find((p) => p.id === formData.projectId);
+  const stageOptions = (
+    selectedProject?.stages && selectedProject.stages.length > 0
+      ? selectedProject.stages.map((s, idx) => ({
+          value: s.name,
+          label: `${s.order || idx + 1}. ${s.name}`,
+        }))
+      : defaultStageTemplate.map((s) => ({
+          value: s.name,
+          label: `${s.order}. ${s.name}`,
+        }))
+  );
 
   return (
     <Modal

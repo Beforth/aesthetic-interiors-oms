@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
 import { formatDate } from '../utils/formatters';
+import { validatePhone, sanitizePhone, validateEmail, validateRequired } from '../utils/validators';
 
 import PageHeader from '../components/ui/PageHeader';
 import DataToolbar from '../components/ui/DataToolbar';
@@ -312,8 +313,15 @@ export function ClientsPage() {
 
   const validate = () => {
     const errs = {};
-    if (!formData.name.trim()) errs.name = 'Client name is required';
-    if (!formData.phone.trim()) errs.phone = 'Phone number is required';
+    const nameErr = validateRequired(formData.name, 'Client full name', 2);
+    if (nameErr) errs.name = nameErr;
+
+    const phoneErr = validatePhone(formData.phone, { required: true, fieldLabel: 'Contact phone' });
+    if (phoneErr) errs.phone = phoneErr;
+
+    const emailErr = validateEmail(formData.email, { required: false, fieldLabel: 'Email address' });
+    if (emailErr) errs.email = emailErr;
+
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -798,18 +806,40 @@ export function ClientsPage() {
               label="Contact Phone"
               required
               type="tel"
+              maxLength={10}
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="+91 98450 12345"
+              onChange={(e) => {
+                const clean = sanitizePhone(e.target.value);
+                setFormData({ ...formData, phone: clean });
+                if (formErrors.phone) {
+                  setFormErrors((prev) => ({
+                    ...prev,
+                    phone: validatePhone(clean, { required: true, fieldLabel: 'Contact phone' }),
+                  }));
+                }
+              }}
+              placeholder="10-digit mobile (e.g. 9845012345)"
               error={formErrors.phone}
+              helperText="Only 10 digits allowed"
             />
 
             <Input
               label="Email Address"
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData({ ...formData, email: val });
+                if (formErrors.email) {
+                  setFormErrors((prev) => ({
+                    ...prev,
+                    email: validateEmail(val, { required: false, fieldLabel: 'Email address' }),
+                  }));
+                }
+              }}
               placeholder="e.g. client@example.com"
+              error={formErrors.email}
+              helperText="Must include @ and valid domain"
             />
           </div>
 

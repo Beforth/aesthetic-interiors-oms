@@ -1,11 +1,26 @@
+/**
+ * Aesthetic Interiors OMS - Attendance & HRMS Geofence Data
+ * Configured according to the HRMS Attendance & Office Location specifications.
+ */
+
+export const mockOfficeLocation = {
+  id: 'OFFICE_NEOMED',
+  name: 'Neomed Head Office',
+  address: 'Neomed Head Office, Main Ave',
+  lat: 19.967048,
+  lng: 73.754104,
+  radiusMeters: 500,
+  geofenceMode: 'office', // 'office' | 'anywhere'
+};
+
 export const mockGeofenceSites = [
   {
-    id: 'OFFICE',
-    name: 'Aesthetic Interiors Head Office & Studio',
-    address: '88, 3rd Block, Koramangala, Bengaluru',
-    lat: 12.9352,
-    lng: 77.6245,
-    radiusMeters: 100,
+    id: 'OFFICE_NEOMED',
+    name: 'Neomed Head Office',
+    address: 'Neomed Head Office, Main Ave',
+    lat: 19.967048,
+    lng: 73.754104,
+    radiusMeters: 500,
     type: 'office',
   },
   {
@@ -26,96 +41,86 @@ export const mockGeofenceSites = [
     radiusMeters: 150,
     type: 'site',
   },
-  {
-    id: 'P3',
-    name: 'Whitefield Penthouse Renovation',
-    address: 'Skyline Penthouse, Tower C, EPIP Zone, Whitefield, Bengaluru',
-    lat: 12.9866,
-    lng: 77.7289,
-    radiusMeters: 200,
-    type: 'site',
-  },
-  {
-    id: 'P4',
-    name: 'Lavelle Road Commercial Studio',
-    address: '4th Floor, UB City Annex, Lavelle Road, Bengaluru',
-    lat: 12.9719,
-    lng: 77.5962,
-    radiusMeters: 100,
-    type: 'site',
-  },
 ];
 
+// Initial Attendance Records matching Screenshot 1: Total Staff: 1, Present Today: 0, Absent Today: 1
 export const mockTodayAttendance = [
   {
     id: 'att-1',
-    userId: 'u3',
-    userName: 'Vikram Jadhav',
-    role: 'Site Supervisor',
-    siteId: 'P1',
-    site: 'Indiranagar 4BHK Luxury Villa',
-    date: new Date().toISOString().split('T')[0],
-    checkInTime: '08:45 AM',
-    checkOutTime: null,
-    status: 'present',
-    verified: true,
-    coordinates: { lat: 12.9716, lng: 77.5946 },
-    distanceMeters: 38,
-    withinGeofence: true,
-    correctionReason: null,
-  },
-  {
-    id: 'att-2',
-    userId: 'u4',
-    userName: 'Suresh Gaikwad',
-    role: 'Site Worker',
-    siteId: 'P1',
-    site: 'Indiranagar 4BHK Luxury Villa',
-    date: new Date().toISOString().split('T')[0],
-    checkInTime: '08:30 AM',
-    checkOutTime: null,
-    status: 'present',
-    verified: true,
-    coordinates: { lat: 12.9718, lng: 77.5948 },
-    distanceMeters: 26,
-    withinGeofence: true,
-    correctionReason: null,
-  },
-  {
-    id: 'att-3',
-    userId: 'u2',
-    userName: 'Neha Kulkarni',
-    role: 'Manager',
-    siteId: 'OFFICE',
-    site: 'Aesthetic Interiors Head Office & Studio',
-    date: new Date().toISOString().split('T')[0],
-    checkInTime: '09:10 AM',
-    checkOutTime: null,
-    status: 'present',
-    verified: true,
-    coordinates: { lat: 12.9353, lng: 77.6244 },
-    distanceMeters: 14,
-    withinGeofence: true,
-    correctionReason: null,
-  },
-  {
-    id: 'att-4',
     userId: 'u1',
     userName: 'Rohit Kumar',
     role: 'Owner',
-    siteId: 'OFFICE',
-    site: 'Aesthetic Interiors Head Office & Studio',
+    siteId: 'OFFICE_NEOMED',
+    site: 'Neomed Head Office',
     date: new Date().toISOString().split('T')[0],
-    checkInTime: '08:50 AM',
+    checkInTime: null,
     checkOutTime: null,
-    status: 'present',
-    verified: true,
-    coordinates: { lat: 12.9352, lng: 77.6245 },
-    distanceMeters: 5,
-    withinGeofence: true,
+    status: 'absent',
+    verified: false,
+    coordinates: null,
+    distanceMeters: null,
+    withinGeofence: false,
     correctionReason: null,
   },
 ];
+
+// Leave Types from Screenshot 2
+export const mockLeaveTypes = [
+  {
+    id: 'lt-1',
+    name: 'Leave Without Pay',
+    daysPerYear: 36,
+    carryForward: 'No',
+    description: '—',
+    status: 'Active',
+  },
+  {
+    id: 'lt-2',
+    name: 'Medical Leave',
+    daysPerYear: 12,
+    carryForward: 'No',
+    description: '—',
+    status: 'Active',
+  },
+  {
+    id: 'lt-3',
+    name: 'Privileged Leave',
+    daysPerYear: 10,
+    carryForward: 'No',
+    description: '—',
+    status: 'Active',
+  },
+];
+
+// Empty attendance regularization requests matching Screenshot 1
+export const mockAttendanceRequests = [];
+
+// Company-wide Attendance Overview Statistics from Screenshot 5
+export const mockAttendanceOverviewStats = {
+  totalEmployees: 5000,
+  checkedIn: 4500,
+  notCheckedIn: 500,
+  onLeave: 456,
+  weeklyOff: 145,
+  holiday: 12,
+  checkedOut: 250,
+};
+
+// Shift and Personal Attendance metrics from Screenshot 4
+export const mockShiftStatus = {
+  shiftTime: '09:00 AM - 06:00 PM',
+  shiftDuration: '9h 0m ( 1h Break )',
+  shiftStart: '9:00 AM',
+  monthlyRate: 94.5,
+  monthlyPresentDays: 22,
+  monthlyTotalDays: 23,
+  todayHoursWorked: '08h 28m',
+  todayTargetHours: '9h 00m',
+  todayWorkPercentage: 93,
+  remainingLeaveDays: 12,
+  totalLeaveDays: 20,
+  leavePercentage: 60,
+};
 
 export const mockAttendance = mockTodayAttendance;
 export default mockTodayAttendance;

@@ -33,6 +33,7 @@ export function Topbar({ onToggleMobileMenu }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchContainerRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   // Search dataset cache
   const [searchData, setSearchData] = useState({
@@ -68,6 +69,21 @@ export function Topbar({ onToggleMobileMenu }) {
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Global Ctrl+K / Cmd+K search shortcut listener
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      } else if (e.key === 'Escape') {
+        setIsSearchOpen(false);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Compute live search matches
@@ -122,16 +138,6 @@ export function Topbar({ onToggleMobileMenu }) {
       totalMatches,
     };
   }, [searchQuery, searchData]);
-
-  // Derive current page title from active path
-  const currentPageTitle = useMemo(() => {
-    const matched = navigationItems.find((item) =>
-      item.path === '/'
-        ? location.pathname === '/'
-        : location.pathname.startsWith(item.path)
-    );
-    return matched ? matched.label : 'Dashboard';
-  }, [location.pathname]);
 
   const handleSignOut = async () => {
     try {
@@ -188,14 +194,9 @@ export function Topbar({ onToggleMobileMenu }) {
   return (
     <>
       <header className="h-16 bg-surface border-b border-border px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
-        {/* Left Section: Sidebar Rail / Drawer Trigger + Page Title */}
-        <div className="flex items-center gap-3">
+        {/* Left Section: Mobile Sidebar Drawer Trigger (Desktop trigger is beside Aesthetic Interiors heading) */}
+        <div className="flex items-center lg:hidden">
           <SidebarTrigger />
-          <div className="hidden sm:block">
-            <h1 className="text-base sm:text-lg font-bold text-text-main tracking-tight">
-              {currentPageTitle}
-            </h1>
-          </div>
         </div>
 
         {/* Center Section: Global Quick Search with Autocomplete */}
@@ -207,6 +208,7 @@ export function Topbar({ onToggleMobileMenu }) {
               className="absolute left-3.5 text-text-muted pointer-events-none"
             />
             <input
+              ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => {
@@ -214,136 +216,207 @@ export function Topbar({ onToggleMobileMenu }) {
                 setIsSearchOpen(true);
               }}
               onFocus={() => setIsSearchOpen(true)}
+              onClick={() => setIsSearchOpen(true)}
               placeholder="Search projects, clients, tasks, muster..."
-              className="w-full h-11 pl-11 pr-10 py-2.5 text-sm bg-slate-50 border border-border rounded-xl text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all shadow-inner"
+              className="w-full h-11 pl-11 pr-24 py-2.5 text-sm bg-slate-50 border border-border rounded-xl text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all shadow-inner cursor-pointer focus:cursor-text"
             />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 text-text-muted hover:text-text-main text-xs p-1 rounded cursor-pointer"
-                title="Clear query"
+            <div className="absolute right-3 flex items-center gap-1.5">
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="text-text-muted hover:text-text-main text-xs p-1 rounded cursor-pointer"
+                  title="Clear query"
+                >
+                  ✕
+                </button>
+              ) : null}
+              <kbd
+                onClick={(e) => {
+                  e.stopPropagation();
+                  searchInputRef.current?.focus();
+                  setIsSearchOpen(true);
+                }}
+                className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-mono font-medium text-text-muted bg-slate-200/70 hover:bg-slate-300/80 rounded border border-border/80 cursor-pointer shadow-2xs select-none transition-colors"
+                title="Click or press Ctrl+K to search"
               >
-                ✕
-              </button>
-            )}
+                <span>Ctrl</span>
+                <span>K</span>
+              </kbd>
+            </div>
           </div>
 
-          {/* Autocomplete Search Dropdown */}
-          {isSearchOpen && searchResults && (
+          {/* Autocomplete Search Dropdown & Command Palette */}
+          {isSearchOpen && (
             <div className="absolute top-full left-0 right-0 mt-1.5 bg-surface border border-border rounded-xl shadow-xl overflow-hidden z-50 max-h-96 overflow-y-auto divide-y divide-border/50 animate-fadeIn">
-              {searchResults.totalMatches === 0 ? (
-                <div className="p-4 text-center text-xs text-text-muted">
-                  No matches found for <span className="font-semibold text-text-main">"{searchQuery}"</span>
-                </div>
+              {searchResults ? (
+                searchResults.totalMatches === 0 ? (
+                  <div className="p-4 text-center text-xs text-text-muted">
+                    No matches found for <span className="font-semibold text-text-main">"{searchQuery}"</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Projects */}
+                    {searchResults.projects.length > 0 && (
+                      <div className="p-2">
+                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="briefcase" size={12} className="text-brand-600" />
+                          <span>Projects</span>
+                        </div>
+                        {searchResults.projects.map((proj) => (
+                          <button
+                            key={proj.id}
+                            type="button"
+                            onClick={() => handleSelectSearchResult(`/projects/${proj.id}`)}
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                          >
+                            <div className="truncate">
+                              <span className="font-semibold text-text-main">{proj.name}</span>
+                              <span className="text-[11px] text-text-muted ml-2">{proj.clientName}</span>
+                            </div>
+                            <span className="text-[10px] text-brand-600 shrink-0 font-medium ml-2">
+                              View →
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Tasks */}
+                    {searchResults.tasks.length > 0 && (
+                      <div className="p-2">
+                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="clipboard-list" size={12} className="text-amber-600" />
+                          <span>Tasks</span>
+                        </div>
+                        {searchResults.tasks.map((task) => (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => handleSelectSearchResult('/tasks')}
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                          >
+                            <div className="truncate">
+                              <span className="font-medium text-text-main">{task.title}</span>
+                              {task.assignedToName && (
+                                <span className="text-[11px] text-text-muted ml-2">({task.assignedToName})</span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-amber-600 shrink-0 font-medium ml-2">
+                              Task Board →
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Clients */}
+                    {searchResults.clients.length > 0 && (
+                      <div className="p-2">
+                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="users" size={12} className="text-blue-600" />
+                          <span>Clients</span>
+                        </div>
+                        {searchResults.clients.map((client) => (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => handleSelectSearchResult('/clients')}
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                          >
+                            <div className="truncate">
+                              <span className="font-semibold text-text-main">{client.name}</span>
+                              <span className="text-[11px] text-text-muted ml-2">{client.city || client.phone}</span>
+                            </div>
+                            <span className="text-[10px] text-blue-600 shrink-0 font-medium ml-2">
+                              Directory →
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Team Members */}
+                    {searchResults.users.length > 0 && (
+                      <div className="p-2">
+                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="attendance" size={12} className="text-purple-600" />
+                          <span>Staff & Team</span>
+                        </div>
+                        {searchResults.users.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => handleSelectSearchResult('/attendance')}
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                          >
+                            <div className="truncate">
+                              <span className="font-semibold text-text-main">{user.name}</span>
+                              <span className="text-[11px] text-text-muted ml-2">{user.role}</span>
+                            </div>
+                            <span className="text-[10px] text-purple-600 shrink-0 font-medium ml-2">
+                              Muster →
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
               ) : (
-                <>
-                  {/* Projects */}
-                  {searchResults.projects.length > 0 && (
-                    <div className="p-2">
-                      <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                        <Icon name="briefcase" size={12} className="text-brand-600" />
-                        <span>Projects</span>
+                /* Instant Command Palette on click / Ctrl+K */
+                <div className="p-3 space-y-2.5">
+                  <div className="px-1 text-[10px] uppercase font-bold text-text-muted flex items-center justify-between">
+                    <span>Quick Navigation</span>
+                    <span className="text-[10px] font-mono font-medium text-text-muted">ESC to close</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {[
+                      { label: 'Dashboard', path: '/', icon: 'dashboard', color: 'text-brand-600' },
+                      { label: 'Site Tasks', path: '/tasks', icon: 'clipboard-list', color: 'text-amber-600' },
+                      { label: 'Projects', path: '/projects', icon: 'briefcase', color: 'text-indigo-600' },
+                      { label: 'Attendance', path: '/attendance', icon: 'attendance', color: 'text-emerald-600' },
+                      { label: 'Clients', path: '/clients', icon: 'users', color: 'text-sky-600' },
+                      { label: 'Billing', path: '/payments', icon: 'currency-inr', color: 'text-rose-600' },
+                    ].map((nav) => (
+                      <button
+                        key={nav.path}
+                        type="button"
+                        onClick={() => handleSelectSearchResult(nav.path)}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 hover:bg-brand-50 text-xs text-text-main transition-colors text-left border border-border/50"
+                      >
+                        <Icon name={nav.icon} size={15} className={nav.color} />
+                        <span className="font-medium truncate">{nav.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {searchData.projects.length > 0 && (
+                    <div className="pt-2 border-t border-border/60">
+                      <div className="px-1 pb-1.5 text-[10px] uppercase font-bold text-text-muted">
+                        Active Sites
                       </div>
-                      {searchResults.projects.map((proj) => (
-                        <button
-                          key={proj.id}
-                          type="button"
-                          onClick={() => handleSelectSearchResult(`/projects/${proj.id}`)}
-                          className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
-                        >
-                          <div className="truncate">
-                            <span className="font-semibold text-text-main">{proj.name}</span>
-                            <span className="text-[11px] text-text-muted ml-2">{proj.clientName}</span>
-                          </div>
-                          <span className="text-[10px] text-brand-600 shrink-0 font-medium ml-2">
-                            View →
-                          </span>
-                        </button>
-                      ))}
+                      <div className="space-y-1">
+                        {searchData.projects.slice(0, 3).map((proj) => (
+                          <button
+                            key={proj.id}
+                            type="button"
+                            onClick={() => handleSelectSearchResult(`/projects/${proj.id}`)}
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors"
+                          >
+                            <span className="font-medium text-text-main truncate">{proj.name}</span>
+                            <span className="text-[10px] text-brand-600 font-semibold shrink-0 ml-2">Open Site →</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
 
-                  {/* Tasks */}
-                  {searchResults.tasks.length > 0 && (
-                    <div className="p-2">
-                      <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                        <Icon name="clipboard-list" size={12} className="text-amber-600" />
-                        <span>Tasks</span>
-                      </div>
-                      {searchResults.tasks.map((task) => (
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => handleSelectSearchResult('/tasks')}
-                          className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
-                        >
-                          <div className="truncate">
-                            <span className="font-medium text-text-main">{task.title}</span>
-                            {task.assignedToName && (
-                              <span className="text-[11px] text-text-muted ml-2">({task.assignedToName})</span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-amber-600 shrink-0 font-medium ml-2">
-                            Task Board →
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Clients */}
-                  {searchResults.clients.length > 0 && (
-                    <div className="p-2">
-                      <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                        <Icon name="users" size={12} className="text-blue-600" />
-                        <span>Clients</span>
-                      </div>
-                      {searchResults.clients.map((client) => (
-                        <button
-                          key={client.id}
-                          type="button"
-                          onClick={() => handleSelectSearchResult('/clients')}
-                          className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
-                        >
-                          <div className="truncate">
-                            <span className="font-semibold text-text-main">{client.name}</span>
-                            <span className="text-[11px] text-text-muted ml-2">{client.city || client.phone}</span>
-                          </div>
-                          <span className="text-[10px] text-blue-600 shrink-0 font-medium ml-2">
-                            Directory →
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Team Members */}
-                  {searchResults.users.length > 0 && (
-                    <div className="p-2">
-                      <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                        <Icon name="attendance" size={12} className="text-purple-600" />
-                        <span>Staff & Team</span>
-                      </div>
-                      {searchResults.users.map((user) => (
-                        <button
-                          key={user.id}
-                          type="button"
-                          onClick={() => handleSelectSearchResult('/attendance')}
-                          className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
-                        >
-                          <div className="truncate">
-                            <span className="font-semibold text-text-main">{user.name}</span>
-                            <span className="text-[11px] text-text-muted ml-2">{user.role}</span>
-                          </div>
-                          <span className="text-[10px] text-purple-600 shrink-0 font-medium ml-2">
-                            Muster →
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
+                  <div className="px-2.5 py-1.5 text-[11px] text-text-muted bg-slate-100/70 rounded-lg flex items-center justify-between">
+                    <span>Type to search across projects, trades, clients, or team</span>
+                    <span className="font-mono text-[10px] font-semibold bg-white px-1.5 py-0.5 rounded border border-border">Ctrl+K</span>
+                  </div>
+                </div>
               )}
             </div>
           )}

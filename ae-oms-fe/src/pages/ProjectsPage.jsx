@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
 import { ROLES, ROLE_LABELS } from '../config/roles';
+import { validateRequired, validatePositiveNumber } from '../utils/validators';
 
 import PageHeader from '../components/ui/PageHeader';
 import DataToolbar from '../components/ui/DataToolbar';
@@ -114,11 +115,19 @@ export function ProjectsPage() {
 
   const validate = () => {
     const errs = {};
-    if (!formData.name.trim()) errs.name = 'Project title is required';
-    if (!formData.clientId) errs.clientId = 'Please link a client';
-    if (!formData.totalCost || isNaN(Number(formData.totalCost))) {
-      errs.totalCost = 'Please enter a valid total cost in INR';
-    }
+    const nameErr = validateRequired(formData.name, 'Project title', 3);
+    if (nameErr) errs.name = nameErr;
+
+    if (!formData.clientId) errs.clientId = 'Please select a linked client';
+
+    const costErr = validatePositiveNumber(formData.totalCost, 'Total contract cost', { min: 10000 });
+    if (costErr) errs.totalCost = costErr;
+
+    if (!formData.startDate) errs.startDate = 'Project kickoff date is required';
+
+    const addrErr = validateRequired(formData.siteAddress, 'Site address', 5);
+    if (addrErr) errs.siteAddress = addrErr;
+
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -316,14 +325,17 @@ export function ProjectsPage() {
               onChange={(e) =>
                 setFormData({ ...formData, startDate: e.target.value })
               }
+              error={formErrors.startDate}
             />
             <Input
               label="Site Address"
+              required
               value={formData.siteAddress}
               onChange={(e) =>
                 setFormData({ ...formData, siteAddress: e.target.value })
               }
               placeholder="Full site location & landmark"
+              error={formErrors.siteAddress}
             />
           </div>
 
