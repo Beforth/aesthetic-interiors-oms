@@ -1,6 +1,5 @@
 import { apiClient, USER_KEY } from './apiClient';
 import { getPermissionsForRole } from '../config/permissions';
-import { ROLES } from '../config/roles';
 import { mockUsers } from '../data/users';
 
 const STORAGE_KEY = 'osm_users_store';
@@ -69,44 +68,40 @@ function saveLocalUsers(users) {
   }
 }
 
+const WRITABLE_FIELDS = ['name', 'email', 'username', 'password', 'phone', 'role', 'title', 'notes', 'birthday', 'status'];
+
+/** Only the fields the API accepts. Empty text is kept (it clears a field) except an empty password. */
+function toPayload(data) {
+  const payload = {};
+  WRITABLE_FIELDS.forEach((field) => {
+    const value = data[field];
+    if (value === undefined || value === null) return;
+    if (field === 'password' && value === '') return;
+    payload[field] = value;
+  });
+  return payload;
+}
+
+/** Keeps the cached signed-in profile in step when the user edits their own record. */
+function syncSignedInUser(updated) {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return;
+    const active = JSON.parse(raw);
+    if (String(active.id) === String(updated.id)) {
+      localStorage.setItem(USER_KEY, JSON.stringify({ ...active, ...updated }));
+    }
+  } catch {
+    // The cache only affects display; the next login or reload refreshes it.
+  }
+}
+
 export const userService = {
   /**
-   * Fetches users from the real backend admin API or persistent store.
-   * Only returns the 5 authorized personnel/clients or newly admin-created users.
+   * MOCK until the tabs that use it are wired: users from the local demo store.
+   * The real list is `listUsers()` below (Settings tab).
    */
   async getAllUsers() {
-    try {
-      const response = await apiClient.get('/admin/users/');
-      const rawList = Array.isArray(response)
-        ? response
-        : response?.results && Array.isArray(response.results)
-        ? response.results
-        : [];
-
-      if (rawList.length > 0) {
-        const normalized = rawList.map((u) => ({
-          id: String(u.id),
-          name:
-            u.display_name ||
-            [u.first_name, u.last_name].filter(Boolean).join(' ') ||
-            u.username,
-          username: u.username,
-          email: u.email || `${u.username}@aesthetic.demo`,
-          phone: u.phone || '+91 98000 00000',
-          role: u.role === 'admin' ? ROLES.ADMIN : u.role || ROLES.WORKER,
-          title: u.role === 'admin' ? 'Owner / Administrator' : u.title || 'Staff Member',
-          status: u.is_active === false || u.status === 'banned' || u.status === 'suspended' ? 'inactive' : 'active',
-          joinedOn: u.date_joined ? u.date_joined.split('T')[0] : '2026-10-19',
-          notes: u.status_note || '',
-          password: u.password || 'demo123',
-        }));
-        saveLocalUsers(normalized);
-        return normalized;
-      }
-    } catch (apiErr) {
-      // Backend request fallback to local storage
-    }
-
     const local = getLocalUsers();
     if (local.length > 0) return local;
 
@@ -122,7 +117,6 @@ export const userService = {
 
     return mockUsers;
   },
-
   async getUserById(id) {
     const users = await this.getAllUsers();
     return users.find((u) => String(u.id) === String(id)) || null;
@@ -138,97 +132,37 @@ export const userService = {
     return getPermissionsForRole(user.role);
   },
 
-  /**
-   * Creates a new user record.
-   * Admin can set initial password directly.
-   */
+
+  // ------------------------------------------------------------------------------------------
+  // Real backend (the Settings tab). The read methods above still run on local mock data for the
+  // tabs that are not wired yet; they move here one tab at a time.
+  // ------------------------------------------------------------------------------------------
+
+  /** Every live user. Needs `users.manage`. Pages are fetched until the list is complete. */
+  async listUsers() {
+    return apiClient.getAll('/accounts/users/');
+  },
+
+  /** Creates a user. `name`, `email`, `password` and `role` (a role key) are required. */
   async createUser(userData) {
-    let createdOnBackend = null;
-    try {
-      createdOnBackend = await apiClient.post('/admin/users/', {
-        username: userData.email?.split('@')[0] || `user_${Date.now()}`,
-        email: userData.email,
-        display_name: userData.name,
-        password: userData.password,
-        role: userData.role === ROLES.ADMIN ? 'admin' : userData.role,
-        status: userData.status === 'active' ? 'active' : 'suspended',
-      });
-    } catch (e) {
-      // Backend fallback to local store
-    }
-
-    const localUsers = getLocalUsers();
-    const newUser = {
-      id: createdOnBackend?.id ? String(createdOnBackend.id) : `u_${Date.now()}`,
-      name: userData.name,
-      email: userData.email,
-      username: userData.username || userData.email.split('@')[0],
-      password: userData.password || 'demo123',
-      phone: userData.phone || '',
-      role: userData.role || ROLES.WORKER,
-      title: userData.title || 'Staff Member',
-      notes: userData.notes || '',
-      status: userData.status || 'active',
-      joinedOn: new Date().toISOString().split('T')[0],
-      assignedProjects: [],
-    };
-
-    const updated = [newUser, ...localUsers];
-    saveLocalUsers(updated);
-    return newUser;
+    return apiClient.post('/accounts/users/', toPayload(userData));
   },
 
-  /**
-   * Updates an existing user record with new details (email, phone, name, password, role, etc.).
-   */
+  /** Updates a user. Only the fields given change; a blank `password` leaves the password alone. */
   async updateUser(id, updateData) {
-    try {
-      await apiClient.patch(`/admin/users/${id}/`, updateData);
-    } catch (e) {}
-
-    const localUsers = getLocalUsers();
-    const updated = localUsers.map((u) =>
-      String(u.id) === String(id) ? { ...u, ...updateData } : u
-    );
-    saveLocalUsers(updated);
-
-    // If currently authenticated session user was updated, synchronize active session
-    try {
-      const activeRaw = localStorage.getItem(USER_KEY);
-      if (activeRaw) {
-        const active = JSON.parse(activeRaw);
-        if (String(active.id) === String(id)) {
-          const synced = { ...active, ...updateData };
-          localStorage.setItem(USER_KEY, JSON.stringify(synced));
-        }
-      }
-    } catch {}
-
-    return updated.find((u) => String(u.id) === String(id)) || null;
+    const updated = await apiClient.patch(`/accounts/users/${id}/`, toPayload(updateData));
+    syncSignedInUser(updated);
+    return updated;
   },
 
-  async toggleUserStatus(id) {
-    const localUsers = getLocalUsers();
-    const target = localUsers.find((u) => String(u.id) === String(id));
-    if (!target) return null;
-
-    const newStatus = target.status === 'active' ? 'inactive' : 'active';
-    try {
-      await apiClient.post(`/admin/users/${id}/status/`, {
-        status: newStatus === 'active' ? 'active' : 'suspended',
-      });
-    } catch (e) {}
-
-    return this.updateUser(id, { status: newStatus });
+  /** Activates or deactivates a user. A deactivated user is signed out at once. */
+  async setUserStatus(id, status) {
+    return apiClient.post(`/accounts/users/${id}/status/`, { status });
   },
 
+  /** Soft-deletes a user. */
   async deleteUser(id) {
-    const localUsers = getLocalUsers();
-    const updated = localUsers.filter((u) => String(u.id) !== String(id));
-    saveLocalUsers(updated);
-    try {
-      await apiClient.delete(`/admin/users/${id}/`);
-    } catch (e) {}
+    await apiClient.delete(`/accounts/users/${id}/`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('osm_users_updated', { detail: { id } }));
     }
