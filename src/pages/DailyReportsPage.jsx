@@ -313,9 +313,9 @@ export function DailyReportsPage() {
   );
 
   return (
-    // The page is exactly as tall as the space under the top bar and scrolls inside itself, so the window never
-    // scrolls: the sidebar and top bar stay put. The table is as long as its rows and the page scrolls.
-    <div className="flex flex-col gap-4 h-[calc(100dvh-184px)] lg:h-[calc(100dvh-144px)] overflow-y-auto overflow-x-hidden pr-2 pb-1 [scrollbar-gutter:stable] sm:-mx-4 lg:-mx-6">
+    // useFixedShell bounds the app shell to the window, so the main column scrolls the whole page (title,
+    // filters and table together) with one scrollbar at the window edge, and the sidebar scrolls on its own.
+    <div className="flex flex-col gap-4 sm:-mx-4 lg:-mx-6">
       <PageHeader
         title="Daily Status Report"
         subtitle={`${whose} submitted work`}
@@ -418,7 +418,7 @@ export function DailyReportsPage() {
                   <col key={i} style={{ width: `${w}%` }} />
                 ))}
               </colgroup>
-              <thead className="sticky top-0 z-10">
+              <thead className="sticky top-16 z-10">
                 <tr className="bg-brand-50">
                   <th className={`${TH} text-center`}>Date</th>
                   {multiple && <th className={TH}>Person</th>}
