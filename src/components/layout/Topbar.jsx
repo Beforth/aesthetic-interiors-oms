@@ -193,7 +193,7 @@ export function Topbar({ onToggleMobileMenu }) {
 
   return (
     <>
-      <header className="h-16 bg-surface border-b border-border px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <header className="h-16 bg-surface border-b border-border px-4 sm:px-8 lg:px-12 flex items-center justify-between sticky top-0 z-30 shadow-xs">
         {/* Left Section: Mobile Sidebar Drawer Trigger (Desktop trigger is beside Aesthetic Interiors heading) */}
         <div className="flex items-center lg:hidden">
           <SidebarTrigger />
@@ -422,24 +422,8 @@ export function Topbar({ onToggleMobileMenu }) {
           )}
         </div>
 
-        {/* Right Section: Task Allocation Plus Icon, Notifications, Avatar & Logout Icon */}
+        {/* Right Section: Notifications, Avatar & Logout Icon */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Plus icon beside notification with hover tooltip for Task Allocation */}
-          <div className="relative group">
-            <button
-              type="button"
-              onClick={() => setIsTaskModalOpen(true)}
-              aria-label="Task Allocation"
-              title="Task Allocation"
-              className="p-2 text-text-muted hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
-            >
-              <Icon name="plus" size={18} />
-            </button>
-            <div className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2 py-1 text-[11px] font-medium text-white bg-slate-900 rounded-md shadow-md whitespace-nowrap z-50 pointer-events-none transition-all">
-              Task Allocation
-            </div>
-          </div>
-
           {/* Notification Bell */}
           <div className="relative">
             <IconButton

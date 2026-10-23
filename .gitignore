@@ -4,6 +4,7 @@ dist/
 dist-ssr/
 dev-dist/
 .vite/
+ae-oms-fe/
 
 # Environment files (secrets); commit only .env.example
 .env

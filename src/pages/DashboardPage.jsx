@@ -12,13 +12,13 @@ import { useToast } from '../context/ToastContext';
 import { mockUsers } from '../data/users';
 
 import ProgressBar from '../components/ui/ProgressBar';
-import Avatar from '../components/ui/Avatar';
 import Icon from '../components/ui/Icon';
 import StatusBadge from '../components/ui/StatusBadge';
 import Button from '../components/ui/Button';
 import TaskAllocationModal from '../components/common/TaskAllocationModal';
 import { Leaderboard } from '../components/ui/leaderboard';
 import OverallProgressGraph from '../components/domain/OverallProgressGraph';
+import HRWorkforceOverview from '../components/domain/HRWorkforceOverview';
 
 export function DashboardPage() {
   const { currentUser, role } = useAuth();
@@ -108,11 +108,29 @@ export function DashboardPage() {
 
   const onDutyPercentage = totalStaffCount > 0 ? Math.round((presentCount / totalStaffCount) * 100) : 0;
 
-  const presentStaff = useMemo(() => {
-    return attendance.filter((a) => a.status === 'present');
-  }, [attendance]);
+  const currentMonth = new Date().getMonth();
+  const currentMonthName = new Date().toLocaleString('en-US', { month: 'long' });
+  const currentMonthShort = new Date().toLocaleString('en-US', { month: 'short' });
+  const todayDate = new Date().getDate();
 
-  const chartProjects = activeProjects.slice(0, 4);
+  const monthlyBirthdays = useMemo(() => {
+    return users
+      .filter((u) => u.birthday && u.role !== 'client')
+      .map((u) => {
+        const parts = u.birthday.split('-');
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        return {
+          ...u,
+          birthMonth: month,
+          birthDay: day,
+          displayDate: `${currentMonthShort} ${day}`,
+          isUpcoming: day >= todayDate,
+        };
+      })
+      .filter((u) => u.birthMonth === currentMonth)
+      .sort((a, b) => a.birthDay - b.birthDay);
+  }, [users, currentMonth, currentMonthShort, todayDate]);
 
   // Compute Leaderboard ranking items for Project Execution & Process Tracker
   const projectLeaderboardItems = useMemo(() => {
@@ -173,26 +191,6 @@ export function DashboardPage() {
       completedMilestones,
     };
   }, [projects, activeProjects, completedProjects]);
-
-  // Live Milestone Hand-offs across active projects
-  const recentHandOffs = useMemo(() => {
-    const list = [];
-    (projects || []).forEach((proj) => {
-      (proj.stages || []).forEach((stg) => {
-        if (stg.status === 'done') {
-          list.push({
-            projectId: proj.id,
-            projectName: proj.name,
-            clientName: proj.clientName,
-            stageName: stg.name,
-            agencyName: stg.agencyName || 'Specialized Agency',
-            date: stg.endDate ? formatDate(stg.endDate) : 'Completed',
-          });
-        }
-      });
-    });
-    return list.slice(0, 4);
-  }, [projects]);
 
   const userFirstName = currentUser?.name
     ? currentUser.name.trim().split(/\s+/)[0]
@@ -263,27 +261,7 @@ export function DashboardPage() {
           </p>
         </div>
 
-        {/* Card 2: Combined Valuation (Purple) */}
-        <div className="p-4 rounded-2xl bg-surface border border-border hover:border-purple-300 shadow-2xs transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Active Valuation
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center">
-              <Icon name="payments" size={16} />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">
-              {formatCurrency(totalContractValuation)}
-            </span>
-          </div>
-          <p className="text-[11px] text-text-muted mt-1 truncate">
-            Across {activeProjects.length} active fit-out contracts
-          </p>
-        </div>
-
-        {/* Card 3: Today's Attendance (Emerald) */}
+        {/* Card 2: Today's Attendance (Emerald) */}
         <div className="p-4 rounded-2xl bg-surface border border-border hover:border-emerald-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
@@ -305,6 +283,42 @@ export function DashboardPage() {
           <p className="text-[11px] text-text-muted mt-1 truncate">
             {presentCount} on-duty, {absentCount} absent from attendance muster
           </p>
+        </div>
+
+        {/* Card 3: Upcoming Employee Birthdays (This Month) */}
+        <div className="p-4 rounded-2xl bg-surface border border-border hover:border-pink-300 shadow-2xs transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
+              Birthdays ({currentMonthName})
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 border border-pink-200 flex items-center justify-center">
+              <Icon name="cake" size={16} />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-text-main">
+              {monthlyBirthdays.length}
+            </span>
+            <span className="text-xs font-semibold text-pink-700 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-full">
+              This Month
+            </span>
+          </div>
+          <div className="mt-1 text-[11px] text-text-muted truncate">
+            {monthlyBirthdays.length > 0 ? (
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="font-semibold text-text-main truncate">
+                  {monthlyBirthdays[0].name} ({monthlyBirthdays[0].displayDate})
+                </span>
+                {monthlyBirthdays.length > 1 && (
+                  <span className="text-pink-600 font-medium shrink-0">
+                    +{monthlyBirthdays.length - 1} more
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span>No employee birthdays in {currentMonthName}</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -454,179 +468,9 @@ export function DashboardPage() {
               </div>
             )}
           </div>
-
-          {/* SECTION 2: Visual Charts & Analytics (Project Progress Multi-bar & Labor Muster Trends) */}
-          <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600" />
-                  <span>Execution Analytics & Labor Trends</span>
-                </h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Visual milestone velocity comparison & weekly site workforce turnout
-                </p>
-              </div>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
-                Weekly Metrics
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              {/* Chart A: Multi-Project Stage Progress Bars */}
-              <div className="p-4 bg-brand-50/50 rounded-xl border border-border space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold text-text-main">
-                  <span>Site Milestone Progress</span>
-                  <span className="text-indigo-600 font-mono text-[11px]">4 Sites</span>
-                </div>
-
-                <div className="space-y-3">
-                  {chartProjects.map((p, idx) => {
-                    const prog = calculateProgress(p.stages || []);
-                    const colors = ['bg-indigo-600', 'bg-emerald-600', 'bg-purple-600', 'bg-sky-600'];
-                    return (
-                      <div key={p.id} className="space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-text-main truncate max-w-[180px]">
-                            {p.name}
-                          </span>
-                          <span className="font-mono text-text-muted font-bold">{prog}%</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
-                          <div
-                            className={`h-full rounded-full ${colors[idx % colors.length]}`}
-                            style={{ width: `${prog}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Chart B: Weekly Site Turnout Area Graphic (SVG curve with solid fill) */}
-              <div className="p-4 bg-brand-50/50 rounded-xl border border-border flex flex-col justify-between">
-                <div className="flex items-center justify-between text-xs font-bold text-text-main mb-2">
-                  <span>Weekly Attendance Muster</span>
-                  <span className="text-emerald-700 font-semibold text-[11px]">96% Avg Turnout</span>
-                </div>
-
-                {/* SVG Attendance Curve (Solid Tint, No Gradient) */}
-                <div className="relative h-28 w-full mt-2">
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 300 100" preserveAspectRatio="none">
-                    {/* Area fill - clean solid emerald light tint */}
-                    <path
-                      d="M 0 80 Q 50 30, 100 45 T 200 20 T 300 15 L 300 100 L 0 100 Z"
-                      fill="#d1fae5"
-                      opacity="0.6"
-                    />
-                    {/* Stroke line */}
-                    <path
-                      d="M 0 80 Q 50 30, 100 45 T 200 20 T 300 15"
-                      fill="none"
-                      stroke="#059669"
-                      strokeWidth="2.5"
-                    />
-                    {/* Data Points */}
-                    <circle cx="0" cy="80" r="3.5" fill="#059669" />
-                    <circle cx="75" cy="40" r="3.5" fill="#059669" />
-                    <circle cx="150" cy="35" r="3.5" fill="#059669" />
-                    <circle cx="225" cy="18" r="3.5" fill="#059669" />
-                    <circle cx="300" cy="15" r="3.5" fill="#059669" />
-                  </svg>
-                </div>
-
-                {/* Day Labels */}
-                <div className="flex items-center justify-between text-[10px] text-text-muted font-mono font-medium pt-2 border-t border-border/80">
-                  <span>Mon (4)</span>
-                  <span>Tue (4)</span>
-                  <span>Wed (4)</span>
-                  <span>Thu (4)</span>
-                  <span>Today (4)</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 3: Recent Milestone Hand-offs & Site Execution Activity */}
-          <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
-                  <span>Recent Milestone Hand-offs & Site Activity</span>
-                </h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Live trade transitions, stage completions, and site approvals
-                </p>
-              </div>
-
-              <Link
-                to="/projects"
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline-offset-2 hover:underline"
-              >
-                View All Sites →
-              </Link>
-            </div>
-
-            {recentHandOffs.length === 0 ? (
-              <div className="p-6 text-center text-xs text-text-muted bg-brand-50/50 rounded-xl">
-                No recent stage hand-offs recorded yet.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentHandOffs.map((item, idx) => (
-                  <div
-                    key={`${item.projectId}-${item.stageName}-${idx}`}
-                    className="p-3.5 rounded-xl border border-border/80 bg-surface hover:border-brand-300 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0 mt-0.5">
-                        <Icon name="check-circle" size={16} className="text-emerald-600" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-text-main truncate">
-                            {item.projectName}
-                          </span>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {item.stageName}
-                          </span>
-                        </div>
-                        <p className="text-xs text-text-muted mt-0.5">
-                          Stage completed & verified snag-free for next trade handover.
-                        </p>
-                        <div className="flex items-center gap-3 text-[11px] text-text-muted mt-1.5 flex-wrap">
-                          <span className="flex items-center gap-1 font-medium text-brand-700">
-                            <Icon name="wrench" size={11} />
-                            {item.agencyName}
-                          </span>
-                          {item.clientName && (
-                            <>
-                              <span>•</span>
-                              <span>Client: {item.clientName}</span>
-                            </>
-                          )}
-                          <span>•</span>
-                          <span>{item.date}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Link
-                      to={`/projects/${item.projectId}`}
-                      className="self-end sm:self-center px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 hover:bg-slate-100 text-text-main border border-border transition-colors shrink-0"
-                    >
-                      Site Details →
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Right Column (1 Col wide): Overall Portfolio Progress + Today Attendance + Operational Notes */}
+        {/* Right Column (1 Col wide): Overall Portfolio Progress */}
         <div className="space-y-6">
           {/* OVERALL PORTFOLIO PROGRESS: Fluid Organic Progress Visualizer */}
           <OverallProgressGraph
@@ -636,91 +480,21 @@ export function DashboardPage() {
             totalMilestones={overallPortfolioStats.totalMilestones}
             completedMilestones={overallPortfolioStats.completedMilestones}
           />
-
-          {/* SECTION 4: Today All Employee Attendance (Who is currently present) */}
-          <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Staff Attendance (Today)</span>
-                </h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Live GPS geofenced check-in muster roll
-                </p>
-              </div>
-
-              <Link
-                to="/attendance"
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline-offset-2 hover:underline"
-              >
-                View Muster →
-              </Link>
-            </div>
-
-            {/* Attendance quick metrics */}
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
-              <span className="font-bold text-emerald-900 flex items-center gap-1.5">
-                <Icon name="check-circle" size={15} className="text-emerald-600" />
-                <span>Attendance Status</span>
-              </span>
-              <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
-                {presentCount} / {totalStaffCount} On Duty
-              </span>
-            </div>
-
-            {attendance.length === 0 ? (
-              <div className="p-6 text-center text-xs text-text-muted bg-brand-50/50 rounded-xl">
-                No attendance records logged today.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {attendance.map((record) => (
-                  <div
-                    key={record.id}
-                    className="p-3 rounded-xl border border-border/80 bg-surface flex items-center justify-between gap-3 hover:border-emerald-300 transition-colors shadow-2xs"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Avatar name={record.userName} size="sm" status="online" />
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-text-main truncate">
-                          {record.userName}
-                        </div>
-                        <div className="text-[11px] text-text-muted truncate">
-                          {record.site}
-                        </div>
-                        <div className="text-[10px] text-emerald-700 font-medium flex items-center gap-1 mt-0.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                          <span>Punched in: {record.checkInTime}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200">
-                        {record.role}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 5: Non-Technical Friendly Operational Guide (Solid Clean Background) */}
-          <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 space-y-2 text-xs">
-            <div className="flex items-center gap-2 font-bold text-indigo-950">
-              <Icon name="sparkles" size={16} className="text-indigo-600" />
-              <span>Standard Operational Reminders</span>
-            </div>
-            <ul className="space-y-1.5 text-text-muted text-[11px] leading-relaxed pl-1">
-              <li>• <strong>Site Safety:</strong> Hard hats and safety shoes must be worn on all active sites.</li>
-              <li>• <strong>DSR Reports:</strong> Upload daily site photos before 06:00 PM.</li>
-              <li>• <strong>Stage Milestones:</strong> Complete stages sequentially to prevent vendor clashes.</li>
-              <li>• <strong>Fast Task Allocation:</strong> Click the <strong>+</strong> icon in the top navigation bar to assign urgent deliverables directly.</li>
-            </ul>
-          </div>
         </div>
+      </div>
+
+      {/* Workforce & HR Operations (Recent Employees, Total Employees, Leave Applications, Holidays) */}
+      <div className="border-t border-border/80 pt-6 space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-text-main flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-600" />
+            <span>Workforce & HR Operations</span>
+          </h2>
+          <p className="text-xs text-text-muted mt-0.5">
+            Staff directory arrivals, leave workflow statuses, and upcoming holiday schedule
+          </p>
+        </div>
+        <HRWorkforceOverview totalEmployees={30} />
       </div>
 
       {/* Task Allocation Modal Dialog */}

@@ -58,6 +58,7 @@ import {
   EyeOff,
   UploadCloud,
   Download,
+  Umbrella,
   Filter,
   HelpCircle,
   HardHat,
@@ -134,6 +135,7 @@ export const iconMap = {
   'eye-off': EyeOff,
   upload: UploadCloud,
   download: Download,
+  umbrella: Umbrella,
   filter: Filter,
   help: HelpCircle,
 

@@ -325,6 +325,18 @@ export const attendanceService = {
   },
 
   /**
+   * Delete attendance record
+   */
+  async deleteAttendanceRecord(id) {
+    return apiClient.execute(async () => {
+      const records = getStoredAttendance();
+      const updated = records.filter((r) => r.id !== id);
+      saveAttendance(updated);
+      return updated;
+    }, 'Attendance record deleted');
+  },
+
+  /**
    * Mark attendance manually for staff member (Admin/Manager action)
    */
   async markForStaff({ user, status = 'present', checkInTime = '09:00 AM', checkOutTime = '06:00 PM', notes = '' }) {

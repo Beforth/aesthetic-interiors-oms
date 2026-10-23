@@ -23,7 +23,7 @@ export function AppShell() {
           <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
             <Topbar />
 
-            <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-8">
+            <main className="flex-1 px-4 sm:px-8 lg:px-12 py-6 sm:py-8 w-full pb-24 lg:pb-12">
               <Outlet />
             </main>
           </div>

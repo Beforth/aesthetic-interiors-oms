@@ -18,6 +18,44 @@ import Select from '../components/ui/Select';
 import Icon from '../components/ui/Icon';
 import Alert from '../components/ui/Alert';
 
+export function calculateWorkingHours(checkInStr, checkOutStr) {
+  if (!checkInStr) return '—';
+
+  const parseTimeToMinutes = (str) => {
+    if (!str) return null;
+    const clean = str.trim().toLowerCase();
+    const isPM = clean.includes('pm');
+    const isAM = clean.includes('am');
+    const timePart = clean.replace(/[a-z]/g, '').trim();
+    const parts = timePart.split(':');
+    let h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1] || '0', 10);
+    if (isPM && h < 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    return h * 60 + m;
+  };
+
+  const inMin = parseTimeToMinutes(checkInStr);
+  if (inMin === null) return '—';
+
+  let outMin = parseTimeToMinutes(checkOutStr);
+  let isActive = false;
+
+  if (outMin === null) {
+    const now = new Date();
+    outMin = now.getHours() * 60 + now.getMinutes();
+    isActive = true;
+  }
+
+  let diff = outMin - inMin;
+  if (diff < 0) diff += 24 * 60;
+
+  const hrs = Math.floor(diff / 60);
+  const mins = diff % 60;
+
+  return `${hrs.toString().padStart(2, '0')}h ${mins.toString().padStart(2, '0')}m${isActive ? ' (Active)' : ''}`;
+}
+
 export function AttendancePage() {
   const toast = useToast();
   const { currentUser } = useAuth();
@@ -110,17 +148,28 @@ export function AttendancePage() {
   const [leaveSearch, setLeaveSearch] = useState('');
   const [leaveStatusFilter, setLeaveStatusFilter] = useState('ALL');
   const [recordSearch, setRecordSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [selectedDateFilter, setSelectedDateFilter] = useState('');
+  const [viewTargetRecord, setViewTargetRecord] = useState(null);
   const [punchLoading, setPunchLoading] = useState(false);
+  const [overviewStats, setOverviewStats] = useState({
+    totalEmployees: 5000,
+    checkedIn: 4500,
+    notCheckedIn: 500,
+    onLeave: 456,
+    checkedOut: 250,
+  });
 
   // Fetch all initial data
   const loadData = async () => {
     setLoading(true);
     try {
-      const [records, office, leaves, reqs] = await Promise.all([
+      const [records, office, leaves, reqs, stats] = await Promise.all([
         attendanceService.getTodayAttendance(),
         attendanceService.getOfficeLocation(),
         attendanceService.getLeaveTypes(),
         attendanceService.getRequests(),
+        attendanceService.getOverviewStats(),
       ]);
       setAttendanceList(records);
       setOfficeLocation(office);
@@ -132,6 +181,7 @@ export function AttendancePage() {
       });
       setLeaveTypes(leaves);
       setRequestsList(reqs);
+      if (stats) setOverviewStats(stats);
     } catch (err) {
       toast.error('Failed to load attendance data');
     } finally {
@@ -466,25 +516,42 @@ export function AttendancePage() {
   // Filtered Attendance Records
   const filteredRecords = useMemo(() => {
     return attendanceList.filter((r) => {
+      const q = recordSearch.toLowerCase();
       const matchQuery =
-        (r.userName && r.userName.toLowerCase().includes(recordSearch.toLowerCase())) ||
-        (r.role && r.role.toLowerCase().includes(recordSearch.toLowerCase())) ||
-        (r.site && r.site.toLowerCase().includes(recordSearch.toLowerCase()));
-      return matchQuery;
-    });
-  }, [attendanceList, recordSearch]);
+        !recordSearch ||
+        (r.userName && r.userName.toLowerCase().includes(q)) ||
+        (r.role && r.role.toLowerCase().includes(q)) ||
+        (r.site && r.site.toLowerCase().includes(q));
 
-  // Derived KPI metrics matching Screenshot 1
-  const totalStaffCount = attendanceList.length > 0 ? attendanceList.length : 1;
-  const presentCount = attendanceList.filter((r) => r.status === 'present').length;
-  const absentCount = totalStaffCount - presentCount;
+      const matchRole =
+        roleFilter === 'ALL' ||
+        (r.role && r.role.toLowerCase() === roleFilter.toLowerCase());
+
+      const matchDate =
+        !selectedDateFilter ||
+        r.date === selectedDateFilter;
+
+      return matchQuery && matchRole && matchDate;
+    });
+  }, [attendanceList, recordSearch, roleFilter, selectedDateFilter]);
+
+  const handleDeleteRecord = async (recordId) => {
+    if (!window.confirm('Are you sure you want to delete this attendance record?')) return;
+    try {
+      await attendanceService.deleteAttendanceRecord(recordId);
+      toast.success('Attendance record deleted');
+      loadData();
+    } catch (e) {
+      toast.error('Failed to delete attendance record');
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* SECTION 1: Breadcrumb + Header + Actions (Screenshot 1) */}
+      {/* SECTION 1: Breadcrumb + Header + Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          {/* Breadcrumb matching Screenshot 1: HRMS > Attendance */}
+          {/* Breadcrumb: HRMS > Attendance */}
           <div className="flex items-center gap-1.5 text-xs text-text-muted mb-1 font-medium">
             <span>HRMS</span>
             <span>&gt;</span>
@@ -497,7 +564,7 @@ export function AttendancePage() {
           </p>
         </div>
 
-        {/* Action Buttons matching Screenshot 1 */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Office Settings Button */}
           <button
@@ -519,21 +586,6 @@ export function AttendancePage() {
             <span>Export Excel</span>
           </button>
 
-          {/* Punch In / Out Button (Primary Dark Button) */}
-          <button
-            type="button"
-            disabled={punchLoading}
-            onClick={handlePunchAction}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg text-white transition-all shadow-2xs cursor-pointer ${
-              isCheckedIn
-                ? 'bg-rose-700 hover:bg-rose-800'
-                : 'bg-slate-900 hover:bg-slate-800'
-            }`}
-          >
-            <Icon name="clock" size={14} />
-            <span>{punchLoading ? 'Verifying GPS...' : isCheckedIn ? 'Punch Out' : 'Punch In / Out'}</span>
-          </button>
-
           {/* Mark for Staff Button */}
           {isAdminOrManager && (
             <button
@@ -548,34 +600,7 @@ export function AttendancePage() {
         </div>
       </div>
 
-      {/* SECTION 2: Top KPI Summary Cards (Screenshot 1: Total Staff: 1, Present Today: 0, Absent Today: 1) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Total Staff */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
-          <div className="text-xs text-text-muted font-medium">Total Staff</div>
-          <div className="text-3xl font-extrabold text-text-main mt-1 tracking-tight">
-            {totalStaffCount}
-          </div>
-        </div>
-
-        {/* Present Today */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
-          <div className="text-xs text-text-muted font-medium">Present Today</div>
-          <div className="text-3xl font-extrabold text-text-main mt-1 tracking-tight">
-            {presentCount}
-          </div>
-        </div>
-
-        {/* Absent Today */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
-          <div className="text-xs text-text-muted font-medium">Absent Today</div>
-          <div className="text-3xl font-extrabold text-text-main mt-1 tracking-tight">
-            {absentCount}
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 3: Live Work Day Status & Shift Metrics (Screenshot 4: Here's what's happening with your work today) */}
+      {/* SECTION 2: Live Work Day Status & Shift Metrics */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-text-main tracking-tight">
@@ -614,263 +639,171 @@ export function AttendancePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          {/* Work Day Status Card - Enlarged & Expanded for Clear Visibility */}
-          <div className="lg:col-span-2 p-5 sm:p-6 rounded-2xl bg-surface border border-border shadow-xs space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center">
-                  <Icon name="clock" size={20} />
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-text-main">Work Day Status</div>
-                  <div className="text-xs text-text-muted">
-                    {new Date().toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </div>
+        {/* Work Day Status Card */}
+        <div className="p-5 sm:p-6 rounded-2xl bg-surface border border-border shadow-xs space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center">
+                <Icon name="clock" size={20} />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-text-main">Work Day Status</div>
+                <div className="text-xs text-text-muted">
+                  {new Date().toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
                 </div>
               </div>
-
-              <span
-                className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                  isCheckedIn
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-slate-100 text-slate-700 border border-slate-200'
-                }`}
-              >
-                {isCheckedIn ? 'Checked In' : 'Not Checked In'}
-              </span>
             </div>
 
-            {/* Circular Timer & Shift Info */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-5 pt-2">
-              {/* Enlarged Circular Gauge */}
-              <div className="relative w-32 h-32 shrink-0 flex items-center justify-center">
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                  <path
-                    className="text-slate-100"
-                    strokeWidth="3.2"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                  <path
-                    className={isCheckedIn ? 'text-blue-600' : 'text-slate-300'}
-                    strokeDasharray={isCheckedIn ? '65, 100' : '20, 100'}
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-xs font-mono font-bold text-text-main leading-tight">
-                    {currentTimeStr || '09:42:18 AM'}
-                  </span>
-                  <span className="text-[9px] text-text-muted uppercase tracking-wider mt-0.5">Current Time</span>
-                  <span className="text-sm font-extrabold text-blue-700 mt-1">
-                    {isCheckedIn ? '00h 42m' : '00h 00m'}
-                  </span>
-                  <span className="text-[8px] text-text-muted">Work Duration</span>
-                </div>
-              </div>
-
-              {/* Today's Shift & Check In/Out */}
-              <div className="space-y-2 min-w-0 flex-1 w-full sm:w-auto">
-                <div>
-                  <div className="text-xs text-text-muted font-medium">Today's Shift</div>
-                  <div className="text-sm font-bold text-text-main mt-0.5">09:00 AM – 06:00 PM</div>
-                  <div className="text-xs text-text-muted mt-0.5">
-                    9h 0m <span className="text-blue-600 font-semibold">( 1h Break )</span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={punchLoading}
-                  onClick={handlePunchAction}
-                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer ${
-                    isCheckedIn
-                      ? 'bg-blue-600 hover:bg-blue-700'
-                      : 'bg-emerald-600 hover:bg-emerald-700'
-                  }`}
-                >
-                  <Icon name={isCheckedIn ? 'logout' : 'clock'} size={15} />
-                  <span>{isCheckedIn ? 'Check Out' : 'Check In'}</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="text-xs text-text-muted border-t border-border/70 pt-2.5 flex items-center gap-1.5">
-              <Icon name="info" size={13} className="text-blue-600" />
-              <span>
-                {isCheckedIn
-                  ? `Your Shift Started At ${myTodayRecord?.checkInTime || '9:00 AM'}`
-                  : 'Ready to punch in for today'}
-              </span>
-            </div>
+            <span
+              className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                isCheckedIn
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-slate-100 text-slate-700 border border-slate-200'
+              }`}
+            >
+              {isCheckedIn ? 'Checked In' : 'Not Checked In'}
+            </span>
           </div>
 
-          {/* Monthly Attendance Rate Card */}
-          <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3 flex flex-col justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                <Icon name="calendar" size={18} />
-              </div>
-              <div className="text-xs font-bold text-text-main">Monthly Attendance Rate</div>
-            </div>
-
-            <div>
-              <div className="text-2xl font-extrabold text-text-main">94.5%</div>
-              <div className="text-[11px] text-text-muted mt-0.5">22 of 23 days</div>
-            </div>
-
-            <div className="space-y-1 pt-1">
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '94.5%' }} />
-              </div>
-              <div className="text-[10px] font-semibold text-text-muted text-right">94.5%</div>
-            </div>
-          </div>
-
-          {/* Today's Work Hours Card */}
-          <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3 flex flex-col justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <Icon name="attendance" size={18} />
-              </div>
-              <div className="text-xs font-bold text-text-main">Today's Work Hours</div>
-            </div>
-
-            <div>
-              <div className="text-2xl font-extrabold text-text-main">08h 28m</div>
-              <div className="text-[11px] text-text-muted mt-0.5">of 9h 00m</div>
-            </div>
-
-            <div className="space-y-1 pt-1">
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div className="bg-emerald-600 h-2 rounded-full" style={{ width: '93%' }} />
-              </div>
-              <div className="text-[10px] font-semibold text-text-muted text-right">93%</div>
-            </div>
-          </div>
-
-          {/* Remaining Leave Balance Card */}
-          <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3 flex flex-col justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
-                <Icon name="leave-payslips" size={18} />
-              </div>
-              <div className="text-xs font-bold text-text-main">Remaining Leave Balance</div>
-            </div>
-
-            <div>
-              <div className="text-2xl font-extrabold text-text-main">12 Days</div>
-              <div className="text-[11px] text-text-muted mt-0.5">of 20 Days</div>
-            </div>
-
-            <div className="space-y-1 pt-1">
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div className="bg-purple-600 h-2 rounded-full" style={{ width: '60%' }} />
-              </div>
-              <div className="text-[10px] font-semibold text-text-muted text-right">60%</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 4: Organization Statistics & Attendance Breakdown (Screenshot 5) */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-2xs">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-center">
-          {/* Donut Chart: Statistics */}
-          <div className="lg:border-r border-border/80 lg:pr-6 flex items-center gap-4">
-            <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
+          {/* Circular Timer, Attendance Overview Cards & Today's Shift */}
+          <div className="flex flex-col xl:flex-row items-center justify-between gap-6 pt-2">
+            {/* 1. Left: Enlarged Circular Gauge (Current Time & Work Duration) */}
+            <div className="relative w-32 h-32 shrink-0 flex items-center justify-center">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                {/* 4500 Checked In (Blue) */}
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#2563eb" strokeWidth="4" strokeDasharray="90 10" strokeDashoffset="0" />
-                {/* 500 Not Checked In (Rose) */}
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#f43f5e" strokeWidth="4" strokeDasharray="5 95" strokeDashoffset="-90" />
-                {/* 456 On Leave (Emerald) */}
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#10b981" strokeWidth="4" strokeDasharray="3 97" strokeDashoffset="-95" />
-                {/* Other (Amber) */}
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#f59e0b" strokeWidth="4" strokeDasharray="2 98" strokeDashoffset="-98" />
+                <path
+                  className="text-slate-100"
+                  strokeWidth="3.2"
+                  stroke="currentColor"
+                  fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className={isCheckedIn ? 'text-blue-600' : 'text-slate-300'}
+                  strokeDasharray={isCheckedIn ? '65, 100' : '20, 100'}
+                  strokeWidth="3.2"
+                  strokeLinecap="round"
+                  stroke="currentColor"
+                  fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-[9px] uppercase font-bold text-text-muted tracking-wider">Total</span>
-                <span className="text-sm font-extrabold text-text-main leading-tight">5,000</span>
-                <span className="text-[8px] text-text-muted">Employees</span>
+                <span className="text-xs font-mono font-bold text-text-main leading-tight">
+                  {currentTimeStr || '09:42:18 AM'}
+                </span>
+                <span className="text-[9px] text-text-muted uppercase tracking-wider mt-0.5">Current Time</span>
+                <span className="text-sm font-extrabold text-blue-700 mt-1">
+                  {isCheckedIn ? '00h 42m' : '00h 00m'}
+                </span>
+                <span className="text-[8px] text-text-muted">Work Duration</span>
               </div>
             </div>
 
-            <div>
-              <div className="text-xs uppercase font-bold text-text-muted tracking-wider">Statistics</div>
-              <div className="text-lg font-black text-text-main mt-0.5">92% Checked In</div>
-              <p className="text-[11px] text-text-muted mt-1 leading-snug">
-                Company-wide live biometric & PWA GPS muster synchronization
-              </p>
+            {/* 2. Middle: Attendance Metric Cards (Checked In, Not Checked In, On Leave, Checked Out) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 w-full min-w-0">
+              {/* Card 1: Checked In */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-surface border border-border shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-all">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
+                  <Icon name="check" size={16} />
+                </div>
+                <div className="mt-2.5">
+                  <div className="text-[11px] font-medium text-text-muted">Checked In</div>
+                  <div className="text-xl sm:text-2xl font-black text-blue-600 tracking-tight mt-0.5">
+                    {overviewStats.checkedIn?.toLocaleString() || '4,500'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Not Checked In */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-surface border border-border shadow-2xs flex flex-col justify-between hover:border-rose-300 transition-all">
+                <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center">
+                  <Icon name="alert" size={16} />
+                </div>
+                <div className="mt-2.5">
+                  <div className="text-[11px] font-medium text-text-muted">Not Checked In</div>
+                  <div className="text-xl sm:text-2xl font-black text-rose-600 tracking-tight mt-0.5">
+                    {overviewStats.notCheckedIn?.toLocaleString() || '500'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: On Leave */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-surface border border-border shadow-2xs flex flex-col justify-between hover:border-emerald-300 transition-all">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
+                  <Icon name="umbrella" size={16} />
+                </div>
+                <div className="mt-2.5">
+                  <div className="text-[11px] font-medium text-text-muted">On Leave</div>
+                  <div className="text-xl sm:text-2xl font-black text-emerald-600 tracking-tight mt-0.5">
+                    {overviewStats.onLeave?.toLocaleString() || '456'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: Checked Out */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-surface border border-border shadow-2xs flex flex-col justify-between hover:border-amber-300 transition-all">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center">
+                  <Icon name="logout" size={16} />
+                </div>
+                <div className="mt-2.5">
+                  <div className="text-[11px] font-medium text-text-muted">Checked Out</div>
+                  <div className="text-xl sm:text-2xl font-black text-amber-600 tracking-tight mt-0.5">
+                    {overviewStats.checkedOut?.toLocaleString() || '250'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Right: Today's Shift & Check In/Out */}
+            <div className="space-y-3 min-w-0 shrink-0 w-full xl:w-72">
+              <div>
+                <div className="text-xs text-text-muted font-medium">Today's Shift</div>
+                <div className="text-sm font-bold text-text-main mt-0.5">09:00 AM – 06:00 PM</div>
+                <div className="text-xs text-text-muted mt-0.5">
+                  9h 0m <span className="text-blue-600 font-semibold">( 1h Break )</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={punchLoading}
+                onClick={handlePunchAction}
+                className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer ${
+                  punchLoading
+                    ? 'bg-slate-700 cursor-not-allowed opacity-80'
+                    : isCheckedIn
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                <Icon
+                  name={punchLoading ? 'refresh' : isCheckedIn ? 'logout' : 'clock'}
+                  size={15}
+                  className={punchLoading ? 'animate-spin' : ''}
+                />
+                <span>
+                  {punchLoading
+                    ? 'Verifying PWA Geofence GPS...'
+                    : isCheckedIn
+                    ? 'Check Out (Punch Out)'
+                    : 'Check In (Punch In)'}
+                </span>
+              </button>
             </div>
           </div>
 
-          {/* 6 Attendance Status Cards in Row (Screenshot 5) */}
-          <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-            {/* 1. Checked In (4500) */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
-              <div className="w-7 h-7 mx-auto rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-                <Icon name="check" size={14} />
-              </div>
-              <div className="text-[11px] text-text-muted font-medium">Checked In</div>
-              <div className="text-lg font-bold text-blue-600">4,500</div>
-            </div>
-
-            {/* 2. Not Checked In (500) */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
-              <div className="w-7 h-7 mx-auto rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
-                <Icon name="close" size={14} />
-              </div>
-              <div className="text-[11px] text-text-muted font-medium">Not Checked In</div>
-              <div className="text-lg font-bold text-rose-600">500</div>
-            </div>
-
-            {/* 3. On Leave (456) */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
-              <div className="w-7 h-7 mx-auto rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <Icon name="umbrella" size={14} />
-              </div>
-              <div className="text-[11px] text-text-muted font-medium">On Leave</div>
-              <div className="text-lg font-bold text-emerald-600">456</div>
-            </div>
-
-            {/* 4. Weekly Off (145) */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
-              <div className="w-7 h-7 mx-auto rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center">
-                <Icon name="calendar" size={14} />
-              </div>
-              <div className="text-[11px] text-text-muted font-medium">Weekly Off</div>
-              <div className="text-lg font-bold text-slate-700">145</div>
-            </div>
-
-            {/* 5. Holiday (12) */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
-              <div className="w-7 h-7 mx-auto rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                <Icon name="gift" size={14} />
-              </div>
-              <div className="text-[11px] text-text-muted font-medium">Holiday</div>
-              <div className="text-lg font-bold text-purple-700">12</div>
-            </div>
-
-            {/* 6. Checked Out (250) */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-border/80 text-center space-y-1">
-              <div className="w-7 h-7 mx-auto rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-                <Icon name="logout" size={14} />
-              </div>
-              <div className="text-[11px] text-text-muted font-medium">Checked Out</div>
-              <div className="text-lg font-bold text-amber-600">250</div>
-            </div>
+          <div className="text-xs text-text-muted border-t border-border/70 pt-2.5 flex items-center gap-1.5">
+            <Icon name="info" size={13} className="text-blue-600" />
+            <span>
+              {isCheckedIn
+                ? `Your Shift Started At ${myTodayRecord?.checkInTime || '9:00 AM'}`
+                : 'Ready to punch in for today'}
+            </span>
           </div>
         </div>
       </div>
@@ -931,27 +864,57 @@ export function AttendancePage() {
       {/* TAB 1: Attendance Records (Screenshot 1) */}
       {activeTab === 'records' && (
         <Card className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative max-w-sm w-full">
-              <Icon name="search" size={15} className="absolute left-3 top-2.5 text-text-muted" />
-              <input
-                type="text"
-                value={recordSearch}
-                onChange={(e) => setRecordSearch(e.target.value)}
-                placeholder="Search staff, role, site..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
+          {/* Filters Bar with Increased Gap */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3 pb-3 border-b border-border/70">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
+              {/* Search by Name / Role / Site */}
+              <div className="relative min-w-[200px] flex-1 max-w-xs">
+                <Icon name="search" size={15} className="absolute left-3 top-2.5 text-text-muted" />
+                <input
+                  type="text"
+                  value={recordSearch}
+                  onChange={(e) => setRecordSearch(e.target.value)}
+                  placeholder="Search staff, role, site..."
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+
+              {/* Filter by Role */}
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="py-1.5 px-3 text-xs bg-slate-50 border border-border rounded-lg text-text-main focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+              >
+                <option value="ALL">All Roles</option>
+                <option value="Owner">Owner</option>
+                <option value="Manager">Manager</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Worker">Worker</option>
+              </select>
+
+              {/* Date Picker Filter */}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={selectedDateFilter}
+                  onChange={(e) => setSelectedDateFilter(e.target.value)}
+                  className="py-1 px-2.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                />
+                {selectedDateFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDateFilter('')}
+                    className="text-[10px] text-text-muted hover:text-text-main px-1.5 py-0.5 rounded bg-slate-100 border border-border"
+                    title="Clear date filter"
+                  >
+                    Clear Date
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <span>Date:</span>
-              <span className="font-semibold text-text-main">
-                {new Date().toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </span>
+            <div className="text-xs text-text-muted shrink-0 font-medium">
+              Showing <span className="font-bold text-text-main">{filteredRecords.length}</span> staff records
             </div>
           </div>
 
@@ -962,8 +925,8 @@ export function AttendancePage() {
                   <th className="p-3">Employee</th>
                   <th className="p-3">Assigned Office / Site</th>
                   <th className="p-3">Check-In / Out</th>
-                  <th className="p-3">PWA Geofence GPS</th>
-                  <th className="p-3">Status</th>
+                  <th className="p-3">Location</th>
+                  <th className="p-3">Total Working Hours</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -971,7 +934,7 @@ export function AttendancePage() {
                 {filteredRecords.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-text-muted">
-                      No attendance records found for this query.
+                      No attendance records found matching filters.
                     </td>
                   </tr>
                 ) : (
@@ -988,12 +951,12 @@ export function AttendancePage() {
                       </td>
                       <td className="p-3">
                         <div className="font-medium text-text-main flex items-center gap-1">
-                          <Icon name="mapPin" size={13} className="text-brand-600" />
+                          <Icon name="mapPin" size={13} className="text-brand-600 shrink-0" />
                           <span>{r.site || officeLocation.name}</span>
                         </div>
                         {r.distanceMeters !== null && r.distanceMeters !== undefined && (
                           <div className="text-[10px] text-text-muted mt-0.5">
-                            PWA Radius: <span className="font-mono text-emerald-700 font-semibold">{r.distanceMeters}m</span>
+                            Distance: <span className="font-mono text-emerald-700 font-semibold">{r.distanceMeters}m</span>
                           </div>
                         )}
                       </td>
@@ -1006,44 +969,76 @@ export function AttendancePage() {
                         </div>
                       </td>
                       <td className="p-3">
-                        {r.status === 'present' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <Icon name="check" size={11} />
-                            <span>GPS Geofence Verified</span>
-                          </span>
+                        {r.coordinates?.lat && r.coordinates?.lng ? (
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1 font-medium text-text-main text-[11px]">
+                              <Icon name="mapPin" size={12} className="text-emerald-600 shrink-0" />
+                              <span className="truncate">{r.punchLocation || r.site || 'Punch GPS Site'}</span>
+                            </div>
+                            <span className="font-mono text-[10px] text-text-muted mt-0.5">
+                              {r.coordinates.lat.toFixed(4)}° N, {r.coordinates.lng.toFixed(4)}° E
+                            </span>
+                          </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                            <span>Pending Punch</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <StatusBadge status={r.status} size="sm" />
-                        {r.correctionReason && (
-                          <div className="text-[10px] text-amber-700 mt-0.5 italic">
-                            {r.correctionReason}
+                          <div className="flex items-center gap-1 text-[11px] text-text-muted">
+                            <Icon name="mapPin" size={12} className="text-slate-400 shrink-0" />
+                            <span>{r.site || officeLocation.name || 'Office Location'}</span>
                           </div>
                         )}
                       </td>
+                      <td className="p-3 font-mono">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
+                          r.checkInTime 
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                            : 'text-text-muted bg-slate-100'
+                        }`}>
+                          {calculateWorkingHours(r.checkInTime, r.checkOutTime)}
+                        </span>
+                      </td>
                       <td className="p-3 text-right">
-                        {isAdminOrManager && (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* View Button */}
                           <button
                             type="button"
-                            onClick={() => {
-                              setCorrectionTarget(r);
-                              setCorrectionData({
-                                status: r.status,
-                                checkInTime: r.checkInTime || '09:00 AM',
-                                checkOutTime: r.checkOutTime || '06:00 PM',
-                                reason: r.correctionReason || '',
-                              });
-                            }}
-                            className="p-1.5 text-text-muted hover:text-text-main rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
-                            title="Adjust / Correct record"
+                            onClick={() => setViewTargetRecord(r)}
+                            className="p-1.5 text-text-muted hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors cursor-pointer"
+                            title="View punch details"
                           >
-                            <Icon name="edit" size={13} />
+                            <Icon name="eye" size={14} />
                           </button>
-                        )}
+
+                          {/* Edit Button */}
+                          {isAdminOrManager && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCorrectionTarget(r);
+                                setCorrectionData({
+                                  status: r.status,
+                                  checkInTime: r.checkInTime || '09:00 AM',
+                                  checkOutTime: r.checkOutTime || '06:00 PM',
+                                  reason: r.correctionReason || '',
+                                });
+                              }}
+                              className="p-1.5 text-text-muted hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors cursor-pointer"
+                              title="Edit / Correct record"
+                            >
+                              <Icon name="edit" size={14} />
+                            </button>
+                          )}
+
+                          {/* Delete Button */}
+                          {isAdminOrManager && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRecord(r.id)}
+                              className="p-1.5 text-text-muted hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                              title="Delete record"
+                            >
+                              <Icon name="trash" size={14} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1064,15 +1059,6 @@ export function AttendancePage() {
                 Review and approve staff punch adjustments or submit a correction request
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setIsRequestModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-800 text-white hover:bg-brand-900 transition-colors shadow-2xs cursor-pointer"
-            >
-              <Icon name="plus" size={13} />
-              <span>Submit Request</span>
-            </button>
           </div>
 
           {requestsList.length === 0 ? (
@@ -1681,6 +1667,64 @@ export function AttendancePage() {
                 Save Correction
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL 6: View Attendance Record Modal */}
+      {viewTargetRecord && (
+        <Modal
+          isOpen={!!viewTargetRecord}
+          onClose={() => setViewTargetRecord(null)}
+          title="Staff Attendance Punch Record"
+          subtitle={`${viewTargetRecord.userName} • ${viewTargetRecord.role}`}
+          footer={
+            <Button variant="outline" size="sm" onClick={() => setViewTargetRecord(null)}>
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-border/80 grid grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-text-muted">Date</span>
+                <p className="font-semibold text-text-main mt-0.5">{viewTargetRecord.date}</p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-text-muted">Total Working Hours</span>
+                <p className="font-bold text-emerald-700 mt-0.5">
+                  {calculateWorkingHours(viewTargetRecord.checkInTime, viewTargetRecord.checkOutTime)}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-text-muted">Check-In Time</span>
+                <p className="font-mono font-medium text-text-main mt-0.5">{viewTargetRecord.checkInTime || '—'}</p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-text-muted">Check-Out Time</span>
+                <p className="font-mono font-medium text-text-main mt-0.5">{viewTargetRecord.checkOutTime || 'Active On-Site'}</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-border/80 space-y-2">
+              <span className="text-[10px] uppercase font-bold text-text-muted">Punch Location</span>
+              <div className="flex items-center gap-1.5 font-medium text-text-main">
+                <Icon name="mapPin" size={14} className="text-emerald-600" />
+                <span>{viewTargetRecord.punchLocation || viewTargetRecord.site || 'Office Location'}</span>
+              </div>
+              {viewTargetRecord.coordinates && (
+                <p className="font-mono text-[11px] text-text-muted">
+                  GPS: {viewTargetRecord.coordinates.lat?.toFixed(6)}° N, {viewTargetRecord.coordinates.lng?.toFixed(6)}° E (Accuracy: {viewTargetRecord.coordinates.accuracy || 10}m)
+                </p>
+              )}
+            </div>
+
+            {viewTargetRecord.correctionReason && (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+                <span className="text-[10px] uppercase font-bold text-amber-900">Adjustment Note</span>
+                <p className="text-amber-800 mt-0.5">{viewTargetRecord.correctionReason}</p>
+              </div>
+            )}
           </div>
         </Modal>
       )}
