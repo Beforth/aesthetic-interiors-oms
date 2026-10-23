@@ -3,11 +3,7 @@ import Icon from './Icon';
 import FormField from './FormField';
 
 /**
- * Dropdown Select input component.
- *
- * @param {Object} props
- * @param {Array<{value: string|number, label: string}>|Array<string>} props.options
- * @param {string} [props.placeholder]
+ * befui Select component conforming to https://befui.vercel.app/
  */
 export const Select = forwardRef(function Select(
   {
@@ -40,14 +36,12 @@ export const Select = forwardRef(function Select(
         onChange={onChange}
         aria-invalid={!!error}
         aria-describedby={error ? `${selectId}-error` : undefined}
-        className={`w-full bg-surface border rounded text-sm text-text-main appearance-none cursor-pointer transition-colors
-          min-h-[44px] sm:min-h-[38px] px-3 pr-9 py-2
+        className={`w-full rounded-md border bg-background px-3 pr-9 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 h-9 appearance-none cursor-pointer text-text-main
           ${
             error
-              ? 'border-danger focus:border-danger focus:ring-1 focus:ring-danger'
-              : 'border-border focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
+              ? 'border-destructive focus:border-destructive focus:ring-destructive/20 text-destructive'
+              : 'border-border'
           }
-          focus:outline-none disabled:bg-brand-50 disabled:text-text-muted disabled:cursor-not-allowed
           ${className}
         `}
         {...rest}
@@ -58,17 +52,17 @@ export const Select = forwardRef(function Select(
           </option>
         )}
         {options.map((opt) => {
-          const val = typeof opt === 'object' ? opt.value : opt;
-          const lbl = typeof opt === 'object' ? opt.label : opt;
+          const optValue = typeof opt === 'object' ? opt.value : opt;
+          const optLabel = typeof opt === 'object' ? opt.label : opt;
           return (
-            <option key={val} value={val}>
-              {lbl}
+            <option key={optValue} value={optValue}>
+              {optLabel}
             </option>
           );
         })}
       </select>
-      <div className="absolute right-3 text-text-muted pointer-events-none flex items-center">
-        <Icon name="chevron-down" size={16} />
+      <div className="absolute right-3 text-muted-foreground pointer-events-none flex items-center">
+        <Icon name="chevronDown" size={14} />
       </div>
     </div>
   );
@@ -77,10 +71,10 @@ export const Select = forwardRef(function Select(
     return (
       <FormField
         label={label}
-        htmlFor={selectId}
         required={required}
         error={error}
         helperText={helperText}
+        htmlFor={selectId}
       >
         {baseSelect}
       </FormField>
@@ -90,4 +84,5 @@ export const Select = forwardRef(function Select(
   return baseSelect;
 });
 
+Select.displayName = 'Select';
 export default Select;

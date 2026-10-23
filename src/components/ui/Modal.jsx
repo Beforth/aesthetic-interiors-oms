@@ -2,17 +2,7 @@ import React, { useEffect } from 'react';
 import IconButton from './IconButton';
 
 /**
- * Accessible Modal dialog with keyboard escape handling and focus entrapment.
- *
- * @param {Object} props
- * @param {boolean} props.isOpen
- * @param {function(): void} props.onClose
- * @param {string} [props.title]
- * @param {string} [props.subtitle]
- * @param {'sm'|'md'|'lg'|'xl'} [props.size='md']
- * @param {React.ReactNode} props.children
- * @param {React.ReactNode} [props.footer]
- * @param {string} [props.className]
+ * befui Dialog / Modal component conforming to https://befui.vercel.app/
  */
 export function Modal({
   isOpen,
@@ -60,42 +50,44 @@ export function Modal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-text-main/50 transition-opacity backdrop-blur-[1px]"
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal Dialog Content */}
       <div
-        className={`relative w-full ${sizeClasses[size] || sizeClasses.md} bg-surface border border-border rounded shadow-xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150 my-auto ${className}`}
+        className={`relative w-full ${sizeClasses[size] || sizeClasses.md} bg-card text-card-foreground border border-border rounded-xl shadow-2xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150 my-auto ${className}`}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 border-b border-border bg-surface">
-          <div>
-            {title && (
-              <h2 id="modal-title" className="text-base font-bold text-text-main">
-                {title}
-              </h2>
-            )}
-            {subtitle && (
-              <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>
-            )}
+        {(title || subtitle) && (
+          <div className="flex items-start justify-between px-5 py-4 border-b border-border/80 bg-muted/20">
+            <div>
+              {title && (
+                <h2 id="modal-title" className="text-base font-semibold tracking-tight text-text-main">
+                  {title}
+                </h2>
+              )}
+              {subtitle && (
+                <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+              )}
+            </div>
+            <IconButton
+              icon="close"
+              ariaLabel="Close modal"
+              size="sm"
+              onClick={onClose}
+              className="-mr-1 -mt-1 text-muted-foreground hover:text-text-main"
+            />
           </div>
-          <IconButton
-            icon="close"
-            ariaLabel="Close modal"
-            size="sm"
-            onClick={onClose}
-            className="-mr-1 -mt-1 text-text-muted hover:text-text-main"
-          />
-        </div>
+        )}
 
         {/* Body */}
         <div className="p-5 max-h-[calc(85vh-120px)] overflow-y-auto">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border bg-brand-50">
+          <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border/80 bg-muted/20">
             {footer}
           </div>
         )}

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 /** Dependency-free SVG charts. They read `currentColor`, so color them with a text-* class. */
 

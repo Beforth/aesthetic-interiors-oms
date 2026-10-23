@@ -2,14 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 
 /**
- * Accessible table pagination component.
- *
- * @param {Object} props
- * @param {number} props.currentPage - Current active page (1-based)
- * @param {number} props.totalPages - Total number of pages
- * @param {number} [props.totalItems] - Total row count across all pages
- * @param {number} [props.pageSize] - Rows per page
- * @param {function(number): void} props.onPageChange - Handler called on page click
+ * befui Pagination component conforming to https://befui.vercel.app/
  */
 export function Pagination({
   currentPage = 1,
@@ -26,19 +19,16 @@ export function Pagination({
 
   return (
     <div
-      className={`flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-border bg-surface text-xs text-text-muted ${className}`}
+      className={`flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground ${className}`}
     >
       <div>
         {totalItems ? (
           <span>
-            Showing <strong className="font-semibold text-text-main">{startItem}</strong> to{' '}
-            <strong className="font-semibold text-text-main">{endItem}</strong> of{' '}
-            <strong className="font-semibold text-text-main">{totalItems}</strong> entries
+            {startItem}–{endItem} of <strong className="font-semibold text-text-main">{totalItems}</strong>
           </span>
         ) : (
           <span>
-            Page <strong className="font-semibold text-text-main">{currentPage}</strong> of{' '}
-            <strong className="font-semibold text-text-main">{totalPages}</strong>
+            {currentPage} / <strong className="font-semibold text-text-main">{totalPages}</strong>
           </span>
         )}
       </div>
@@ -49,12 +39,12 @@ export function Pagination({
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           aria-label="Previous page"
-          className="p-1.5 rounded border border-border bg-surface hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed text-text-main transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+          className="size-8 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed text-text-main transition-colors flex items-center justify-center shadow-xs cursor-pointer"
         >
-          <Icon name="chevron-left" size={16} />
+          <Icon name="chevronLeft" size={14} />
         </button>
 
-        <span className="px-2 py-1 font-medium text-text-main select-none">
+        <span className="px-2 py-1 font-mono font-medium text-text-main select-none">
           {currentPage} / {totalPages}
         </span>
 
@@ -63,9 +53,9 @@ export function Pagination({
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           aria-label="Next page"
-          className="p-1.5 rounded border border-border bg-surface hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed text-text-main transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+          className="size-8 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed text-text-main transition-colors flex items-center justify-center shadow-xs cursor-pointer"
         >
-          <Icon name="chevron-right" size={16} />
+          <Icon name="chevronRight" size={14} />
         </button>
       </div>
     </div>

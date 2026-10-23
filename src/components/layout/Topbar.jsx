@@ -24,7 +24,52 @@ export function Topbar({ onToggleMobileMenu }) {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationContainerRef = useRef(null);
+  const [notifications, setNotifications] = useState([
+    {
+      id: 'n1',
+      title: 'Rohit Kumar punched in',
+      description: 'At BeForth Nashik • 11:59 AM',
+      time: '5m ago',
+      unread: true,
+      path: '/attendance',
+      icon: 'attendance',
+      iconColor: 'text-emerald-600 bg-emerald-50',
+    },
+    {
+      id: 'n2',
+      title: 'Horizon Heights Site Visit',
+      description: 'Client inspection scheduled for 2:00 PM',
+      time: '25m ago',
+      unread: true,
+      path: '/projects',
+      icon: 'briefcase',
+      iconColor: 'text-indigo-600 bg-indigo-50',
+    },
+    {
+      id: 'n3',
+      title: 'Proof Uploaded: Skyline Tower',
+      description: 'Supervisor uploaded 3 quality photos',
+      time: '1h ago',
+      unread: true,
+      path: '/tasks',
+      icon: 'tasks',
+      iconColor: 'text-amber-600 bg-amber-50',
+    },
+    {
+      id: 'n4',
+      title: 'Attendance Regularization',
+      description: 'Amit Sharma submitted missed punch request',
+      time: '2h ago',
+      unread: false,
+      path: '/attendance',
+      icon: 'bell',
+      iconColor: 'text-purple-600 bg-purple-50',
+    },
+  ]);
+
+  const unreadCount = notifications.filter((n) => n.unread).length;
 
   // Task Allocation modal state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -193,7 +238,7 @@ export function Topbar({ onToggleMobileMenu }) {
 
   return (
     <>
-      <header className="h-16 bg-surface border-b border-border px-4 sm:px-8 lg:px-12 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <header className="h-16 bg-surface border-b border-border px-3 sm:px-5 lg:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
         {/* Left Section: Mobile Sidebar Drawer Trigger (Desktop trigger is beside Aesthetic Interiors heading) */}
         <div className="flex items-center lg:hidden">
           <SidebarTrigger />
@@ -424,18 +469,90 @@ export function Topbar({ onToggleMobileMenu }) {
 
         {/* Right Section: Notifications, Avatar & Logout Icon */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Notification Bell */}
-          <div className="relative">
+          {/* Notification Bell with Active Panel */}
+          <div ref={notificationContainerRef} className="relative">
             <IconButton
               icon="bell"
               ariaLabel="View notifications"
-              onClick={() => setUnreadNotifications(0)}
+              onClick={() => setIsNotificationsOpen((prev) => !prev)}
               className="cursor-pointer"
             />
-            {unreadNotifications > 0 && (
-              <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-danger text-surface text-[10px] font-bold flex items-center justify-center pointer-events-none">
-                {unreadNotifications}
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none shadow-xs">
+                {unreadCount}
               </span>
+            )}
+
+            {/* Notification Panel Dropdown */}
+            {isNotificationsOpen && (
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-border/60 animate-fadeIn">
+                <div className="p-3 bg-slate-50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-text-main">Notifications</span>
+                    {unreadCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground font-mono">
+                        {unreadCount} new
+                      </span>
+                    )}
+                  </div>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
+                      }
+                      className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-border/40">
+                  {notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        setNotifications((prev) =>
+                          prev.map((item) => (item.id === n.id ? { ...item, unread: false } : item))
+                        );
+                        setIsNotificationsOpen(false);
+                        navigate(n.path);
+                      }}
+                      className={`p-3 hover:bg-slate-50 transition-colors flex items-start gap-3 cursor-pointer ${
+                        n.unread ? 'bg-primary/5' : ''
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border border-border/60 ${n.iconColor}`}>
+                        <Icon name={n.icon} size={15} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className={`text-xs truncate ${n.unread ? 'font-bold text-text-main' : 'font-medium text-text-muted'}`}>
+                            {n.title}
+                          </span>
+                          <span className="text-[10px] text-text-muted shrink-0">{n.time}</span>
+                        </div>
+                        <p className="text-[11px] text-text-muted mt-0.5 truncate">{n.description}</p>
+                      </div>
+                      {n.unread && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-2.5 text-center bg-slate-50 border-t border-border/60">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNotificationsOpen(false);
+                      navigate('/attendance');
+                    }}
+                    className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    View All Attendance & Logs →
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 

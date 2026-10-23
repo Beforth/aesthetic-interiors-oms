@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 import { PanelLeftIcon, ChevronDownIcon, ChevronRightIcon } from './icons';
 
 interface SidebarContextValue {

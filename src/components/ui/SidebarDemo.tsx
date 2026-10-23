@@ -7,7 +7,7 @@ import {
   MegaphoneIcon,
   SettingsIcon,
   UsersIcon,
-} from '@/components/ui/icons';
+} from './icons';
 import {
   Sidebar,
   SidebarContent,
@@ -17,8 +17,8 @@ import {
   SidebarItem,
   SidebarProvider,
   SidebarTrigger,
-} from '@/components/ui/sidebar';
-import { Avatar } from '@/components/ui/avatar';
+} from './sidebar';
+import { Avatar } from './avatar';
 
 export default function SidebarDemo() {
   const [page, setPage] = React.useState('Dashboard');

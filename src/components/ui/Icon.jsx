@@ -1,6 +1,5 @@
 import React from 'react';
 import iconMap from '../../config/iconMap';
-import { HelpCircle } from 'lucide-react';
 
 /**
  * Universal Icon wrapper around lucide-react.
@@ -21,7 +20,8 @@ export function Icon({
   ariaLabel,
   ...rest
 }) {
-  const IconComponent = iconMap[name] || HelpCircle;
+  const IconComponent = iconMap[name];
+  if (!IconComponent) return null;
 
   return (
     <IconComponent

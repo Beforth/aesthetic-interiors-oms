@@ -43,7 +43,7 @@ export const mockGeofenceSites = [
   },
 ];
 
-// Initial Attendance Records matching Screenshot 1: Total Staff: 1, Present Today: 0, Absent Today: 1
+// Attendance Records matching User Screenshots & Flows:
 export const mockTodayAttendance = [
   {
     id: 'att-1',
@@ -51,20 +51,75 @@ export const mockTodayAttendance = [
     userName: 'Rohit Kumar',
     role: 'Owner',
     siteId: 'OFFICE_NEOMED',
-    site: 'Neomed Head Office',
+    site: 'BeForth Nashik',
+    date: new Date().toISOString().split('T')[0],
+    checkInTime: '11:59',
+    checkOutTime: null,
+    status: 'present',
+    verified: true,
+    coordinates: { lat: 19.9910, lng: 73.7601 },
+    distanceMeters: 16,
+    withinGeofence: true,
+    markedBy: 'self',
+    punchLocation: 'BeForth Nashik',
+  },
+  {
+    id: 'att-2',
+    userId: 'u2',
+    userName: 'Neha Kulkarni',
+    role: 'Manager',
+    siteId: 'OFFICE_NEOMED',
+    site: 'BeForth Nashik',
+    date: new Date().toISOString().split('T')[0],
+    checkInTime: '10:00 AM',
+    checkOutTime: '12:00 PM',
+    status: 'present',
+    verified: true,
+    coordinates: { lat: 19.9910, lng: 73.7603 },
+    distanceMeters: 0,
+    withinGeofence: true,
+    markedBy: 'self',
+    punchLocation: 'BeForth Nashik',
+  },
+  {
+    id: 'att-3',
+    userId: 'u3',
+    userName: 'Amit Sharma',
+    role: 'Supervisor',
+    siteId: 'P1',
+    site: 'Indiranagar 4BHK Villa',
     date: new Date().toISOString().split('T')[0],
     checkInTime: null,
     checkOutTime: null,
     status: 'absent',
     verified: false,
-    coordinates: null,
+    coordinates: { lat: 12.9716, lng: 77.5946 },
     distanceMeters: null,
     withinGeofence: false,
-    correctionReason: null,
+    markedBy: 'self',
+    punchLocation: 'Indiranagar Site',
+  },
+  {
+    id: 'att-4',
+    userId: 'u4',
+    userName: 'Priya Deshmukh',
+    role: 'Worker',
+    siteId: 'P2',
+    site: 'HSR Layout Contemporary',
+    date: new Date().toISOString().split('T')[0],
+    checkInTime: null,
+    checkOutTime: null,
+    status: 'leave',
+    verified: true,
+    coordinates: { lat: 12.9121, lng: 77.6446 },
+    distanceMeters: null,
+    withinGeofence: false,
+    markedBy: 'Admin',
+    punchLocation: 'HSR Site',
   },
 ];
 
-// Leave Types from Screenshot 2
+// Leave Types
 export const mockLeaveTypes = [
   {
     id: 'lt-1',
@@ -92,10 +147,9 @@ export const mockLeaveTypes = [
   },
 ];
 
-// Empty attendance regularization requests matching Screenshot 1
 export const mockAttendanceRequests = [];
 
-// Company-wide Attendance Overview Statistics from Screenshot 5
+// Company-wide Attendance Overview Statistics
 export const mockAttendanceOverviewStats = {
   totalEmployees: 5000,
   checkedIn: 4500,
@@ -106,21 +160,10 @@ export const mockAttendanceOverviewStats = {
   checkedOut: 250,
 };
 
-// Shift and Personal Attendance metrics from Screenshot 4
 export const mockShiftStatus = {
   shiftTime: '09:00 AM - 06:00 PM',
   shiftDuration: '9h 0m ( 1h Break )',
   shiftStart: '9:00 AM',
   monthlyRate: 94.5,
   monthlyPresentDays: 22,
-  monthlyTotalDays: 23,
-  todayHoursWorked: '08h 28m',
-  todayTargetHours: '9h 00m',
-  todayWorkPercentage: 93,
-  remainingLeaveDays: 12,
-  totalLeaveDays: 20,
-  leavePercentage: 60,
 };
-
-export const mockAttendance = mockTodayAttendance;
-export default mockTodayAttendance;

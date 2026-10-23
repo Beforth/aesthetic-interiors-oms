@@ -238,6 +238,27 @@ export const projectService = {
       return project;
     }, 'Stage details updated');
   },
+
+  async updateProjectStatus(projectId, newStatus) {
+    return apiClient.execute(async () => {
+      const projects = getStoredProjects();
+      const updated = projects.map((p) => {
+        if (p.id === projectId) {
+          return { ...p, status: newStatus };
+        }
+        return p;
+      });
+      saveProjects(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('osm_project_updated', {
+            detail: { projectId, status: newStatus },
+          })
+        );
+      }
+      return updated.find((p) => p.id === projectId) || null;
+    }, 'Project status updated successfully');
+  },
 };
 
 export default projectService;

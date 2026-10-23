@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import * as AvatarPrimitive from '@radix-ui/react-avatar';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 const tones = [
   'bg-blue-500/15 text-blue-600 dark:text-blue-300',

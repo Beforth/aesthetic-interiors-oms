@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Avatar } from './avatar';
 import { ArrowDownRightIcon, ArrowUpRightIcon } from './icons';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 import { useChartIn } from './charts';
 
 export interface LeaderboardItem {

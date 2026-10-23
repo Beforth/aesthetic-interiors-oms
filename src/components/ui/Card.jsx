@@ -1,42 +1,44 @@
 import React from 'react';
 
 /**
- * Clean card container conforming to design system tokens (white surface, 1px border, 6px radius).
- *
- * @param {Object} props
- * @param {string} [props.title]
- * @param {string} [props.subtitle]
- * @param {React.ReactNode} [props.headerAction]
- * @param {React.ReactNode} props.children
- * @param {string} [props.className]
+ * befui Card component conforming to https://befui.vercel.app/
+ * (Radix + Tailwind CSS variables design system)
  */
-export function Card({
-  title,
-  subtitle,
-  headerAction,
-  children,
-  className = '',
-  ...rest
-}) {
+export const Card = React.forwardRef(function Card(
+  {
+    title,
+    subtitle,
+    headerAction,
+    children,
+    className = '',
+    hoverable = false,
+    ...rest
+  },
+  ref
+) {
   const hasHeader = title || subtitle || headerAction;
 
   return (
     <div
-      className={`bg-surface border border-border rounded shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden ${className}`}
+      ref={ref}
+      className={`rounded-xl border border-border bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] overflow-hidden ${
+        hoverable ? 'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md' : ''
+      } ${className}`}
       {...rest}
     >
       {hasHeader && (
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-4">
+        <div className="px-5 py-3.5 border-b border-border/80 flex items-center justify-between gap-4 bg-muted/20">
           <div>
-            {title && <h3 className="text-base font-semibold text-text-main leading-tight">{title}</h3>}
-            {subtitle && <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>}
+            {title && <h3 className="text-sm font-semibold tracking-tight text-text-main leading-tight">{title}</h3>}
+            {subtitle && <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
           {headerAction && <div className="shrink-0">{headerAction}</div>}
         </div>
       )}
-      <div className="p-4">{children}</div>
+      <div className="p-5">{children}</div>
     </div>
   );
-}
+});
 
+Card.displayName = 'Card';
 export default Card;

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { authService } from '../services/authService';
 import { apiClient, getAuthToken } from '../services/apiClient';
+import { isDebug } from '../config/env';
 
 const AuthContext = createContext(null);
 
@@ -55,7 +56,7 @@ export function AuthProvider({ children }) {
   );
 
   /**
-   * Signs in against the backend with an email or username.
+   * Signs in against the backend (or local mock users in debug mode) with an email or username.
    */
   const login = async (usernameOrEmail, password, rememberMe = false) => {
     const result = await authService.login(usernameOrEmail, password, rememberMe);
@@ -89,8 +90,9 @@ export function AuthProvider({ children }) {
   const isAuthenticated = Boolean(currentUser && token);
 
   // Sliding idle session: refresh only while the user is working; sign out once they stop.
+  // In debug mode (no API), token refresh polling is omitted.
   useEffect(() => {
-    if (!isAuthenticated) return undefined;
+    if (!isAuthenticated || isDebug()) return undefined;
 
     const markActive = () => {
       lastActivityRef.current = Date.now();
