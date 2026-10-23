@@ -61,7 +61,7 @@ export const navigationItems = [
   },
   {
     id: 'daily-reports',
-    label: 'Daily Reports',
+    label: 'DSR',
     path: '/daily-reports',
     icon: 'daily-reports',
     permissions: ['dsr.submit', 'dsr.viewAll', 'feedback.submit'],
@@ -99,7 +99,8 @@ export const navigationItems = [
     label: 'Settings',
     path: '/settings/users',
     icon: 'settings',
-    permission: 'users.manage',
+    // Any one of these opens Settings; the page then shows only the tabs each permission allows.
+    permissions: ['users.manage', 'roles.change', 'settings.stageTemplate'],
     roles: permissionMatrix['users.manage'],
   },
   {

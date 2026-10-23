@@ -70,6 +70,20 @@ export function saveCustomRole(role) {
 }
 
 /**
+ * Replaces the local cache of custom roles with the list the server returned, so labels shown around the
+ * app (ROLE_LABELS) match the real roles. The server is the source of truth; this is only a display cache.
+ * @param {Array<{ key: string, label: string, description: string }>} roles
+ */
+export function replaceCustomRoles(roles) {
+  try {
+    localStorage.setItem(STORAGE_CUSTOM_ROLES_KEY, JSON.stringify(roles));
+  } catch (e) {
+    console.error('Failed to cache custom roles in localStorage', e);
+  }
+  return roles;
+}
+
+/**
  * Dynamically resolves all role labels including custom roles.
  */
 export function getMergedRoleLabels() {

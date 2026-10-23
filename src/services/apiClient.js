@@ -4,15 +4,19 @@
  * 1. Automatic Bearer token attachment from localStorage (prefix: 'osm.auth.*').
  * 2. Unwrapping standard response envelopes { success, message, data, errors }.
  * 3. Normalizing errors into domain-usable format.
- * 4. The ONLY place in the application that clears session on 401 Unauthorized.
+ * 4. Silent token refresh on 401 (one retry), using the sliding idle-session refresh token.
+ * 5. The ONLY place in the application that clears session on 401 Unauthorized.
  */
 
+export const API_BASE = '/api/v1';
 export const AUTH_PREFIX = 'osm.auth.';
 export const TOKEN_KEY = `${AUTH_PREFIX}token`;
 export const REFRESH_TOKEN_KEY = `${AUTH_PREFIX}refresh_token`;
 export const USER_KEY = `${AUTH_PREFIX}user`;
 export const PERMISSIONS_KEY = `${AUTH_PREFIX}permissions`;
 export const REMEMBER_EMAIL_KEY = `${AUTH_PREFIX}remembered_email`;
+
+const AUTH_ENDPOINTS = ['/accounts/login/', '/accounts/token/refresh/', '/accounts/logout/'];
 
 export class ApiError extends Error {
   constructor(message, status = 400, errors = null) {
@@ -38,18 +42,14 @@ export function clearAuthSession() {
   keysToRemove.forEach((key) => localStorage.removeItem(key));
 }
 
-/**
- * Gets currently stored Bearer token.
- * @returns {string|null}
- */
 export function getAuthToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-/**
- * Stores tokens under the standard prefix.
- * @param {string} token
- */
+export function getRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
 export function setAuthToken(token) {
   if (token) {
     localStorage.setItem(TOKEN_KEY, token);
@@ -58,24 +58,82 @@ export function setAuthToken(token) {
   }
 }
 
+export function setRefreshToken(token) {
+  if (token) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
+}
+
+function resolveUrl(endpoint) {
+  if (endpoint.startsWith('http') || endpoint.startsWith('/api')) return endpoint;
+  return `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+}
+
+function isAuthEndpoint(url) {
+  return AUTH_ENDPOINTS.some((path) => url.includes(path));
+}
+
+function expireSession() {
+  clearAuthSession();
+  if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+    window.location.href = '/login';
+  }
+}
+
+let refreshInFlight = null;
+
+/**
+ * Exchanges the refresh token for a new access + refresh pair. Every successful refresh restarts the
+ * server's idle window, so callers should only refresh while the user is actually active.
+ * Concurrent callers share one request.
+ * @returns {Promise<true|false|null>} true = refreshed, false = session rejected, null = server unreachable
+ */
+export function refreshSession() {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const refresh = getRefreshToken();
+    if (!refresh) return false;
+    try {
+      const res = await fetch(`${API_BASE}/accounts/token/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ refresh }),
+      });
+      if (res.status >= 500) return null;
+      if (!res.ok) return false;
+      const payload = await res.json();
+      const data = payload?.data ?? payload;
+      if (!data?.access) return false;
+      setAuthToken(data.access);
+      if (data.refresh) setRefreshToken(data.refresh);
+      return true;
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+
+  return refreshInFlight;
+}
+
 /**
  * Core HTTP request handler that:
- * 1. Automatically attaches Bearer token from localStorage.
- * 2. Connects to backend API endpoints (proxy or base URL).
- * 3. Handles 401 Unauthorized by clearing session and redirecting.
- * 4. Normalizes errors and response envelopes.
+ * 1. Attaches the Bearer token.
+ * 2. Refreshes the token once on 401 and retries; ends the session if that fails.
+ * 3. Normalizes errors and unwraps response envelopes.
  */
 export async function apiRequest(endpoint, options = {}) {
-  const url = endpoint.startsWith('http')
-    ? endpoint
-    : endpoint.startsWith('/api')
-    ? endpoint
-    : `/api/v1${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const { _retried, ...fetchOptions } = options;
+  const url = resolveUrl(endpoint);
 
   const headers = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
-    ...(options.headers || {}),
+    ...(fetchOptions.headers || {}),
   };
 
   const token = getAuthToken();
@@ -84,17 +142,22 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   try {
-    const res = await fetch(url, {
-      ...options,
-      headers,
-    });
+    const res = await fetch(url, { ...fetchOptions, headers });
 
-    if (res.status === 401) {
-      clearAuthSession();
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+    if (res.status === 401 && !isAuthEndpoint(url)) {
+      if (!_retried && getRefreshToken()) {
+        const refreshed = await refreshSession();
+        if (refreshed === true) {
+          const retryHeaders = { ...(fetchOptions.headers || {}) };
+          delete retryHeaders['Authorization'];
+          return apiRequest(endpoint, { ...fetchOptions, headers: retryHeaders, _retried: true });
+        }
+        if (refreshed === null) {
+          throw new ApiError('Unable to reach the server. Please check your connection.', 0);
+        }
       }
-      throw new ApiError('Your session has expired or is unauthorized. Please log in again.', 401);
+      expireSession();
+      throw new ApiError('Your session has expired. Please log in again.', 401);
     }
 
     let payload = null;
@@ -110,8 +173,8 @@ export async function apiRequest(endpoint, options = {}) {
       let errors = null;
 
       if (payload && typeof payload === 'object') {
-        message = payload.detail || payload.message || payload.error || message;
-        errors = payload.errors || (payload.detail ? null : payload);
+        message = payload.message || payload.detail || payload.error || message;
+        errors = payload.errors || null;
       } else if (typeof payload === 'string' && payload.length > 0) {
         if (
           payload.includes('ECONNREFUSED') ||
@@ -123,6 +186,9 @@ export async function apiRequest(endpoint, options = {}) {
         } else {
           message = payload;
         }
+      } else if (res.status >= 500) {
+        // An empty 5xx is what the dev proxy returns when nothing answers on the backend port
+        message = 'Unable to reach the backend server. Please make sure it is running.';
       }
 
       throw new ApiError(message, res.status, errors);
@@ -143,6 +209,29 @@ export async function apiRequest(endpoint, options = {}) {
   }
 }
 
+function withQuery(endpoint, params) {
+  const entries = Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== '');
+  if (entries.length === 0) return endpoint;
+  const query = new URLSearchParams(entries).toString();
+  return `${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`;
+}
+
+/**
+ * Fetches every page of a paginated list endpoint and returns the combined results array.
+ */
+export async function getAllPages(endpoint, params = {}) {
+  const results = [];
+  let page = 1;
+  // page_size is capped at 100 by the backend paginator
+  for (;;) {
+    const data = await apiRequest(withQuery(endpoint, { ...params, page, page_size: 100 }), { method: 'GET' });
+    if (Array.isArray(data)) return data;
+    results.push(...(data?.results || []));
+    if (!data?.next) return results;
+    page += 1;
+  }
+}
+
 /**
  * Checks if an error is due to backend server unavailability, network down, or proxy connection failure.
  */
@@ -160,32 +249,21 @@ export function isNetworkOrServerError(err) {
 }
 
 /**
- * Wraps mock or remote handler execution into the standardized response envelope:
- * { success: true, message: string, data: any, errors: null }
- * or on failure:
- * { success: false, message: string, data: null, errors: object|null }
+ * Runs a local handler and normalizes thrown errors into ApiError.
+ * Only used by the feature services that are still backed by local mock data.
  */
-export async function apiClientExecute(handler, successMessage = 'Success') {
+export async function apiClientExecute(handler) {
   try {
-    const result = await handler();
-    return result;
+    return await handler();
   } catch (error) {
-    const status = error.status || 400;
-
-    if (status === 401) {
-      clearAuthSession();
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
-    }
-
-    throw new ApiError(error.message || 'An unexpected error occurred.', status, error.errors || null);
+    throw new ApiError(error.message || 'An unexpected error occurred.', error.status || 400, error.errors || null);
   }
 }
 
 export const apiClient = {
   request: apiRequest,
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),
+  getAll: getAllPages,
   post: (endpoint, body, options) =>
     apiRequest(endpoint, {
       method: 'POST',
@@ -206,9 +284,12 @@ export const apiClient = {
     }),
   delete: (endpoint, options) => apiRequest(endpoint, { method: 'DELETE', ...options }),
   execute: apiClientExecute,
+  refresh: refreshSession,
   clearSession: clearAuthSession,
   getToken: getAuthToken,
   setToken: setAuthToken,
+  getRefreshToken,
+  setRefreshToken,
 };
 
 export default apiClient;

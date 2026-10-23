@@ -25,8 +25,10 @@ import PlaceholderPage from '../pages/PlaceholderPage';
 export function AppRoutes() {
   const { hasPermission } = useAuth();
 
-  // Root redirect destination depending on permissions
-  const defaultDestination = hasPermission('projects.viewOwn') ? '/projects' : '/dashboard';
+  // Root redirect destination depending on permissions. A "client" sees their own projects but not all of
+  // them; the Owner holds every permission, so it must not be mistaken for one.
+  const isClientOnly = hasPermission('projects.viewOwn') && !hasPermission('projects.viewAll');
+  const defaultDestination = isClientOnly ? '/projects' : '/dashboard';
 
   return (
     <Routes>
@@ -166,13 +168,14 @@ export function AppRoutes() {
           }
         />
 
-        {/* 11. Settings & Sub-routes (Admin only) */}
+        {/* 11. Settings & Sub-routes: open to anyone with users.manage, roles.change or settings.stageTemplate
+              (the page itself shows only the tabs each permission allows; mirrors backend accounts/defaults.py) */}
         <Route path="settings" element={<Navigate to="/settings/users" replace />} />
         <Route path="users" element={<Navigate to="/settings/users" replace />} />
         <Route
           path="settings/users"
           element={
-            <RoleRoute permission="users.manage">
+            <RoleRoute permissions={['users.manage', 'roles.change', 'settings.stageTemplate']}>
               <UsersPage />
             </RoleRoute>
           }

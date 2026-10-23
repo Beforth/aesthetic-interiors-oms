@@ -1,8 +1,18 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { authService } from '../services/authService';
-import { getAuthToken } from '../services/apiClient';
+import { apiClient, getAuthToken } from '../services/apiClient';
 
 const AuthContext = createContext(null);
+
+// Must match the backend refresh-token lifetime (JWT_REFRESH_MINUTES): after this long without any user
+// activity the session can no longer be refreshed, so the app signs out here too.
+// Switched off while developing (npm run dev), so a coffee break does not sign the developer out; production
+// builds keep it.
+const IDLE_LIMIT_MS = import.meta.env.DEV ? Infinity : 10 * 60 * 1000;
+// While the user is active, renew the session well inside the 5-minute access-token lifetime.
+const KEEPALIVE_MS = 4 * 60 * 1000;
+const TICK_MS = 30 * 1000;
+const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -17,7 +27,10 @@ export function AuthProvider({ children }) {
     return getAuthToken();
   });
 
-  // Listen to live permission matrix updates by Admin
+  const lastActivityRef = useRef(Date.now());
+  const lastRefreshRef = useRef(0);
+
+  // Listen to live permission updates (the stored list is re-read when something changes it)
   useEffect(() => {
     const handleUpdate = () => {
       const updated = authService.getStoredPermissions();
@@ -42,10 +55,12 @@ export function AuthProvider({ children }) {
   );
 
   /**
-   * Primary authentication handler supporting credentials for all 5 roles.
+   * Signs in against the backend with an email or username.
    */
   const login = async (usernameOrEmail, password, rememberMe = false) => {
     const result = await authService.login(usernameOrEmail, password, rememberMe);
+    lastActivityRef.current = Date.now();
+    lastRefreshRef.current = Date.now();
     setCurrentUser(result.user);
     setToken(result.token);
     setPermissions(result.permissions);
@@ -53,27 +68,60 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Direct login helper (used by 1-click demo profiles).
+   * Secure logout: invalidates the refresh token on the server and clears the session.
    */
-  const loginAsUser = (user) => {
-    const result = authService.loginAsUser(user);
-    setCurrentUser(result.user);
-    setToken(result.token);
-    setPermissions(result.permissions);
-    return result.user;
-  };
-
-  /**
-   * Secure logout clearing tokens and session.
-   */
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await authService.logout();
     setCurrentUser(null);
     setToken(null);
     setPermissions([]);
-  };
+  }, []);
 
-  const availableUsers = authService.getDemoUsers();
+  /**
+   * Re-reads the profile and permissions from the server (for example after a role was edited).
+   */
+  const reloadProfile = useCallback(async () => {
+    const result = await authService.reloadProfile();
+    setCurrentUser(result.user);
+    setPermissions(result.permissions);
+  }, []);
+
+  const isAuthenticated = Boolean(currentUser && token);
+
+  // Sliding idle session: refresh only while the user is working; sign out once they stop.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const markActive = () => {
+      lastActivityRef.current = Date.now();
+    };
+    ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, markActive, { passive: true }));
+    markActive();
+
+    const tick = async () => {
+      const now = Date.now();
+      if (now - lastActivityRef.current >= IDLE_LIMIT_MS) {
+        await logout();
+        return;
+      }
+      const activeSinceRefresh = lastActivityRef.current > lastRefreshRef.current;
+      if (activeSinceRefresh && now - lastRefreshRef.current >= KEEPALIVE_MS) {
+        const refreshed = await apiClient.refresh();
+        if (refreshed === true) {
+          lastRefreshRef.current = Date.now();
+          setToken(getAuthToken());
+        } else if (refreshed === false) {
+          await logout();
+        }
+      }
+    };
+
+    const timer = setInterval(tick, TICK_MS);
+    return () => {
+      clearInterval(timer);
+      ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, markActive));
+    };
+  }, [isAuthenticated, logout]);
 
   return (
     <AuthContext.Provider
@@ -83,11 +131,10 @@ export function AuthProvider({ children }) {
         token,
         permissions,
         hasPermission,
-        isAuthenticated: Boolean(currentUser && token),
-        availableUsers,
+        isAuthenticated,
         login,
-        loginAsUser,
         logout,
+        reloadProfile,
       }}
     >
       {children}

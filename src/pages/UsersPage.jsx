@@ -1,16 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { userService } from '../services/userService';
 import { stageService } from '../services/stageService';
-import {
-  ROLES,
-  ROLE_LABELS,
-  getCustomRoles,
-  saveCustomRole,
-} from '../config/roles';
-import {
-  getCustomRolePermissions,
-  saveCustomRolePermissions,
-} from '../config/permissions';
+import { roleService } from '../services/roleService';
+import { ROLES, ROLE_LABELS } from '../config/roles';
+import { SYSTEM_PERMISSIONS } from '../config/permissions';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatDate } from '../utils/formatters';
@@ -33,61 +26,42 @@ import Input from '../components/ui/Input';
 import Icon from '../components/ui/Icon';
 import Checkbox from '../components/ui/Checkbox';
 
-const PERMISSION_GROUPS = [
-  {
-    category: 'Clients',
-    keys: ['clients.view', 'clients.manage', 'clients.import'],
-  },
-  {
-    category: 'Projects & Stages',
-    keys: [
-      'projects.viewAll',
-      'projects.viewAssigned',
-      'projects.create',
-      'projects.assignPeople',
-      'agencies.manage',
-      'stages.editDates',
-      'stages.editProjectStages',
-      'stages.updateStatus',
-    ],
-  },
-  {
-    category: 'Attendance & Geofencing',
-    keys: [
-      'attendance.markOwn',
-      'attendance.viewBoard',
-      'attendance.correct',
-      'geofence.manage',
-    ],
-  },
-  {
-    category: 'Tasks',
-    keys: ['tasks.create', 'tasks.viewAll', 'tasks.updateOwn'],
-  },
-  {
-    category: 'Daily Site Reports',
-    keys: ['dsr.submit', 'dsr.viewAll', 'dsr.manageClientLink'],
-  },
-  {
-    category: 'Payments & Billing',
-    keys: [
-      'payments.client.manage',
-      'payments.client.viewOwn',
-      'payments.labour.manage',
-      'users.manage',
-      'roles.change',
-    ],
-  },
-];
+// The role editor's checkboxes come straight from the permission catalog in config/permissions.js, grouped by
+// module. That catalog mirrors the backend's list (accounts/defaults.py), so a role can be given exactly the
+// permissions the server knows about and nothing it would reject.
+const PERMISSION_GROUPS = Object.values(
+  SYSTEM_PERMISSIONS.reduce((groups, permission) => {
+    const group = groups[permission.group] || { category: permission.group, items: [] };
+    group.items.push(permission);
+    groups[permission.group] = group;
+    return groups;
+  }, {})
+);
+
+/** Turns the server's field errors ({ email: ['...'] }) into { email: '...' } for the form inputs. */
+function firstErrors(errors) {
+  return Object.fromEntries(
+    Object.entries(errors || {}).map(([field, messages]) => [field, Array.isArray(messages) ? messages[0] : String(messages)])
+  );
+}
 
 export function UsersPage() {
   const toast = useToast();
   const { currentUser, hasPermission } = useAuth();
-  const isAdmin = hasPermission('users.manage');
+  // What each part of Settings needs (mirrors the list at the top of backend accounts/defaults.py):
+  const canManageUsers = hasPermission('users.manage'); // Users tab: add, edit, activate, delete
+  const canChangeRoles = hasPermission('roles.change'); // create custom roles
+  const canEditStageTemplate = hasPermission('settings.stageTemplate'); // 12-stage master template tab
+  const isAdmin = canManageUsers;
 
-  const [activeTab, setActiveTab] = useState('directory');
+  // Open the first tab this person is allowed to use
+  const [activeTab, setActiveTab] = useState(() => {
+    if (hasPermission('users.manage')) return 'directory';
+    if (hasPermission('roles.change')) return 'roles';
+    return 'stages';
+  });
   const [users, setUsers] = useState([]);
-  const [customRoles, setCustomRoles] = useState(() => getCustomRoles());
+  const [roles, setRoles] = useState([]); // every role from the server: { key, label, description, permissions, isSystem, userCount }
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -104,7 +78,7 @@ export function UsersPage() {
     title: '',
     notes: '',
     role: ROLES.WORKER,
-    password: 'demo123',
+    password: '',
     status: 'active',
   });
   const [formErrors, setFormErrors] = useState({});
@@ -122,7 +96,6 @@ export function UsersPage() {
     name: '',
     key: '',
     description: '',
-    defaultPassword: 'demo123',
     selectedPermissions: [
       'projects.viewAssigned',
       'tasks.updateOwn',
@@ -131,6 +104,9 @@ export function UsersPage() {
     ],
   });
   const [roleFormErrors, setRoleFormErrors] = useState({});
+  const [editingRole, setEditingRole] = useState(null); // the role being edited, or null when creating
+  const [deleteRoleTarget, setDeleteRoleTarget] = useState(null);
+  const [deleteRoleLoading, setDeleteRoleLoading] = useState(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -154,36 +130,47 @@ export function UsersPage() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const data = await userService.getAllUsers();
+      const data = await userService.listUsers();
       setUsers(data);
     } catch (err) {
-      toast.error('Failed to load user directory');
+      toast.error(err.message || 'Failed to load user directory');
     } finally {
       setLoading(false);
     }
   };
 
+  const loadRoles = async () => {
+    try {
+      setRoles(await roleService.syncRoles());
+    } catch (err) {
+      toast.error(err.message || 'Failed to load roles');
+    }
+  };
+
+  const loadStageTemplate = async () => {
+    try {
+      setStageTemplate(await stageService.getStageTemplate());
+    } catch (err) {
+      toast.error(err.message || 'Failed to load the stage template');
+    }
+  };
+
+  // Each part of the page loads only what the signed-in user is allowed to read
   useEffect(() => {
-    fetchUsers();
-    stageService.getStageTemplate().then((d) => setStageTemplate(d));
-    setCustomRoles(getCustomRoles());
+    if (canManageUsers) {
+      fetchUsers();
+    } else {
+      setLoading(false);
+    }
+    if (canEditStageTemplate) loadStageTemplate();
+    if (canManageUsers || canChangeRoles) loadRoles();
   }, []);
 
-  // Show only clean canonical role names (NO person names attached)
-  const roleSelectOptions = useMemo(() => {
-    const base = [
-      { value: ROLES.ADMIN, label: 'Owner' },
-      { value: ROLES.MANAGER, label: 'Manager' },
-      { value: ROLES.SUPERVISOR, label: 'Site Supervisor' },
-      { value: ROLES.WORKER, label: 'Site Worker' },
-      { value: ROLES.CLIENT, label: 'Client' },
-    ];
-    const custom = customRoles.map((r) => ({
-      value: r.key,
-      label: r.label,
-    }));
-    return [...base, ...custom];
-  }, [customRoles]);
+  // The role dropdown lists the roles the server has (built-in and custom), by their display names only
+  const roleSelectOptions = useMemo(
+    () => roles.map((role) => ({ value: role.key, label: role.label })),
+    [roles]
+  );
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
@@ -232,7 +219,7 @@ export function UsersPage() {
       title: '',
       notes: '',
       role: ROLES.WORKER,
-      password: 'demo123',
+      password: '',
       status: 'active',
     });
     setFormErrors({});
@@ -266,8 +253,9 @@ export function UsersPage() {
     const phoneErr = validatePhone(formData.phone, { required: true, fieldLabel: 'Phone number' });
     if (phoneErr) errors.phone = phoneErr;
 
-    if (!editingUser) {
-      const pwdErr = validatePassword(formData.password, { minLength: 4, required: true });
+    // The server enforces the same rule (and rejects very common or all-number passwords)
+    if (!editingUser || formData.password) {
+      const pwdErr = validatePassword(formData.password, { minLength: 8, required: !editingUser });
       if (pwdErr) errors.password = pwdErr;
     }
 
@@ -291,15 +279,18 @@ export function UsersPage() {
       }
       setIsModalOpen(false);
       fetchUsers();
+      loadRoles(); // role user counts changed
     } catch (err) {
-      toast.error('Failed to save user record');
+      // Show the server's message next to the field it is about (for example "email already exists")
+      setFormErrors(firstErrors(err.errors));
+      toast.error(err.message || 'Failed to save user record');
     }
   };
 
   const handleConfirmDeleteUser = async () => {
     if (!deleteUserTarget) return;
-    if (deleteUserTarget.id === 'u1' || deleteUserTarget.role === ROLES.ADMIN) {
-      toast.error('The primary Owner account cannot be deleted');
+    if (deleteUserTarget.role === ROLES.ADMIN) {
+      toast.error('An Owner account cannot be deleted from here');
       setDeleteUserTarget(null);
       return;
     }
@@ -309,20 +300,48 @@ export function UsersPage() {
       toast.success(`User "${deleteUserTarget.name}" deleted successfully`);
       setDeleteUserTarget(null);
       fetchUsers();
+      loadRoles();
     } catch (err) {
-      toast.error('Failed to delete user');
+      toast.error(err.message || 'Failed to delete user');
     } finally {
       setDeleteUserLoading(false);
     }
   };
 
   // Role Creation Handlers
+  const handleOpenEditRole = (role) => {
+    setEditingRole(role);
+    setRoleFormData({
+      name: role.label,
+      key: role.key,
+      description: role.description || '',
+      selectedPermissions: role.permissions || [],
+    });
+    setRoleFormErrors({});
+    setIsRoleModalOpen(true);
+  };
+
+  const handleConfirmDeleteRole = async () => {
+    if (!deleteRoleTarget) return;
+    setDeleteRoleLoading(true);
+    try {
+      await roleService.deleteRole(deleteRoleTarget.key);
+      toast.success(`Role "${deleteRoleTarget.label}" deleted`);
+      setDeleteRoleTarget(null);
+      loadRoles();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete the role');
+    } finally {
+      setDeleteRoleLoading(false);
+    }
+  };
+
   const handleOpenCreateRole = () => {
+    setEditingRole(null);
     setRoleFormData({
       name: '',
       key: '',
       description: '',
-      defaultPassword: 'demo123',
       selectedPermissions: [
         'projects.viewAssigned',
         'tasks.updateOwn',
@@ -335,6 +354,7 @@ export function UsersPage() {
   };
 
   const handleTogglePermission = (permKey) => {
+    if (editingRole?.key === ROLES.ADMIN) return; // the Owner always keeps every permission
     setRoleFormData((prev) => {
       const exists = prev.selectedPermissions.includes(permKey);
       const updated = exists
@@ -344,31 +364,43 @@ export function UsersPage() {
     });
   };
 
-  const handleRoleSubmit = (e) => {
+  const handleRoleSubmit = async (e) => {
     e.preventDefault();
     const errors = {};
     if (!roleFormData.name.trim()) errors.name = 'Role name is required';
     if (!roleFormData.key.trim()) errors.key = 'Role identifier key is required';
-    if (!roleFormData.defaultPassword.trim()) errors.defaultPassword = 'Default password is required';
 
     if (Object.keys(errors).length > 0) {
       setRoleFormErrors(errors);
       return;
     }
 
-    const key = roleFormData.key.trim().toLowerCase();
-    const newRole = {
-      key,
-      label: roleFormData.name.trim(),
-      description: roleFormData.description.trim() || 'Custom operational role',
-      defaultPassword: roleFormData.defaultPassword.trim(),
-    };
-
-    saveCustomRole(newRole);
-    saveCustomRolePermissions(key, roleFormData.selectedPermissions);
-    setCustomRoles(getCustomRoles());
-    setIsRoleModalOpen(false);
-    toast.success(`Role "${newRole.label}" successfully created!`);
+    const label = roleFormData.name.trim();
+    const description = roleFormData.description.trim() || 'Custom operational role';
+    try {
+      if (editingRole) {
+        // The Owner's permission list cannot be changed, so it is not sent
+        const changes = { label, description };
+        if (editingRole.key !== ROLES.ADMIN) changes.permissions = roleFormData.selectedPermissions;
+        await roleService.updateRole(editingRole.key, changes);
+        toast.success(`Role "${label}" updated`);
+      } else {
+        await roleService.createRole({
+          key: roleFormData.key.trim().toLowerCase(),
+          label,
+          description,
+          permissions: roleFormData.selectedPermissions,
+        });
+        toast.success(`Role "${label}" successfully created!`);
+      }
+      await loadRoles();
+      setIsRoleModalOpen(false);
+    } catch (err) {
+      // The server names the field: label (shown as the role name), key or permissions
+      const serverErrors = firstErrors(err.errors);
+      setRoleFormErrors({ ...serverErrors, name: serverErrors.label });
+      toast.error(err.message || 'Failed to save the role');
+    }
   };
 
   // Stage Template Handlers (FR-STG-02)
@@ -401,10 +433,11 @@ export function UsersPage() {
     try {
       if (editingStage) {
         const updated = stageTemplate.map((s) =>
-          s.order === editingStage.order ? { ...s, ...stageFormData } : s
+          s.order === editingStage.order
+            ? { ...s, ...stageFormData, durationDays: Number(stageFormData.durationDays) || 7 }
+            : s
         );
-        await stageService.updateStageTemplate(updated);
-        setStageTemplate(updated);
+        setStageTemplate(await stageService.updateStageTemplate(updated));
       } else {
         const newStage = {
           order: stageTemplate.length + 1,
@@ -412,41 +445,48 @@ export function UsersPage() {
           durationDays: Number(stageFormData.durationDays) || 7,
         };
         const updated = [...stageTemplate, newStage];
-        await stageService.updateStageTemplate(updated);
-        setStageTemplate(updated);
+        setStageTemplate(await stageService.updateStageTemplate(updated));
       }
       setIsStageModalOpen(false);
       toast.success(editingStage ? `Stage "${stageFormData.name}" updated` : `Stage "${stageFormData.name}" added to template`);
     } catch (err) {
-      toast.error('Failed to save stage template');
+      toast.error(err.message || 'Failed to save stage template');
     }
   };
 
   const handleDeleteStage = async (stage) => {
     const remaining = stageTemplate.filter((s) => s.order !== stage.order);
     const reordered = remaining.map((s, idx) => ({ ...s, order: idx + 1 }));
-    await stageService.updateStageTemplate(reordered);
-    setStageTemplate(reordered);
-    toast.success(`Stage "${stage.name}" removed from template`);
+    try {
+      // The server returns the saved template, so the list always shows what was really stored
+      setStageTemplate(await stageService.updateStageTemplate(reordered));
+      toast.success(`Stage "${stage.name}" removed from template`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to remove the stage');
+    }
   };
 
   const handleResetDefaultStages = async () => {
-    const defaults = await stageService.resetDefaultTemplate();
-    setStageTemplate(defaults);
-    toast.success('Template reset to BeForth 12 canonical stages');
+    try {
+      setStageTemplate(await stageService.resetDefaultTemplate());
+      toast.success('Template reset to BeForth 12 canonical stages');
+    } catch (err) {
+      toast.error(err.message || 'Failed to reset the template');
+    }
   };
 
   const handleToggleStatus = async () => {
     if (!confirmTarget) return;
     setConfirmLoading(true);
     try {
-      await userService.toggleUserStatus(confirmTarget.id);
-      const actionName = confirmTarget.status === 'active' ? 'deactivated' : 'reactivated';
+      const nextStatus = confirmTarget.status === 'active' ? 'inactive' : 'active';
+      await userService.setUserStatus(confirmTarget.id, nextStatus);
+      const actionName = nextStatus === 'inactive' ? 'deactivated' : 'reactivated';
       toast.success(`User ${confirmTarget.name} has been ${actionName}`);
       setConfirmTarget(null);
       fetchUsers();
     } catch (err) {
-      toast.error('Failed to alter user status');
+      toast.error(err.message || 'Failed to alter user status');
     } finally {
       setConfirmLoading(false);
     }
@@ -527,6 +567,17 @@ export function UsersPage() {
                 className="hover:bg-brand-50 text-brand-700"
               />
 
+              {u.id !== currentUser?.id && (
+                <IconButton
+                  icon={u.status === 'active' ? 'user-x' : 'user-check'}
+                  size="sm"
+                  ariaLabel={`${u.status === 'active' ? 'Deactivate' : 'Reactivate'} ${u.name}`}
+                  title={u.status === 'active' ? 'Deactivate User' : 'Reactivate User'}
+                  onClick={() => setConfirmTarget(u)}
+                  className="hover:bg-brand-50 text-brand-700"
+                />
+              )}
+
               {u.role !== ROLES.ADMIN && u.id !== currentUser?.id && (
                 <IconButton
                   icon="trash"
@@ -555,34 +606,45 @@ export function UsersPage() {
           { label: 'Users & Roles' },
         ]}
         actions={
-          isAdmin && (
+          (canChangeRoles || canManageUsers) && (
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                leadingIcon="shield"
-                onClick={handleOpenCreateRole}
-              >
-                Create New Role
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                leadingIcon="plus"
-                onClick={handleOpenAdd}
-              >
-                Add New User
-              </Button>
+              {canChangeRoles && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leadingIcon="shield"
+                  onClick={handleOpenCreateRole}
+                >
+                  Create New Role
+                </Button>
+              )}
+              {canManageUsers && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leadingIcon="plus"
+                  onClick={handleOpenAdd}
+                >
+                  Add New User
+                </Button>
+              )}
             </div>
           )
         }
       />
 
-      {/* Tabs Switcher: Clean 2 Tabs (Role Permissions Matrix removed completely) */}
+      {/* Tabs Switcher: each tab appears only for the people allowed to use it */}
       <Tabs
         tabs={[
-          { id: 'directory', label: 'Users Directory', icon: 'users', count: users.length },
-          { id: 'stages', label: '12-Stage Master Template', icon: 'layers', count: stageTemplate.length },
+          ...(canManageUsers
+            ? [{ id: 'directory', label: 'Users Directory', icon: 'users', count: users.length }]
+            : []),
+          ...(canManageUsers || canChangeRoles
+            ? [{ id: 'roles', label: 'Roles', icon: 'shield', count: roles.length }]
+            : []),
+          ...(canEditStageTemplate
+            ? [{ id: 'stages', label: '12-Stage Master Template', icon: 'layers', count: stageTemplate.length }]
+            : []),
         ]}
         activeTab={activeTab}
         onChange={setActiveTab}
@@ -646,6 +708,69 @@ export function UsersPage() {
             }}
           />
         </>
+      ) : activeTab === 'roles' ? (
+        /* Roles: every role from the server with what it holds and how many people use it */
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-text-muted border-b border-border">
+                  <th className="py-2 pr-4 font-semibold">Role</th>
+                  <th className="py-2 pr-4 font-semibold">Description</th>
+                  <th className="py-2 pr-4 font-semibold text-right">Permissions</th>
+                  <th className="py-2 pr-4 font-semibold text-right">Users</th>
+                  <th className="py-2 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {roles.map((role) => (
+                  <tr key={role.key} className="border-b border-border last:border-0 align-top">
+                    <td className="py-3 pr-4">
+                      <div className="font-semibold text-text-main">{role.label}</div>
+                      <div className="text-xs text-text-muted font-mono">
+                        {role.key} · {role.isSystem ? 'Built-in' : 'Custom'}
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-text-muted max-w-xs">{role.description}</td>
+                    <td className="py-3 pr-4 text-right font-mono">{role.permissions.length}</td>
+                    <td className="py-3 pr-4 text-right font-mono">{role.userCount}</td>
+                    <td className="py-3 text-right">
+                      {canChangeRoles && (
+                        <div className="flex items-center justify-end gap-1">
+                          <IconButton
+                            icon="edit"
+                            size="sm"
+                            ariaLabel={`Edit role ${role.label}`}
+                            title="Edit Role"
+                            onClick={() => handleOpenEditRole(role)}
+                            className="hover:bg-brand-50 text-brand-700"
+                          />
+                          {!role.isSystem && (
+                            <IconButton
+                              icon="trash"
+                              size="sm"
+                              ariaLabel={`Delete role ${role.label}`}
+                              title="Delete Role"
+                              onClick={() => setDeleteRoleTarget(role)}
+                              className="hover:bg-danger-light text-danger"
+                            />
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {roles.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-xs text-text-muted">
+                      No roles to show.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : (
         /* 12-Stage Master Template: Horizontal Pipeline Display with Testimonial Banner & Minimal Animation */
         <div className="space-y-5">
@@ -665,7 +790,7 @@ export function UsersPage() {
               </div>
             </div>
 
-            {isAdmin && (
+            {canEditStageTemplate && (
               <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                 <Button
                   variant="outline"
@@ -721,7 +846,7 @@ export function UsersPage() {
                     <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200 truncate max-w-[150px]">
                       {stage.defaultAgencyTrade || 'General Trade'}
                     </span>
-                    {isAdmin && (
+                    {canEditStageTemplate && (
                       <div className="flex items-center gap-1">
                         <IconButton
                           icon="edit"
@@ -889,16 +1014,9 @@ export function UsersPage() {
           <Select
             label="Assigned System Role"
             value={formData.role}
-            onChange={(e) => {
-              const selectedRole = e.target.value;
-              const customMatch = customRoles.find((r) => r.key === selectedRole);
-              setFormData((prev) => ({
-                ...prev,
-                role: selectedRole,
-                password: prev.password || customMatch?.defaultPassword || 'demo123',
-              }));
-            }}
+            onChange={(e) => setFormData((prev) => ({ ...prev, role: e.target.value }))}
             options={roleSelectOptions}
+            error={formErrors.role}
             helperText="Controls system permissions and navigation visibility"
           />
 
@@ -907,7 +1025,8 @@ export function UsersPage() {
             type="text"
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            placeholder={editingUser ? 'Leave blank to keep existing password' : 'Enter login password'}
+            placeholder={editingUser ? 'Leave blank to keep existing password' : 'At least 8 characters'}
+            helperText="At least 8 characters; not too common and not only numbers"
             error={formErrors.password}
           />
 
@@ -931,8 +1050,12 @@ export function UsersPage() {
       <Modal
         isOpen={isRoleModalOpen}
         onClose={() => setIsRoleModalOpen(false)}
-        title="Create Custom System Role"
-        subtitle="Define a custom operational title and assign granular permissions"
+        title={editingRole ? `Edit Role: ${editingRole.label}` : 'Create Custom System Role'}
+        subtitle={
+          editingRole?.key === ROLES.ADMIN
+            ? 'The Owner always keeps every permission; only the name and description can change'
+            : 'Define a custom operational title and assign granular permissions'
+        }
         size="lg"
         footer={
           <>
@@ -940,7 +1063,7 @@ export function UsersPage() {
               Cancel
             </Button>
             <Button variant="primary" size="sm" onClick={handleRoleSubmit}>
-              Save & Register Role
+              {editingRole ? 'Save Changes' : 'Save & Register Role'}
             </Button>
           </>
         }
@@ -954,8 +1077,9 @@ export function UsersPage() {
               value={roleFormData.name}
               onChange={(e) => {
                 const name = e.target.value;
-                const key = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-                setRoleFormData({ ...roleFormData, name, key });
+                // keys are lowercase words joined by single hyphens, as the server requires
+                const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                setRoleFormData({ ...roleFormData, name, key: editingRole ? roleFormData.key : key });
               }}
               error={roleFormErrors.name}
             />
@@ -963,30 +1087,21 @@ export function UsersPage() {
             <Input
               label="Role Key / Identifier"
               required
-              placeholder="e.g. quality_inspector"
+              placeholder="e.g. quality-inspector"
               value={roleFormData.key}
+              disabled={Boolean(editingRole)}
+              helperText={editingRole ? 'A role key cannot be changed' : 'Lowercase letters, numbers and hyphens'}
               onChange={(e) => setRoleFormData({ ...roleFormData, key: e.target.value })}
               error={roleFormErrors.key}
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Role Description"
-              placeholder="Brief summary of duties and responsibilities"
-              value={roleFormData.description}
-              onChange={(e) => setRoleFormData({ ...roleFormData, description: e.target.value })}
-            />
-
-            <Input
-              label="Default Password for New Users"
-              required
-              placeholder="e.g. demo123"
-              value={roleFormData.defaultPassword}
-              onChange={(e) => setRoleFormData({ ...roleFormData, defaultPassword: e.target.value })}
-              error={roleFormErrors.defaultPassword}
-            />
-          </div>
+          <Input
+            label="Role Description"
+            placeholder="Brief summary of duties and responsibilities"
+            value={roleFormData.description}
+            onChange={(e) => setRoleFormData({ ...roleFormData, description: e.target.value })}
+          />
 
           <div className="border-t pt-3">
             <div className="text-xs font-bold text-text-main mb-2">
@@ -999,13 +1114,24 @@ export function UsersPage() {
                     {grp.category}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-2">
-                    {grp.keys.map((permKey) => (
-                      <label key={permKey} className="flex items-center gap-2 text-xs text-text-main cursor-pointer">
+                    {grp.items.map((permission) => (
+                      <label
+                        key={permission.id}
+                        className="flex items-center gap-2 text-xs text-text-main cursor-pointer"
+                        data-tooltip={permission.hint}
+                      >
                         <Checkbox
-                          checked={roleFormData.selectedPermissions.includes(permKey)}
-                          onChange={() => handleTogglePermission(permKey)}
+                          checked={
+                            editingRole?.key === ROLES.ADMIN ||
+                            roleFormData.selectedPermissions.includes(permission.id)
+                          }
+                          disabled={editingRole?.key === ROLES.ADMIN}
+                          onChange={() => handleTogglePermission(permission.id)}
                         />
-                        <span className="font-mono text-[11px]">{permKey}</span>
+                        <span>
+                          {permission.label}
+                          <span className="block font-mono text-[10px] text-text-muted">{permission.id}</span>
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -1069,9 +1195,21 @@ export function UsersPage() {
       </Modal>
 
       {/* Deactivate/Reactivate Confirmation Dialog */}
+      {/* Delete Role Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(deleteRoleTarget)}
+        onConfirm={handleConfirmDeleteRole}
+        onCancel={() => setDeleteRoleTarget(null)}
+        title={`Delete Role: ${deleteRoleTarget?.label}`}
+        message={`Delete the custom role "${deleteRoleTarget?.label}"? Roles that are still assigned to users cannot be deleted.`}
+        confirmText="Delete Role"
+        confirmVariant="danger"
+        loading={deleteRoleLoading}
+      />
+
       <ConfirmDialog
         isOpen={Boolean(confirmTarget)}
-        onClose={() => setConfirmTarget(null)}
+        onCancel={() => setConfirmTarget(null)}
         onConfirm={handleToggleStatus}
         title={confirmTarget?.status === 'active' ? 'Deactivate User Account' : 'Reactivate User Account'}
         message={
