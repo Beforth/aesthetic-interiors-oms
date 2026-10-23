@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { Avatar } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Kanban, type KanbanColumn } from '@/components/ui/kanban';
+import { Avatar } from './avatar';
+import { Badge } from './badge';
+import { Kanban, type KanbanColumn } from './kanban';
 
 interface Task {
   id: string;

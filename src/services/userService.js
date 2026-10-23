@@ -1,4 +1,5 @@
 import { apiClient, USER_KEY } from './apiClient';
+import { isDebug } from '../config/env';
 import { getPermissionsForRole } from '../config/permissions';
 import { mockUsers } from '../data/users';
 
@@ -99,7 +100,7 @@ function syncSignedInUser(updated) {
 export const userService = {
   /**
    * MOCK until the tabs that use it are wired: users from the local demo store.
-   * The real list is `listUsers()` below (Settings tab).
+   * In debug mode, this is also the primary store.
    */
   async getAllUsers() {
     const local = getLocalUsers();
@@ -117,6 +118,7 @@ export const userService = {
 
     return mockUsers;
   },
+
   async getUserById(id) {
     const users = await this.getAllUsers();
     return users.find((u) => String(u.id) === String(id)) || null;
@@ -132,24 +134,57 @@ export const userService = {
     return getPermissionsForRole(user.role);
   },
 
-
   // ------------------------------------------------------------------------------------------
-  // Real backend (the Settings tab). The read methods above still run on local mock data for the
-  // tabs that are not wired yet; they move here one tab at a time.
+  // Users Management (The Settings tab).
+  // - In debug mode: runs standalone against local storage (no API).
+  // - In API mode: connects to the real Django backend at /accounts/users/.
   // ------------------------------------------------------------------------------------------
 
-  /** Every live user. Needs `users.manage`. Pages are fetched until the list is complete. */
+  /** Every live user. Needs `users.manage`. */
   async listUsers() {
+    if (isDebug()) {
+      return getLocalUsers();
+    }
     return apiClient.getAll('/accounts/users/');
   },
 
   /** Creates a user. `name`, `email`, `password` and `role` (a role key) are required. */
   async createUser(userData) {
+    if (isDebug()) {
+      const local = getLocalUsers();
+      const newUser = {
+        id: `u_${Date.now()}`,
+        name: userData.name,
+        email: userData.email,
+        username: userData.username || userData.email.split('@')[0],
+        password: userData.password || 'demo123',
+        phone: userData.phone || '',
+        role: userData.role || 'worker',
+        title: userData.title || 'Staff Member',
+        notes: userData.notes || '',
+        birthday: userData.birthday || '',
+        status: userData.status || 'active',
+        joinedOn: new Date().toISOString().split('T')[0],
+        assignedProjects: [],
+      };
+      saveLocalUsers([newUser, ...local]);
+      return newUser;
+    }
     return apiClient.post('/accounts/users/', toPayload(userData));
   },
 
   /** Updates a user. Only the fields given change; a blank `password` leaves the password alone. */
   async updateUser(id, updateData) {
+    if (isDebug()) {
+      const local = getLocalUsers();
+      const updated = local.map((u) =>
+        String(u.id) === String(id) ? { ...u, ...updateData } : u
+      );
+      saveLocalUsers(updated);
+      const user = updated.find((u) => String(u.id) === String(id));
+      if (user) syncSignedInUser(user);
+      return user;
+    }
     const updated = await apiClient.patch(`/accounts/users/${id}/`, toPayload(updateData));
     syncSignedInUser(updated);
     return updated;
@@ -157,11 +192,23 @@ export const userService = {
 
   /** Activates or deactivates a user. A deactivated user is signed out at once. */
   async setUserStatus(id, status) {
+    if (isDebug()) {
+      return this.updateUser(id, { status });
+    }
     return apiClient.post(`/accounts/users/${id}/status/`, { status });
   },
 
   /** Soft-deletes a user. */
   async deleteUser(id) {
+    if (isDebug()) {
+      const local = getLocalUsers();
+      const filtered = local.filter((u) => String(u.id) !== String(id));
+      saveLocalUsers(filtered);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_users_updated', { detail: { id } }));
+      }
+      return true;
+    }
     await apiClient.delete(`/accounts/users/${id}/`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('osm_users_updated', { detail: { id } }));

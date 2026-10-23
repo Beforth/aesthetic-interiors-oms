@@ -12,6 +12,8 @@ import { validateRequired, validatePositiveNumber } from '../utils/validators';
 import PageHeader from '../components/ui/PageHeader';
 import DataToolbar from '../components/ui/DataToolbar';
 import Button from '../components/ui/Button';
+import IconButton from '../components/ui/IconButton';
+import Icon from '../components/ui/Icon';
 import ProjectCard from '../components/domain/ProjectCard';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
@@ -20,6 +22,33 @@ import Textarea from '../components/ui/Textarea';
 import EmptyState from '../components/ui/EmptyState';
 import AssigneePicker from '../components/domain/AssigneePicker';
 import PermissionGate from '../components/ui/PermissionGate';
+
+const STATUS_COLUMNS = [
+  {
+    key: 'not started',
+    aliases: ['not started', 'pending', 'planning'],
+    label: 'Planning & Kickoff',
+    color: 'border-t-sky-500',
+    countBadge: 'bg-sky-100 text-sky-800',
+    dotColor: 'bg-sky-500',
+  },
+  {
+    key: 'in progress',
+    aliases: ['in progress', 'active', 'ongoing'],
+    label: 'Fit-Out In Progress',
+    color: 'border-t-brand-600',
+    countBadge: 'bg-brand-100 text-brand-800',
+    dotColor: 'bg-brand-600',
+  },
+  {
+    key: 'completed',
+    aliases: ['completed', 'done', 'handed over'],
+    label: 'Completed & Handed Over',
+    color: 'border-t-emerald-600',
+    countBadge: 'bg-emerald-100 text-emerald-800',
+    dotColor: 'bg-emerald-600',
+  },
+];
 
 export function ProjectsPage() {
   const navigate = useNavigate();
@@ -30,11 +59,19 @@ export function ProjectsPage() {
   const isAssignedView = hasPermission('projects.viewAssigned') && !canViewAll;
   const toast = useToast();
   const canCreateProject = usePermission('projects.create');
+  const canEditProjectStatus =
+    hasPermission('stages.editProjectStages') ||
+    hasPermission('projects.create') ||
+    role !== 'client';
 
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // View mode: 'board' (Kanban default) or 'grid' (cards)
+  const [viewMode, setViewMode] = useState('board');
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -85,11 +122,66 @@ export function ProjectsPage() {
         (p.siteAddress && p.siteAddress.toLowerCase().includes(q));
 
       const matchesStatus =
-        statusFilter === 'ALL' || p.status === statusFilter;
+        statusFilter === 'ALL' ||
+        (p.status || '').toLowerCase() === statusFilter.toLowerCase();
 
       return matchesSearch && matchesStatus;
     });
   }, [projects, search, statusFilter]);
+
+  // Drag and drop project status changer
+  const handleDropProject = async (projectId, targetStatus) => {
+    if (!canEditProjectStatus) {
+      toast.error('Only authorized personnel (Admin / Manager) can update project status');
+      return;
+    }
+    const targetProj = projects.find((p) => p.id === projectId);
+    if (!targetProj) return;
+
+    const currentStatus = (targetProj.status || 'in progress').toLowerCase();
+    if (currentStatus === targetStatus.toLowerCase()) return;
+
+    try {
+      await projectService.updateProjectStatus(projectId, targetStatus);
+      const label =
+        targetStatus === 'in progress'
+          ? 'In Progress'
+          : targetStatus === 'completed'
+          ? 'Completed'
+          : 'Planning';
+      toast.success(`Project "${targetProj.name}" moved to ${label}`);
+      fetchAll();
+    } catch (err) {
+      toast.error('Failed to update project status');
+    }
+  };
+
+  // Quick sequential advance handler
+  const handleAdvanceProjectStatus = async (project) => {
+    if (!canEditProjectStatus) {
+      toast.error('Only authorized personnel (Admin / Manager) can update project status');
+      return;
+    }
+    const current = (project.status || 'in progress').toLowerCase();
+    const nextStatus =
+      current === 'not started' || current === 'pending' || current === 'planning'
+        ? 'in progress'
+        : current === 'in progress'
+        ? 'completed'
+        : 'not started';
+
+    try {
+      await projectService.updateProjectStatus(project.id, nextStatus);
+      toast.success(
+        nextStatus === 'completed'
+          ? `Project "${project.name}" marked as completed!`
+          : `Project moved to "${nextStatus}"`
+      );
+      fetchAll();
+    } catch (err) {
+      toast.error('Failed to update project status');
+    }
+  };
 
   const handleOpenCreate = () => {
     setFormData({
@@ -168,16 +260,48 @@ export function ProjectsPage() {
           { label: 'Projects' },
         ]}
         actions={
-          <PermissionGate permission="projects.create">
-            <Button
-              variant="primary"
-              size="sm"
-              leadingIcon="plus"
-              onClick={handleOpenCreate}
-            >
-              Initiate New Project
-            </Button>
-          </PermissionGate>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* View Mode Toggle: Kanban Board vs Cards Grid */}
+            <div className="flex items-center border border-border rounded-lg bg-surface p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('board')}
+                className={`px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  viewMode === 'board'
+                    ? 'bg-brand-50 text-brand-700 shadow-2xs'
+                    : 'text-text-muted hover:text-text-main'
+                }`}
+                title="Kanban Board View"
+              >
+                <Icon name="columns" size={14} />
+                <span className="hidden sm:inline">Kanban Board</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-brand-50 text-brand-700 shadow-2xs'
+                    : 'text-text-muted hover:text-text-main'
+                }`}
+                title="Cards Grid View"
+              >
+                <Icon name="grid" size={14} />
+                <span className="hidden sm:inline">Cards Grid</span>
+              </button>
+            </div>
+
+            <PermissionGate permission="projects.create">
+              <Button
+                variant="primary"
+                size="sm"
+                leadingIcon="plus"
+                onClick={handleOpenCreate}
+              >
+                Initiate New Project
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
@@ -192,7 +316,7 @@ export function ProjectsPage() {
             <button
               type="button"
               onClick={() => setStatusFilter('ALL')}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors min-h-[44px] sm:min-h-0 ${
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors min-h-[44px] sm:min-h-0 cursor-pointer ${
                 statusFilter === 'ALL'
                   ? 'bg-brand-600 text-surface'
                   : 'bg-surface text-text-muted hover:text-text-main border border-border'
@@ -202,8 +326,19 @@ export function ProjectsPage() {
             </button>
             <button
               type="button"
+              onClick={() => setStatusFilter('not started')}
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors min-h-[44px] sm:min-h-0 cursor-pointer ${
+                statusFilter === 'not started'
+                  ? 'bg-brand-600 text-surface'
+                  : 'bg-surface text-text-muted hover:text-text-main border border-border'
+              }`}
+            >
+              Planning
+            </button>
+            <button
+              type="button"
               onClick={() => setStatusFilter('in progress')}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors min-h-[44px] sm:min-h-0 ${
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors min-h-[44px] sm:min-h-0 cursor-pointer ${
                 statusFilter === 'in progress'
                   ? 'bg-brand-600 text-surface'
                   : 'bg-surface text-text-muted hover:text-text-main border border-border'
@@ -213,9 +348,9 @@ export function ProjectsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('done')}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors min-h-[44px] sm:min-h-0 ${
-                statusFilter === 'done'
+              onClick={() => setStatusFilter('completed')}
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors min-h-[44px] sm:min-h-0 cursor-pointer ${
+                statusFilter === 'completed'
                   ? 'bg-brand-600 text-surface'
                   : 'bg-surface text-text-muted hover:text-text-main border border-border'
               }`}
@@ -226,7 +361,7 @@ export function ProjectsPage() {
         }
       />
 
-      {/* Projects Grid */}
+      {/* Projects Display */}
       {loading ? (
         <div className="p-12 text-center text-xs text-text-muted">
           Loading site projects...
@@ -250,13 +385,102 @@ export function ProjectsPage() {
             )
           }
         />
+      ) : viewMode === 'board' ? (
+        /* KANBAN BOARD VIEW: grid grid-cols-1 md:grid-cols-3 gap-4 */
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {STATUS_COLUMNS.map((col) => {
+            const colProjects = filteredProjects.filter((p) => {
+              const pStatus = (p.status || 'in progress').toLowerCase();
+              return col.aliases.includes(pStatus);
+            });
+            const isTarget = dragOverCol === col.key;
+
+            return (
+              <div
+                key={col.key}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragOverCol !== col.key) setDragOverCol(col.key);
+                }}
+                onDragLeave={() => {
+                  if (dragOverCol === col.key) setDragOverCol(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverCol(null);
+                  const projectId = e.dataTransfer.getData('text/plain');
+                  if (projectId) handleDropProject(projectId, col.key);
+                }}
+                className={`space-y-3 p-1 rounded-xl transition-all ${
+                  isTarget ? 'bg-brand-50/80 ring-2 ring-brand-400' : ''
+                }`}
+              >
+                {/* Column Header */}
+                <div
+                  className={`flex items-center justify-between p-3 rounded-xl border border-border bg-surface border-t-4 ${col.color} shadow-2xs`}
+                >
+                  <div className="font-bold text-xs uppercase tracking-wider text-text-main flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${col.dotColor}`} />
+                    <span>{col.label}</span>
+                    <span
+                      className={`w-5 h-5 rounded-full ${col.countBadge} text-[11px] font-mono flex items-center justify-center font-bold`}
+                    >
+                      {colProjects.length}
+                    </span>
+                  </div>
+                  {canCreateProject && col.key === 'not started' && (
+                    <IconButton
+                      icon="plus"
+                      size="xs"
+                      ariaLabel="Initiate Project"
+                      onClick={handleOpenCreate}
+                    />
+                  )}
+                </div>
+
+                {/* Column Cards Drop Area */}
+                <div className="space-y-3 min-h-[420px]">
+                  {colProjects.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-text-muted border-2 border-dashed border-border/80 rounded-xl bg-surface/50">
+                      No sites in {col.label.toLowerCase()}
+                      {canEditProjectStatus && (
+                        <p className="text-[11px] text-text-muted mt-1">
+                          Drag a project card here to update status
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    colProjects.map((project) => (
+                      <ProjectCard
+                        key={project.id}
+                        project={project}
+                        teamUsers={users}
+                        draggable={canEditProjectStatus}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', project.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        canAdvance={canEditProjectStatus}
+                        onAdvance={handleAdvanceProjectStatus}
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* STANDARD CARDS GRID VIEW */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
           {filteredProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
               teamUsers={users}
+              canAdvance={canEditProjectStatus}
+              onAdvance={handleAdvanceProjectStatus}
               onClick={() => navigate(`/projects/${project.id}`)}
             />
           ))}

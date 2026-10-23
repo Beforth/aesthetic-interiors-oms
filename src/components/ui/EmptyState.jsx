@@ -2,14 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 
 /**
- * Reusable empty state view for tables, lists, and empty screens.
- *
- * @param {Object} props
- * @param {string} [props.icon='folder']
- * @param {string} props.title
- * @param {string} [props.description]
- * @param {React.ReactNode} [props.action]
- * @param {string} [props.className]
+ * befui EmptyState component conforming to https://befui.vercel.app/
  */
 export function EmptyState({
   icon = 'folder',
@@ -20,14 +13,14 @@ export function EmptyState({
 }) {
   return (
     <div
-      className={`flex flex-col items-center justify-center text-center p-8 border border-dashed border-border rounded bg-surface/60 ${className}`}
+      className={`flex flex-col items-center justify-center text-center p-8 border border-dashed border-border rounded-xl bg-card/40 ${className}`}
     >
-      <div className="w-12 h-12 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center mb-3">
-        <Icon name={icon} size={24} />
+      <div className="w-10 h-10 rounded-full bg-muted text-muted-foreground flex items-center justify-center mb-3">
+        <Icon name={icon} size={20} />
       </div>
-      <h4 className="text-sm font-semibold text-text-main">{title}</h4>
+      <h4 className="text-sm font-semibold tracking-tight text-text-main">{title}</h4>
       {description && (
-        <p className="text-xs text-text-muted mt-1 max-w-sm leading-relaxed">
+        <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
           {description}
         </p>
       )}

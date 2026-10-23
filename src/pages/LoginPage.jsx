@@ -9,6 +9,7 @@ import Icon from '../components/ui/Icon';
 import Alert from '../components/ui/Alert';
 import Checkbox from '../components/ui/Checkbox';
 import { validateEmail } from '../utils/validators';
+import { isDebug } from '../config/env';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -82,9 +83,8 @@ export function LoginPage() {
       const user = await login(usernameOrEmail, password, rememberMe);
       handleLoginSuccess(user);
     } catch (err) {
-      setErrorMessage(
-        err.message || 'Authentication failed. Please verify your credentials.'
-      );
+      const msg = err.message || 'Authentication failed. Please verify your credentials.';
+      setErrorMessage(!isDebug() && (msg.includes('Failed to fetch') || msg.includes('network') || msg.includes('server')) ? msg + ' (Backend API is offline. Set DEBUG=true in .env to run without API)' : msg);
     } finally {
       setLoading(false);
     }
@@ -219,6 +219,17 @@ export function LoginPage() {
                 <Icon name="shield" size={13} className="text-brand-600" />
                 <span>Log in by Email, Username, or Role</span>
               </span>
+              {isDebug() ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  DEBUG ON (No API Needed)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  DEBUG OFF (API Required)
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {[
@@ -233,6 +244,9 @@ export function LoginPage() {
                   key={item.key}
                   onClick={() => {
                     setUsernameOrEmail(item.key);
+                    if (isDebug()) {
+                      setPassword(item.key === 'admin' ? 'admin123' : 'demo123');
+                    }
                     if (validationErrors.usernameOrEmail) {
                       setValidationErrors((prev) => ({ ...prev, usernameOrEmail: '' }));
                     }

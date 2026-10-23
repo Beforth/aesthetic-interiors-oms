@@ -38,7 +38,7 @@ function getStoredAttendance() {
     const raw = localStorage.getItem(STORAGE_ATTENDANCE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed) && parsed.length >= 4 && parsed.some(r => r.coordinates)) {
         return parsed;
       }
     }

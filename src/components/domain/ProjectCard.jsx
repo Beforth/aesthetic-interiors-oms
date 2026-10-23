@@ -8,14 +8,28 @@ import { formatCurrency } from '../../utils/formatters';
 import { calculateProgress, hasLateStages } from '../../utils/progress';
 
 /**
- * Domain card representing a Project entity with progress and late stage alerts.
+ * Domain card representing a Project entity with progress, kanban draggable support, and late stage alerts.
  *
  * @param {Object} props
  * @param {Object} props.project
  * @param {Array<Object>} [props.teamUsers=[]] - Resolved user objects for supervisors & workers
  * @param {function(): void} [props.onClick]
+ * @param {boolean} [props.draggable=false]
+ * @param {function(React.DragEvent): void} [props.onDragStart]
+ * @param {function(React.DragEvent): void} [props.onDragEnd]
+ * @param {boolean} [props.canAdvance=false]
+ * @param {function(Object): void} [props.onAdvance]
  */
-export function ProjectCard({ project, teamUsers = [], onClick }) {
+export function ProjectCard({
+  project,
+  teamUsers = [],
+  onClick,
+  draggable = false,
+  onDragStart,
+  onDragEnd,
+  canAdvance = false,
+  onAdvance,
+}) {
   const progress = calculateProgress(project.stages || []);
   const isDelayed = hasLateStages(project.stages || []);
 
@@ -34,9 +48,12 @@ export function ProjectCard({ project, teamUsers = [], onClick }) {
 
   return (
     <Card
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onClick}
       className={`transition-all hover:border-brand-500 hover:shadow-sm ${
-        onClick ? 'cursor-pointer' : ''
+        draggable ? 'cursor-grab active:cursor-grabbing' : onClick ? 'cursor-pointer' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -84,25 +101,41 @@ export function ProjectCard({ project, teamUsers = [], onClick }) {
           </span>
         </div>
 
-        {assignedTeam.length > 0 ? (
-          <div className="flex items-center -space-x-2 overflow-hidden">
-            {assignedTeam.slice(0, 4).map((member) => (
-              <Avatar
-                key={member.id}
-                name={member.name}
-                size="sm"
-                className="ring-2 ring-surface"
-              />
-            ))}
-            {assignedTeam.length > 4 && (
-              <span className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold flex items-center justify-center ring-2 ring-surface">
-                +{assignedTeam.length - 4}
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="text-text-muted italic text-[11px]">No team assigned</span>
-        )}
+        <div className="flex items-center gap-2">
+          {assignedTeam.length > 0 ? (
+            <div className="flex items-center -space-x-2 overflow-hidden">
+              {assignedTeam.slice(0, 4).map((member) => (
+                <Avatar
+                  key={member.id}
+                  name={member.name}
+                  size="sm"
+                  className="ring-2 ring-surface"
+                />
+              ))}
+              {assignedTeam.length > 4 && (
+                <span className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold flex items-center justify-center ring-2 ring-surface">
+                  +{assignedTeam.length - 4}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-text-muted italic text-[11px]">No team assigned</span>
+          )}
+
+          {canAdvance && onAdvance && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAdvance(project);
+              }}
+              title={`Advance status from "${project.status || 'in progress'}"`}
+              className="p-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 transition-colors cursor-pointer shrink-0"
+            >
+              <Icon name="arrow-right" size={13} />
+            </button>
+          )}
+        </div>
       </div>
     </Card>
   );

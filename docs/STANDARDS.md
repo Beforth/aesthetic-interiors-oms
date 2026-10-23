@@ -35,7 +35,7 @@ Rule entry template:
 | `ae-oms-fe` (this repo) | React 18 + Vite + Tailwind CSS (JavaScript) | Operations & CRM web client |
 
 - Backend and frontend are **separate repositories**, kept side by side in one parent folder (`Aesthetic-Interior/`). They talk **only** through the versioned HTTP API. This repo holds the frontend only; the backend sections below are the rules the backend repo follows.
-- In local dev the frontend proxies `/api` and `/media` to the backend (`vite.config.js`), so the frontend `.env` can stay empty.
+- In local dev the frontend proxies `/api` and `/media` to the backend (`vite.config.js`). Set `DEBUG=true` in `.env` to run standalone without any backend API (mock mode); set `DEBUG=false` to strictly connect to the live backend API.
 - Frontend local setup, from the root of this repo: `npm install`, then `npm run dev` (Vite on http://localhost:5173; it proxies `/api` and `/media` to the backend on http://127.0.0.1:8000, so start the backend first and sign in with a backend user, for example the `admin` / `admin123` demo account). `npm run build` makes a production build. The backend's own setup steps live in the `ae-oms-be` repo.
 - Git: never commit directly to `main`. Work on a `feat/...` branch and merge through a pull request. Swagger UI is at `http://127.0.0.1:8000/api/docs/` (schema at `/api/schema/`). Run `python manage.py check` and `python manage.py makemigrations --check` before committing.
 - Secrets live in `.env` (gitignored). Commit only `.env.example`. Never hardcode `SECRET_KEY`, DB passwords, tokens, or API keys.

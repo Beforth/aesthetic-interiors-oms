@@ -3,7 +3,7 @@ import Icon from './Icon';
 import FormField from './FormField';
 
 /**
- * Standard text input field with error and icon integration.
+ * befui Input component conforming to https://befui.vercel.app/
  */
 export const Input = forwardRef(function Input(
   {
@@ -27,8 +27,8 @@ export const Input = forwardRef(function Input(
   const baseInput = (
     <div className="relative flex items-center w-full">
       {leadingIcon && (
-        <div className="absolute left-3 text-text-muted pointer-events-none flex items-center">
-          <Icon name={leadingIcon} size={16} />
+        <div className="absolute left-3 text-muted-foreground pointer-events-none flex items-center">
+          <Icon name={leadingIcon} size={15} />
         </div>
       )}
       <input
@@ -39,23 +39,21 @@ export const Input = forwardRef(function Input(
         required={required}
         aria-invalid={!!error}
         aria-describedby={error ? `${inputId}-error` : undefined}
-        className={`w-full bg-surface border rounded text-sm text-text-main placeholder:text-text-muted/60 transition-colors
-          min-h-[44px] sm:min-h-[38px] px-3 py-2
+        className={`w-full rounded-md border bg-background px-3 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] placeholder:text-muted-foreground/70 hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 h-9
           ${leadingIcon ? 'pl-9' : ''}
           ${trailingIcon ? 'pr-9' : ''}
           ${
             error
-              ? 'border-danger focus:border-danger focus:ring-1 focus:ring-danger'
-              : 'border-border focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
+              ? 'border-destructive focus:border-destructive focus:ring-destructive/20 text-destructive'
+              : 'border-border'
           }
-          focus:outline-none disabled:bg-brand-50 disabled:text-text-muted disabled:cursor-not-allowed
           ${className}
         `}
         {...rest}
       />
       {trailingIcon && (
-        <div className="absolute right-3 text-text-muted pointer-events-none flex items-center">
-          <Icon name={trailingIcon} size={16} />
+        <div className="absolute right-3 text-muted-foreground pointer-events-none flex items-center">
+          <Icon name={trailingIcon} size={15} />
         </div>
       )}
     </div>
@@ -65,10 +63,10 @@ export const Input = forwardRef(function Input(
     return (
       <FormField
         label={label}
-        htmlFor={inputId}
         required={required}
         error={error}
         helperText={helperText}
+        htmlFor={inputId}
       >
         {baseInput}
       </FormField>
@@ -78,4 +76,5 @@ export const Input = forwardRef(function Input(
   return baseInput;
 });
 
+Input.displayName = 'Input';
 export default Input;

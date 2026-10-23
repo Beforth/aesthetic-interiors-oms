@@ -3,16 +3,7 @@ import Icon from './Icon';
 import Spinner from './Spinner';
 
 /**
- * Accessible button solely for icons with mandatory ariaLabel.
- *
- * @param {Object} props
- * @param {string} props.icon - Icon name from iconMap
- * @param {string} props.ariaLabel - Accessible name for screen readers
- * @param {'ghost'|'outline'|'primary'|'secondary'} [props.variant='ghost']
- * @param {'sm'|'md'|'lg'} [props.size='md']
- * @param {boolean} [props.loading=false]
- * @param {boolean} [props.disabled=false]
- * @param {string} [props.className]
+ * befui IconButton component conforming to https://befui.vercel.app/
  */
 export function IconButton({
   icon,
@@ -26,37 +17,34 @@ export function IconButton({
   ...rest
 }) {
   const baseClasses =
-    'inline-flex items-center justify-center rounded transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0';
+    'inline-flex shrink-0 items-center justify-center rounded-md transition-[background,box-shadow,transform,color] duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-[0.98]';
 
   const sizeClasses = {
-    sm: 'w-8 h-8',
-    md: 'w-10 h-10',
-    lg: 'w-12 h-12',
+    xs: 'size-7',
+    sm: 'size-8',
+    md: 'size-9',
+    lg: 'size-10',
   };
 
   const variantClasses = {
-    primary: 'bg-brand-600 text-surface hover:bg-brand-700 active:bg-brand-700',
-    secondary: 'bg-brand-100 text-brand-700 hover:bg-brand-50 active:bg-brand-100',
-    outline: 'bg-surface text-brand-700 border border-border hover:bg-brand-50',
-    ghost: 'bg-transparent text-text-muted hover:text-text-main hover:bg-brand-100',
+    primary: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs border border-transparent',
+    secondary: 'bg-accent text-accent-foreground hover:bg-accent/80 border border-transparent',
+    outline: 'bg-card text-text-main border border-border hover:bg-muted shadow-xs',
+    ghost: 'bg-transparent text-muted-foreground hover:text-text-main hover:bg-muted border border-transparent',
+    danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border border-transparent shadow-xs',
   };
 
-  const iconSize = size === 'sm' ? 16 : size === 'lg' ? 22 : 18;
+  const iconSize = size === 'xs' ? 13 : size === 'sm' ? 15 : size === 'lg' ? 18 : 16;
 
   return (
     <button
       type={type}
       disabled={disabled || loading}
       aria-label={ariaLabel}
-      data-tooltip={ariaLabel}
       className={`${baseClasses} ${sizeClasses[size] || sizeClasses.md} ${variantClasses[variant] || variantClasses.ghost} ${className}`}
       {...rest}
     >
-      {loading ? (
-        <Spinner size={size === 'lg' ? 'md' : 'sm'} />
-      ) : (
-        <Icon name={icon} size={iconSize} />
-      )}
+      {loading ? <Spinner size="sm" /> : <Icon name={icon} size={iconSize} />}
     </button>
   );
 }

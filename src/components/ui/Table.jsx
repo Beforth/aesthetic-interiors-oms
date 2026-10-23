@@ -4,19 +4,7 @@ import Skeleton from './Skeleton';
 import Pagination from './Pagination';
 
 /**
- * Robust, accessible Table component with columns configuration, loading skeletons,
- * empty state, and integrated pagination.
- *
- * @param {Object} props
- * @param {Array<{key: string, header: string|React.ReactNode, render?: function, width?: string, align?: 'left'|'center'|'right', className?: string}>} props.columns
- * @param {Array<Object>} props.data
- * @param {string} [props.keyField='id']
- * @param {function(Object): void} [props.onRowClick]
- * @param {boolean} [props.loading=false]
- * @param {string} [props.emptyTitle='No data available']
- * @param {string} [props.emptyDescription]
- * @param {Object} [props.pagination] - Pagination props
- * @param {string} [props.className]
+ * befui Table component conforming to https://befui.vercel.app/
  */
 export function Table({
   columns = [],
@@ -30,16 +18,16 @@ export function Table({
   className = '',
 }) {
   return (
-    <div className={`w-full bg-surface border border-border rounded overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)] ${className}`}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-brand-50">
+    <div className={`w-full rounded-xl border border-border overflow-hidden bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] ${className}`}>
+      <div className="relative w-full overflow-x-auto">
+        <table className="w-full text-left border-collapse text-[13px]">
+          <thead className="bg-muted/40 border-b border-border/80">
+            <tr>
               {columns.map((col, idx) => (
                 <th
                   key={col.key || idx}
                   style={{ width: col.width }}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted select-none
+                  className={`h-9 whitespace-nowrap px-4 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-muted-foreground select-none
                     ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}
                     ${col.className || ''}
                   `}
@@ -49,69 +37,53 @@ export function Table({
               ))}
             </tr>
           </thead>
-
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-border/60">
             {loading ? (
-              // Skeletons during loading state
-              Array.from({ length: 5 }).map((_, rIdx) => (
-                <tr key={`loading-row-${rIdx}`} className="bg-surface">
-                  {columns.map((col, cIdx) => (
-                    <td key={`loading-cell-${cIdx}`} className="px-4 py-3">
-                      <Skeleton variant="text" width={col.width || '80%'} height={16} />
+              Array.from({ length: 4 }).map((_, rIdx) => (
+                <tr key={`skel-${rIdx}`} className="border-b border-border/60">
+                  {columns.map((_, cIdx) => (
+                    <td key={`skel-c-${cIdx}`} className="px-4 py-3">
+                      <Skeleton className="h-4 w-3/4 rounded-md" />
                     </td>
                   ))}
                 </tr>
               ))
             ) : data.length === 0 ? (
-              // Empty State
               <tr>
-                <td colSpan={columns.length} className="p-8">
-                  <EmptyState
-                    title={emptyTitle}
-                    description={emptyDescription}
-                  />
+                <td colSpan={columns.length} className="px-4 py-10">
+                  <EmptyState title={emptyTitle} description={emptyDescription} />
                 </td>
               </tr>
             ) : (
-              // Data Rows
-              data.map((row, rIdx) => {
-                const rowKey = row[keyField] || rIdx;
-                const isClickable = !!onRowClick;
-
-                return (
-                  <tr
-                    key={rowKey}
-                    onClick={() => onRowClick && onRowClick(row)}
-                    className={`bg-surface transition-colors
-                      ${isClickable ? 'cursor-pointer hover:bg-brand-100/60' : 'hover:bg-brand-50/60'}
-                    `}
-                  >
-                    {columns.map((col, cIdx) => {
-                      const cellValue = row[col.key];
-                      const rendered = col.render ? col.render(row, rIdx) : cellValue;
-
-                      return (
-                        <td
-                          key={col.key || cIdx}
-                          className={`px-4 py-3 text-text-main align-middle
-                            ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}
-                            ${col.className || ''}
-                          `}
-                        >
-                          {rendered ?? '-'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })
+              data.map((row, rIdx) => (
+                <tr
+                  key={row[keyField] || rIdx}
+                  onClick={() => onRowClick?.(row)}
+                  className={`border-b border-border/60 transition-colors hover:bg-muted/70 ${
+                    onRowClick ? 'cursor-pointer' : ''
+                  }`}
+                >
+                  {columns.map((col, cIdx) => (
+                    <td
+                      key={col.key || cIdx}
+                      className={`px-4 py-3 align-middle text-[13px] ${
+                        col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
+                      } ${col.cellClassName || ''}`}
+                    >
+                      {col.render ? col.render(row[col.key], row, rIdx) : (row[col.key] ?? '—')}
+                    </td>
+                  ))}
+                </tr>
+              ))
             )}
           </tbody>
         </table>
       </div>
 
       {pagination && !loading && data.length > 0 && (
-        <Pagination {...pagination} />
+        <div className="border-t border-border/70 p-3 bg-muted/10">
+          <Pagination {...pagination} />
+        </div>
       )}
     </div>
   );
