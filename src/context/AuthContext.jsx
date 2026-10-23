@@ -6,7 +6,9 @@ const AuthContext = createContext(null);
 
 // Must match the backend refresh-token lifetime (JWT_REFRESH_MINUTES): after this long without any user
 // activity the session can no longer be refreshed, so the app signs out here too.
-const IDLE_LIMIT_MS = 10 * 60 * 1000;
+// Switched off while developing (npm run dev), so a coffee break does not sign the developer out; production
+// builds keep it.
+const IDLE_LIMIT_MS = import.meta.env.DEV ? Infinity : 10 * 60 * 1000;
 // While the user is active, renew the session well inside the 5-minute access-token lifetime.
 const KEEPALIVE_MS = 4 * 60 * 1000;
 const TICK_MS = 30 * 1000;

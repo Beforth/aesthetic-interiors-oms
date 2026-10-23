@@ -61,7 +61,7 @@ export const navigationItems = [
   },
   {
     id: 'daily-reports',
-    label: 'Daily Reports',
+    label: 'DSR',
     path: '/daily-reports',
     icon: 'daily-reports',
     permissions: ['dsr.submit', 'dsr.viewAll', 'feedback.submit'],
