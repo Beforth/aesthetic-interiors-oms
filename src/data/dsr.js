@@ -45,9 +45,18 @@ export function dateDaysAgo(daysAgo = 0) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** Local date and time as YYYY-MM-DDTHH:MM:SS. Not UTC, so it sorts correctly against the entries below. */
+export function localTimestamp(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// Demo submission times: the entries below are listed newest first, so each one is a little earlier than the last.
+let seq = 0;
 const entry = (id, daysAgo, who, task, project, category, minutes, status, extra = {}) => ({
   id,
   date: dateDaysAgo(daysAgo),
+  createdAt: `${dateDaysAgo(daysAgo)}T${String(18 - Math.floor(seq / 3) % 9).padStart(2, '0')}:${String((seq++ * 13) % 60).padStart(2, '0')}:00`,
   ...PEOPLE[who],
   task,
   project,

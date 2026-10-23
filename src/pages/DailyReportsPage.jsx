@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLE_LABELS } from '../config/roles';
-import { DSR_CATEGORIES, DSR_PROJECTS, DSR_STATUSES, NO_PROJECT, dateDaysAgo, mockDsrEntries } from '../data/dsr';
+import { DSR_CATEGORIES, DSR_PROJECTS, DSR_STATUSES, NO_PROJECT, dateDaysAgo, localTimestamp, mockDsrEntries } from '../data/dsr';
 import { downloadCsv, entriesToCsv, formatDuration, parseDuration } from '../utils/dsr';
 import { validateRequired } from '../utils/validators';
 
@@ -16,8 +16,9 @@ import SearchInput from '../components/ui/SearchInput';
 import EmptyState from '../components/ui/EmptyState';
 import PermissionGate from '../components/ui/PermissionGate';
 import { StatusBadge } from '../components/ui/Badge';
+import PersonMenu from '../components/dsr/PersonMenu';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 const PERIODS = [
   { value: 'today', label: 'Today' },
@@ -27,13 +28,13 @@ const PERIODS = [
   { value: 'all', label: 'All time' },
 ];
 
-// `person: ''` means "me": everyone opens their own DSR first, and a person is picked to look at someone else's.
+// `people: null` means "me": everyone opens their own DSR first, then ticks other people in the Person menu.
 const DEFAULT_FILTERS = {
   period: '7d',
   from: '',
   to: '',
   search: '',
-  person: '',
+  people: null,
   project: 'ALL',
   category: 'ALL',
   status: 'ALL',
@@ -41,7 +42,7 @@ const DEFAULT_FILTERS = {
 
 const EMPTY_FORM = { task: '', project: NO_PROJECT, category: DSR_CATEGORIES[0], time: '', status: 'completed', note: '' };
 
-const TH = 'px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-r border-border last:border-r-0';
+const TH = 'px-5 py-3 border-b border-border bg-brand-50 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-r border-border last:border-r-0';
 const TD = 'px-5 py-4 align-middle border-r border-border last:border-r-0';
 
 /** The date range (inclusive, YYYY-MM-DD) a period stands for; a from/to pair overrides the period. */
@@ -58,6 +59,18 @@ function rangeFor({ period, from, to }) {
 function dayLabel(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function longDayLabel(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function timeLabel(createdAt) {
+  const time = (createdAt || '').split('T')[1];
+  if (!time) return '';
+  const [h, m] = time.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
 const sum = (rows) => rows.reduce((total, e) => total + e.minutes, 0);
@@ -79,11 +92,12 @@ export function DailyReportsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [deleting, setDeleting] = useState(null);
-  const [viewing, setViewing] = useState(null); // the entry whose description is open
+  const [viewing, setViewing] = useState(null); // the entry whose details are open
 
   // Whose DSR is on screen. Only people who may see everyone's work can look at anyone else's.
-  const person = canViewAll && filters.person ? filters.person : me;
-  const viewingSelf = person === me;
+  const selectedPeople = canViewAll && filters.people ? filters.people : [me];
+  const viewingSelf = selectedPeople.length === 1 && selectedPeople[0] === me;
+  const multiple = selectedPeople.length > 1;
   const canChange = (e) => canViewAll || e.authorName === me;
 
   const setFilter = (key, value) => {
@@ -98,6 +112,8 @@ export function DailyReportsPage() {
     setPage(1);
   };
 
+  const setPeople = (names) => setFilter('people', names.length === 1 && names[0] === me ? null : names);
+
   const moreCount =
     ['project', 'category', 'status'].filter((k) => filters[k] !== 'ALL').length + (filters.from || filters.to ? 1 : 0);
   const hasActiveFilters = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
@@ -106,12 +122,8 @@ export function DailyReportsPage() {
     setPage(1);
   };
 
-  // Everyone in the person filter: me first, then the others A to Z (the admin is one of them)
-  const peopleOptions = useMemo(() => {
-    const others = [...new Set(entries.map((e) => e.authorName))].filter((n) => n !== me).sort();
-    return [{ value: me, label: `${me} (You)` }, ...others.map((n) => ({ value: n, label: n }))];
-  }, [entries, me]);
-
+  // Everyone else who has logged work, A to Z (the admin is one of them)
+  const others = useMemo(() => [...new Set(entries.map((e) => e.authorName))].filter((n) => n !== me).sort(), [entries, me]);
   const projects = useMemo(() => [...new Set([...DSR_PROJECTS, ...entries.map((e) => e.project)])], [entries]);
 
   const filtered = useMemo(() => {
@@ -119,17 +131,19 @@ export function DailyReportsPage() {
     const q = filters.search.trim().toLowerCase();
     return entries
       .filter((e) => {
-        if (e.authorName !== person) return false;
+        if (!selectedPeople.includes(e.authorName)) return false;
         if (start && e.date < start) return false;
         if (end && e.date > end) return false;
         if (filters.project !== 'ALL' && e.project !== filters.project) return false;
         if (filters.category !== 'ALL' && e.category !== filters.category) return false;
         if (filters.status !== 'ALL' && e.status !== filters.status) return false;
-        if (q && ![e.task, e.note, e.project, e.category].some((v) => (v || '').toLowerCase().includes(q))) return false;
+        if (q && ![e.task, e.note, e.project, e.category, e.authorName].some((v) => (v || '').toLowerCase().includes(q))) return false;
         return true;
       })
-      .sort((a, b) => b.date.localeCompare(a.date)); // newest day first; stable, so a day keeps its order
-  }, [entries, filters, person]);
+      // newest day first; within a day, whoever logged work most recently is on top
+      .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, filters, selectedPeople.join('|')]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -142,6 +156,10 @@ export function DailyReportsPage() {
   }, [pageRows]);
 
   const completed = filtered.filter((e) => e.status === 'completed').length;
+
+  let whose = `${selectedPeople[0]}'s`;
+  if (viewingSelf) whose = 'Your';
+  else if (multiple) whose = others.length + 1 === selectedPeople.length ? "Everyone's" : "Selected people's";
 
   // ------------------------------------------------------------------ add / edit
   const openAdd = () => {
@@ -195,6 +213,7 @@ export function DailyReportsPage() {
         {
           id: `dsr-${Date.now()}`,
           date: dateDaysAgo(0),
+          createdAt: localTimestamp(),
           authorId: String(currentUser?.id ?? ''),
           authorName: me || 'You',
           authorRole: ROLE_LABELS[role] || role || '',
@@ -221,11 +240,14 @@ export function DailyReportsPage() {
       toast.error('There is nothing to export for these filters');
       return;
     }
-    downloadCsv(`dsr-${person.toLowerCase().replace(/\s+/g, '-')}-${dateDaysAgo(0)}.csv`, entriesToCsv(filtered));
+    const who = viewingSelf || selectedPeople.length === 1 ? selectedPeople[0].toLowerCase().replace(/\s+/g, '-') : 'team';
+    downloadCsv(`dsr-${who}-${dateDaysAgo(0)}.csv`, entriesToCsv(filtered));
     toast.success(`Exported ${plural(filtered.length, 'entry', 'entries')}`);
   };
 
   const selectOptions = (all, items) => [{ value: 'ALL', label: all }, ...items.map((v) => (typeof v === 'string' ? { value: v, label: v } : v))];
+
+  const hasAnyForSelection = entries.some((e) => selectedPeople.includes(e.authorName));
 
   const renderRow = (e, group, index) => (
     <tr key={e.id} className="border-t border-border hover:bg-brand-50/50 transition-colors">
@@ -235,6 +257,12 @@ export function DailyReportsPage() {
           <div className="text-xs text-text-muted mt-1 whitespace-nowrap">
             {formatDuration(group.minutes)} · {plural(group.rows.length, 'entry', 'entries')}
           </div>
+        </td>
+      )}
+      {multiple && (
+        <td className={`${TD} whitespace-nowrap`}>
+          <div className="text-sm font-medium text-text-main">{e.authorName === me ? 'Me' : e.authorName}</div>
+          <div className="text-[11px] text-text-muted">{timeLabel(e.createdAt)}</div>
         </td>
       )}
       <td className={TD}>
@@ -266,10 +294,11 @@ export function DailyReportsPage() {
   );
 
   return (
-    <div className="space-y-4 sm:-mx-4 lg:-mx-6">
+    // The page fills the space under the top bar and scrolls the table itself, so the sidebar and header stay put.
+    <div className="flex flex-col gap-4 min-h-[520px] h-[calc(100dvh-184px)] lg:h-[calc(100dvh-144px)] sm:-mx-4 lg:-mx-6">
       <PageHeader
         title="Daily Status Report"
-        subtitle={viewingSelf ? 'Your submitted work' : `${person}'s submitted work`}
+        subtitle={`${whose} submitted work`}
         actions={
           <>
             <Button variant="outline" size="sm" leadingIcon="download" onClick={exportCsv}>
@@ -282,21 +311,15 @@ export function DailyReportsPage() {
             </PermissionGate>
           </>
         }
-        className="!mb-2"
+        className="!mb-0 shrink-0"
       />
 
       {/* Filters: one quiet row; the less-used filters sit behind the Filters button */}
-      <div className="space-y-2">
+      <div className="space-y-2 shrink-0">
         <div className="flex flex-col md:flex-row md:items-center gap-2">
           {canViewAll && (
             <div className="w-full md:w-56 shrink-0">
-              <Select
-                aria-label="Person"
-                placeholder={null}
-                value={person}
-                onChange={(e) => setFilter('person', e.target.value === me ? '' : e.target.value)}
-                options={peopleOptions}
-              />
+              <PersonMenu me={me} others={others} value={selectedPeople} onChange={setPeople} />
             </div>
           )}
           <div className="flex-1 min-w-[200px]">
@@ -322,15 +345,12 @@ export function DailyReportsPage() {
         </div>
 
         {showMore && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <Select aria-label="Project" placeholder={null} value={filters.project} onChange={(e) => setFilter('project', e.target.value)} options={selectOptions('All projects', projects)} />
-            <Select aria-label="Category" placeholder={null} value={filters.category} onChange={(e) => setFilter('category', e.target.value)} options={selectOptions('All categories', DSR_CATEGORIES)} />
-            <Select aria-label="Status" placeholder={null} value={filters.status} onChange={(e) => setFilter('status', e.target.value)} options={selectOptions('All statuses', DSR_STATUSES)} />
-            <div className="flex items-center gap-2">
-              <Input aria-label="From date" type="date" value={filters.from} max={filters.to || undefined} onChange={(e) => setFilter('from', e.target.value)} />
-              <span className="text-xs text-text-muted">to</span>
-              <Input aria-label="To date" type="date" value={filters.to} min={filters.from || undefined} onChange={(e) => setFilter('to', e.target.value)} />
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <Select label="Project" aria-label="Project" placeholder={null} value={filters.project} onChange={(e) => setFilter('project', e.target.value)} options={selectOptions('All projects', projects)} />
+            <Select label="Category" aria-label="Category" placeholder={null} value={filters.category} onChange={(e) => setFilter('category', e.target.value)} options={selectOptions('All categories', DSR_CATEGORIES)} />
+            <Select label="Status" aria-label="Status" placeholder={null} value={filters.status} onChange={(e) => setFilter('status', e.target.value)} options={selectOptions('All statuses', DSR_STATUSES)} />
+            <Input label="From" className="sm:!h-[38px]" aria-label="From date" type="date" value={filters.from} max={filters.to || undefined} onChange={(e) => setFilter('from', e.target.value)} />
+            <Input label="To" className="sm:!h-[38px]" aria-label="To date" type="date" value={filters.to} min={filters.from || undefined} onChange={(e) => setFilter('to', e.target.value)} />
           </div>
         )}
 
@@ -343,17 +363,17 @@ export function DailyReportsPage() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table: this is the part that scrolls */}
       {filtered.length === 0 ? (
         <EmptyState
           icon="daily-reports"
-          title={entries.some((e) => e.authorName === person) ? 'No entries match these filters' : 'No work logged yet'}
+          title={hasAnyForSelection ? 'No entries match these filters' : 'No work logged yet'}
           description={
-            entries.some((e) => e.authorName === person)
+            hasAnyForSelection
               ? 'Try a wider period or clear the filters.'
               : viewingSelf
               ? 'Add what you worked on and it will show up here.'
-              : `${person} has not logged any work yet.`
+              : 'Nobody selected has logged any work yet.'
           }
           action={
             hasActiveFilters ? (
@@ -370,13 +390,14 @@ export function DailyReportsPage() {
           }
         />
       ) : (
-        <div className="bg-surface border border-border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="flex-1 min-h-0 flex flex-col bg-surface border border-border rounded-lg overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full min-w-[900px] text-left border-collapse">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-brand-50">
                   <th className={`${TH} text-center`}>Date</th>
-                  <th className={`${TH} w-[36%]`}>Task</th>
+                  {multiple && <th className={TH}>Person</th>}
+                  <th className={`${TH} w-[34%]`}>Task</th>
                   <th className={TH}>Project</th>
                   <th className={TH}>Category</th>
                   <th className={`${TH} text-center`}>Time</th>
@@ -389,7 +410,7 @@ export function DailyReportsPage() {
           </div>
 
           {pageCount > 1 && (
-            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-text-muted">
+            <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-text-muted">
               <span>
                 Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
               </span>
@@ -453,18 +474,49 @@ export function DailyReportsPage() {
         </form>
       </Modal>
 
-      {/* Description of one task, opened with the info button */}
+      {/* Details of one entry, opened with the info button */}
       <Modal
         isOpen={Boolean(viewing)}
         onClose={() => setViewing(null)}
-        title={viewing?.task}
-        subtitle={viewing ? `${viewing.project} · ${viewing.category} · ${formatDuration(viewing.minutes)}` : ''}
-        size="sm"
+        title="Task details"
+        size="md"
+        footer={
+          <Button variant="outline" size="sm" onClick={() => setViewing(null)}>
+            Close
+          </Button>
+        }
       >
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">Description</div>
-        <p className="text-sm text-text-main leading-relaxed whitespace-pre-wrap">
-          {viewing?.note || <span className="text-text-muted">No description added.</span>}
-        </p>
+        {viewing && (
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <h3 className="text-base font-semibold text-text-main leading-snug">{viewing.task}</h3>
+              <StatusBadge status={viewing.status} size="sm" className="shrink-0" />
+            </div>
+
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+              {[
+                ['Person', viewing.authorName === me ? `${viewing.authorName} (You)` : viewing.authorName],
+                ['Date', longDayLabel(viewing.date)],
+                ['Project', viewing.project],
+                ['Category', viewing.category],
+                ['Time spent', formatDuration(viewing.minutes)],
+                ['Logged at', timeLabel(viewing.createdAt) || '-'],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">{label}</dt>
+                  <dd className="mt-1 text-sm text-text-main">{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Description</div>
+              <div className="mt-1.5 rounded-lg border border-border bg-brand-50 px-3.5 py-3 text-sm leading-relaxed text-text-main whitespace-pre-wrap">
+                {viewing.note || <span className="text-text-muted">No description added.</span>}
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal
