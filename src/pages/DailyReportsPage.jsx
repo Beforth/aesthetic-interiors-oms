@@ -18,7 +18,14 @@ import PermissionGate from '../components/ui/PermissionGate';
 import PersonMenu from '../components/dsr/PersonMenu';
 import useFixedShell from '../components/dsr/useFixedShell';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZES = [10, 25, 50, 100];
+
+/** Page numbers to show: 1 2 3 ... 9 10, always including the first, last and the pages around the current one. */
+function pageNumbers(current, total) {
+  const pages = new Set([1, total, current - 1, current, current + 1]);
+  const list = [...pages].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+  return list.flatMap((n, i) => (i > 0 && n - list[i - 1] > 1 ? ['gap-' + n, n] : [n]));
+}
 
 const PERIODS = [
   { value: 'today', label: 'Today' },
@@ -104,6 +111,7 @@ export function DailyReportsPage() {
   const [entries, setEntries] = useState(mockDsrEntries);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [showMore, setShowMore] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -164,9 +172,9 @@ export function DailyReportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, filters, selectedPeople.join('|')]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const groups = useMemo(() => {
     const byDate = new Map();
@@ -434,24 +442,59 @@ export function DailyReportsPage() {
             </table>
           </div>
 
-          {pageCount > 1 && (
-            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-text-muted">
-              <span>
-                Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
-              </span>
-              <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-text-muted">
+            <span>
+              Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length}
+            </span>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2">
+                Rows per page
+                <select
+                  aria-label="Rows per page"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-main focus:outline-none focus:border-brand-500"
+                >
+                  {PAGE_SIZES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <nav aria-label="Pagination" className="flex items-center gap-1">
                 <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>
                   Previous
                 </Button>
-                <span>
-                  Page {currentPage} of {pageCount}
-                </span>
+                {pageNumbers(currentPage, pageCount).map((n) =>
+                  typeof n === 'string' ? (
+                    <span key={n} className="px-1">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-label={`Page ${n}`}
+                      aria-current={n === currentPage ? 'page' : undefined}
+                      onClick={() => setPage(n)}
+                      className={`h-8 min-w-8 rounded px-2 text-xs font-medium transition-colors ${
+                        n === currentPage ? 'bg-brand-600 text-surface' : 'text-text-main hover:bg-brand-50'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  )
+                )}
                 <Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>
                   Next
                 </Button>
-              </div>
+              </nav>
             </div>
-          )}
+          </div>
         </div>
       )}
 
