@@ -297,9 +297,8 @@ export function DailyReportsPage() {
 
   return (
     // The page is exactly as tall as the space under the top bar and scrolls inside itself, so the window never
-    // scrolls: the sidebar and top bar stay put. On tall screens the table fills the page and scrolls by itself;
-    // on short ones the whole page scrolls.
-    <div className="flex flex-col gap-4 h-[calc(100dvh-184px)] lg:h-[calc(100dvh-144px)] overflow-y-auto overflow-x-hidden pr-2 [scrollbar-gutter:stable] sm:-mx-4 lg:-mx-6">
+    // scrolls: the sidebar and top bar stay put. The table is as long as its rows and the page scrolls.
+    <div className="flex flex-col gap-4 h-[calc(100dvh-184px)] lg:h-[calc(100dvh-144px)] overflow-y-auto overflow-x-hidden pr-2 pb-1 [scrollbar-gutter:stable] sm:-mx-4 lg:-mx-6">
       <PageHeader
         title="Daily Status Report"
         subtitle={`${whose} submitted work`}
@@ -394,8 +393,8 @@ export function DailyReportsPage() {
           }
         />
       ) : (
-        <div className="flex-1 min-h-[360px] flex flex-col bg-surface border border-border rounded-lg overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-auto">
+        <div className="shrink-0 bg-surface border border-border rounded-lg overflow-clip">
+          <div className="overflow-x-auto xl:overflow-x-visible">
             <table className="w-full min-w-[900px] text-left border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-brand-50">
@@ -414,7 +413,7 @@ export function DailyReportsPage() {
           </div>
 
           {pageCount > 1 && (
-            <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-text-muted">
+            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-text-muted">
               <span>
                 Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
               </span>
