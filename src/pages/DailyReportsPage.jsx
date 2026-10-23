@@ -411,8 +411,8 @@ export function DailyReportsPage() {
         />
       ) : (
         <div className="shrink-0 bg-surface border border-border rounded-xl overflow-clip">
-          <div className="overflow-x-auto xl:overflow-x-visible">
-            <table className="w-full min-w-[1000px] table-fixed text-left text-sm border-collapse">
+          <div>
+            <table className="w-full table-fixed text-left text-sm border-collapse">
               <colgroup>
                 {COLUMN_WIDTHS[multiple ? 'multi' : 'single'].map((w, i) => (
                   <col key={i} style={{ width: `${w}%` }} />
