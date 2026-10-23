@@ -15,7 +15,6 @@ import Select from '../components/ui/Select';
 import SearchInput from '../components/ui/SearchInput';
 import EmptyState from '../components/ui/EmptyState';
 import PermissionGate from '../components/ui/PermissionGate';
-import { StatusBadge } from '../components/ui/Badge';
 import PersonMenu from '../components/dsr/PersonMenu';
 import useFixedShell from '../components/dsr/useFixedShell';
 
@@ -43,8 +42,26 @@ const DEFAULT_FILTERS = {
 
 const EMPTY_FORM = { task: '', project: NO_PROJECT, category: DSR_CATEGORIES[0], time: '', status: 'completed', note: '' };
 
-const TH = 'px-5 py-3 border-b border-border bg-brand-50 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-r border-border last:border-r-0';
-const TD = 'px-5 py-4 align-middle border-r border-border last:border-r-0';
+const TH = 'h-10 px-4 whitespace-nowrap border-b border-r border-border bg-brand-50 text-[11px] font-semibold uppercase tracking-wider text-text-muted last:border-r-0';
+const TD = 'px-4 py-3 align-middle border-r border-border last:border-r-0';
+
+// Column widths (% of the table), so Project and Category are not squeezed and the Task column gets the room
+const COLUMN_WIDTHS = { single: [9, 34, 20, 13, 7, 8, 9], multi: [8, 10, 32, 15, 11, 7, 8, 9] };
+
+const STATUS_PILL = {
+  completed: 'bg-success-light text-success',
+  'in progress': 'bg-info-light text-info',
+  blocked: 'bg-danger-light text-danger',
+};
+
+function StatusPill({ status }) {
+  const label = DSR_STATUSES.find((x) => x.value === status)?.label || status;
+  return (
+    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap ${STATUS_PILL[status] || 'bg-brand-50 text-text-muted'}`}>
+      {label}
+    </span>
+  );
+}
 
 /** The date range (inclusive, YYYY-MM-DD) a period stands for; a from/to pair overrides the period. */
 function rangeFor({ period, from, to }) {
@@ -254,7 +271,7 @@ export function DailyReportsPage() {
   const renderRow = (e, group, index) => (
     <tr key={e.id} className="border-t border-border hover:bg-brand-50/50 transition-colors">
       {index === 0 && (
-        <td rowSpan={group.rows.length} className={`${TD} text-center bg-surface min-w-[150px] w-[150px]`}>
+        <td rowSpan={group.rows.length} className={`${TD} text-center bg-surface`}>
           <div className="text-sm font-semibold text-text-main whitespace-nowrap">{dayLabel(group.date)}</div>
           <div className="text-xs text-text-muted mt-1 whitespace-nowrap">
             {formatDuration(group.minutes)} · {plural(group.rows.length, 'entry', 'entries')}
@@ -279,7 +296,7 @@ export function DailyReportsPage() {
       <td className={`${TD} text-sm text-text-main whitespace-nowrap`}>{e.category}</td>
       <td className={`${TD} text-sm font-semibold text-text-main text-center whitespace-nowrap`}>{formatDuration(e.minutes)}</td>
       <td className={`${TD} text-center`}>
-        <StatusBadge status={e.status} size="sm" />
+        <StatusPill status={e.status} />
       </td>
       <td className={TD}>
         <div className="flex items-center justify-center gap-0.5">
@@ -393,14 +410,19 @@ export function DailyReportsPage() {
           }
         />
       ) : (
-        <div className="shrink-0 bg-surface border border-border rounded-lg overflow-clip">
+        <div className="shrink-0 bg-surface border border-border rounded-xl overflow-clip">
           <div className="overflow-x-auto xl:overflow-x-visible">
-            <table className="w-full min-w-[900px] text-left border-collapse">
+            <table className="w-full min-w-[1000px] table-fixed text-left text-sm border-collapse">
+              <colgroup>
+                {COLUMN_WIDTHS[multiple ? 'multi' : 'single'].map((w, i) => (
+                  <col key={i} style={{ width: `${w}%` }} />
+                ))}
+              </colgroup>
               <thead className="sticky top-0 z-10">
                 <tr className="bg-brand-50">
                   <th className={`${TH} text-center`}>Date</th>
                   {multiple && <th className={TH}>Person</th>}
-                  <th className={`${TH} w-[34%]`}>Task</th>
+                  <th className={TH}>Task</th>
                   <th className={TH}>Project</th>
                   <th className={TH}>Category</th>
                   <th className={`${TH} text-center`}>Time</th>
@@ -493,7 +515,7 @@ export function DailyReportsPage() {
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-base font-semibold text-text-main leading-snug">{viewing.task}</h3>
-              <StatusBadge status={viewing.status} size="sm" className="shrink-0" />
+              <span className="shrink-0"><StatusPill status={viewing.status} /></span>
             </div>
 
             <dl className="grid grid-cols-2 gap-x-6 gap-y-4">

@@ -16,7 +16,7 @@ export const DSR_CATEGORIES = [
 
 export const DSR_STATUSES = [
   { value: 'completed', label: 'Completed' },
-  { value: 'in progress', label: 'In progress' },
+  { value: 'in progress', label: 'In Progress' },
   { value: 'blocked', label: 'Blocked' },
 ];
 
