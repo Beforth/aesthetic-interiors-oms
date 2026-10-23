@@ -1,736 +1,511 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { formatDate } from '../utils/formatters';
-import { validateRequired, validatePositiveNumber, validateUrl } from '../utils/validators';
-import { mockDsrLogs, mockMissingDsrEmployees } from '../data/dsr';
+import { ROLE_LABELS } from '../config/roles';
+import { DSR_CATEGORIES, DSR_PROJECTS, DSR_STATUSES, NO_PROJECT, dateDaysAgo, mockDsrEntries } from '../data/dsr';
+import { downloadCsv, entriesToCsv, formatDuration, parseDuration } from '../utils/dsr';
+import { validateRequired } from '../utils/validators';
 
 import PageHeader from '../components/ui/PageHeader';
-import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import IconButton from '../components/ui/IconButton';
 import Avatar from '../components/ui/Avatar';
 import Modal from '../components/ui/Modal';
-import Icon from '../components/ui/Icon';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import SearchInput from '../components/ui/SearchInput';
+import EmptyState from '../components/ui/EmptyState';
+import PermissionGate from '../components/ui/PermissionGate';
+import { StatusBadge } from '../components/ui/Badge';
+
+const PAGE_SIZE = 20;
+
+const PERIODS = [
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'all', label: 'All time' },
+];
+
+const SORTS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'longest', label: 'Longest time' },
+  { value: 'shortest', label: 'Shortest time' },
+  { value: 'person', label: 'Person A to Z' },
+];
+
+const DEFAULT_FILTERS = {
+  period: '7d',
+  from: '',
+  to: '',
+  search: '',
+  person: 'ALL',
+  project: 'ALL',
+  category: 'ALL',
+  status: 'ALL',
+  sort: 'newest',
+};
+
+const EMPTY_FORM = { task: '', project: NO_PROJECT, category: DSR_CATEGORIES[0], time: '', status: 'completed', note: '' };
+
+/** The date range (inclusive, YYYY-MM-DD) a period stands for; a from/to pair overrides the period. */
+function rangeFor({ period, from, to }) {
+  if (from || to) return { start: from, end: to };
+  const today = dateDaysAgo(0);
+  if (period === 'today') return { start: today, end: today };
+  if (period === 'yesterday') return { start: dateDaysAgo(1), end: dateDaysAgo(1) };
+  if (period === '7d') return { start: dateDaysAgo(6), end: today };
+  if (period === '30d') return { start: dateDaysAgo(29), end: today };
+  return { start: '', end: '' };
+}
+
+function dayLabel(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const label = new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (dateStr === dateDaysAgo(0)) return `${label} · Today`;
+  if (dateStr === dateDaysAgo(1)) return `${label} · Yesterday`;
+  return label;
+}
+
+const sum = (rows) => rows.reduce((total, e) => total + e.minutes, 0);
 
 export function DailyReportsPage() {
   const toast = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, role, hasPermission } = useAuth();
+  const canViewAll = hasPermission('dsr.viewAll');
 
-  const [activeTab, setActiveTab] = useState('all-logs'); // 'all-logs' | 'missing' | 'client-link'
-  const [dsrLogs, setDsrLogs] = useState(mockDsrLogs);
-  const [missingEmployees, setMissingEmployees] = useState(mockMissingDsrEmployees);
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [entries, setEntries] = useState(mockDsrEntries);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [page, setPage] = useState(1);
 
-  // Filter state
-  const [projectFilter, setProjectFilter] = useState('ALL');
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null); // the entry being edited, or null when adding
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [errors, setErrors] = useState({});
+  const [deleting, setDeleting] = useState(null);
 
-  // Submit DSR Modal (FR-DSR-01 / 02 / 03 / 04)
-  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
-  const [dsrForm, setDsrForm] = useState({
-    projectId: 'P1',
-    projectName: 'Indiranagar 4BHK Luxury Villa',
-    stageName: 'False Ceiling & POP Works',
-    type: 'site', // 'site' | 'office'
-    workDone: '',
-    manpowerCount: 5,
-    materialArrivals: '',
-    photoUrl: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80',
-    showOnClientLink: true,
-  });
+  const isOwn = (e) => e.authorName === currentUser?.name;
+  const canChange = (e) => canViewAll || isOwn(e);
 
-  // Client Share Link Modal (FR-DSR-05 & FR-DSR-06)
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [shareProject, setShareProject] = useState('P1');
+  const setFilter = (key, value) => {
+    setFilters((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === 'period') {
+        next.from = '';
+        next.to = '';
+      }
+      return next;
+    });
+    setPage(1);
+  };
 
-  // Submit DSR Form with Validation (FR-DSR-02 & FR-DSR-03)
-  const handleDsrSubmit = (e) => {
+  const hasActiveFilters = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
+  const clearFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setPage(1);
+  };
+
+  // Everyone who may see these entries, before any filter is applied
+  const visibleEntries = useMemo(
+    () => (canViewAll ? entries : entries.filter(isOwn)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, canViewAll, currentUser?.name]
+  );
+
+  const people = useMemo(() => [...new Set(visibleEntries.map((e) => e.authorName))].sort(), [visibleEntries]);
+  const projects = useMemo(() => [...new Set([...DSR_PROJECTS, ...visibleEntries.map((e) => e.project)])], [visibleEntries]);
+
+  const filtered = useMemo(() => {
+    const { start, end } = rangeFor(filters);
+    const q = filters.search.trim().toLowerCase();
+    const rows = visibleEntries.filter((e) => {
+      if (start && e.date < start) return false;
+      if (end && e.date > end) return false;
+      if (filters.person !== 'ALL' && e.authorName !== filters.person) return false;
+      if (filters.project !== 'ALL' && e.project !== filters.project) return false;
+      if (filters.category !== 'ALL' && e.category !== filters.category) return false;
+      if (filters.status !== 'ALL' && e.status !== filters.status) return false;
+      if (q && ![e.task, e.note, e.project, e.category, e.authorName].some((v) => (v || '').toLowerCase().includes(q))) {
+        return false;
+      }
+      return true;
+    });
+    const order = {
+      newest: (a, b) => b.date.localeCompare(a.date),
+      oldest: (a, b) => a.date.localeCompare(b.date),
+      longest: (a, b) => b.minutes - a.minutes,
+      shortest: (a, b) => a.minutes - b.minutes,
+      person: (a, b) => a.authorName.localeCompare(b.authorName) || b.date.localeCompare(a.date),
+    }[filters.sort];
+    return [...rows].sort(order); // Array.sort is stable, so entries keep their order within a day
+  }, [visibleEntries, filters]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const grouped = filters.sort === 'newest' || filters.sort === 'oldest';
+
+  const groups = useMemo(() => {
+    if (!grouped) return [{ key: 'all', date: null, rows: pageRows }];
+    const byDate = new Map();
+    pageRows.forEach((e) => byDate.set(e.date, [...(byDate.get(e.date) || []), e]));
+    return [...byDate].map(([date, rows]) => ({ key: date, date, rows }));
+  }, [pageRows, grouped]);
+
+  const completed = filtered.filter((e) => e.status === 'completed').length;
+  const peopleCount = new Set(filtered.map((e) => e.authorName)).size;
+
+  // ------------------------------------------------------------------ add / edit
+  const openAdd = () => {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setErrors({});
+    setFormOpen(true);
+  };
+
+  const openEdit = (entry) => {
+    setEditing(entry);
+    setForm({
+      task: entry.task,
+      project: entry.project,
+      category: entry.category,
+      time: formatDuration(entry.minutes),
+      status: entry.status,
+      note: entry.note || '',
+    });
+    setErrors({});
+    setFormOpen(true);
+  };
+
+  const closeForm = () => setFormOpen(false);
+
+  const submitForm = (e) => {
     e.preventDefault();
+    const found = {};
+    const taskError = validateRequired(form.task, 'What you worked on', 3);
+    if (taskError) found.task = taskError;
+    const minutes = parseDuration(form.time);
+    if (minutes === null) found.time = 'Enter the time like 45m, 1h 30m or 2h';
+    else if (minutes > 24 * 60) found.time = 'A single entry cannot be more than 24 hours';
+    setErrors(found);
+    if (Object.keys(found).length) return;
 
-    const stageErr = validateRequired(dsrForm.stageName, 'Project stage', 2);
-    if (stageErr) {
-      toast.error(stageErr);
-      return;
-    }
-
-    const workErr = validateRequired(dsrForm.workDone, 'Work completed description', 10);
-    if (workErr) {
-      toast.error(workErr);
-      return;
-    }
-
-    const manpowerErr = validatePositiveNumber(dsrForm.manpowerCount, 'Manpower count', { min: 1, max: 200 });
-    if (manpowerErr) {
-      toast.error(manpowerErr);
-      return;
-    }
-
-    // FR-DSR-02: Require at least one photo for on-site employees
-    if (dsrForm.type === 'site') {
-      if (!dsrForm.photoUrl.trim()) {
-        toast.error('Site trade workers & supervisors must attach at least one progress site photo (FR-DSR-02)');
-        return;
-      }
-      const urlErr = validateUrl(dsrForm.photoUrl, { required: true, fieldLabel: 'Site progress photo' });
-      if (urlErr) {
-        toast.error(urlErr);
-        return;
-      }
-    } else if (dsrForm.photoUrl.trim()) {
-      const urlErr = validateUrl(dsrForm.photoUrl, { required: false, fieldLabel: 'Design render photo' });
-      if (urlErr) {
-        toast.error(urlErr);
-        return;
-      }
-    }
-
-    const newLog = {
-      id: `dsr-${Date.now()}`,
-      projectId: dsrForm.projectId,
-      projectName: dsrForm.projectName,
-      stageId: `stg-${Date.now()}`,
-      stageName: dsrForm.stageName,
-      authorId: currentUser?.id || 'u3',
-      authorName: currentUser?.name || 'Vikram Jadhav',
-      authorRole: currentUser?.role || 'Site Supervisor',
-      date: new Date().toISOString().split('T')[0],
-      submissionTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: dsrForm.type,
-      workDone: dsrForm.workDone,
-      manpowerCount: Number(dsrForm.manpowerCount) || 1,
-      materialArrivals: dsrForm.materialArrivals || 'No material dispatch today',
-      photos: dsrForm.photoUrl ? [dsrForm.photoUrl] : [],
-      showOnClientLink: dsrForm.showOnClientLink,
-      clientFeedback: null,
+    const values = {
+      task: form.task.trim(),
+      project: form.project,
+      category: form.category,
+      minutes,
+      status: form.status,
+      note: form.note.trim(),
     };
 
-    setDsrLogs([newLog, ...dsrLogs]);
-    toast.success('Daily Site Report submitted successfully!');
-    setIsSubmitModalOpen(false);
-    setDsrForm({
-      projectId: 'P1',
-      projectName: 'Indiranagar 4BHK Luxury Villa',
-      stageName: 'False Ceiling & POP Works',
-      type: 'site',
-      workDone: '',
-      manpowerCount: 5,
-      materialArrivals: '',
-      photoUrl: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80',
-      showOnClientLink: true,
-    });
+    if (editing) {
+      setEntries((prev) => prev.map((x) => (x.id === editing.id ? { ...x, ...values } : x)));
+      toast.success('Entry updated');
+    } else {
+      setEntries((prev) => [
+        {
+          id: `dsr-${Date.now()}`,
+          date: dateDaysAgo(0),
+          authorId: String(currentUser?.id ?? ''),
+          authorName: currentUser?.name || 'You',
+          authorRole: ROLE_LABELS[role] || role || '',
+          auto: false,
+          ...values,
+        },
+        ...prev,
+      ]);
+      toast.success('Work added');
+    }
+    setFormOpen(false);
   };
 
-  // Toggle client link visibility (FR-DSR-07: Manager chooses which photos appear on client link)
-  const handleToggleClientVisibility = (id) => {
-    setDsrLogs(
-      dsrLogs.map((log) =>
-        log.id === id ? { ...log, showOnClientLink: !log.showOnClientLink } : log
-      )
-    );
-    toast.success('Updated client portal visibility');
+  const confirmDelete = () => {
+    setEntries((prev) => prev.filter((x) => x.id !== deleting.id));
+    setDeleting(null);
+    toast.success('Entry deleted');
   };
 
-  // Copy Public Share Link (FR-DSR-05 & 06)
-  const handleCopyClientLink = () => {
-    const url = `${window.location.origin}/dsr-share/${shareProject}`;
-    navigator.clipboard?.writeText(url);
-    toast.success('Client view link copied! Open in any browser without app install (FR-DSR-06)');
+  // ------------------------------------------------------------------ export
+  const exportCsv = () => {
+    if (filtered.length === 0) {
+      toast.error('There is nothing to export for these filters');
+      return;
+    }
+    downloadCsv(`dsr-${dateDaysAgo(0)}.csv`, entriesToCsv(filtered));
+    toast.success(`Exported ${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'}`);
   };
 
-  const filteredLogs = dsrLogs.filter(
-    (l) => projectFilter === 'ALL' || l.projectId === projectFilter
+  const selectOptions = (all, items) => [{ value: 'ALL', label: all }, ...items.map((v) => (typeof v === 'string' ? { value: v, label: v } : v))];
+  const columns = canViewAll ? 8 : 7;
+
+  const renderRow = (e) => (
+    <tr key={e.id} className="border-t border-border hover:bg-brand-50/60 transition-colors">
+      {canViewAll && (
+        <td className="px-4 py-3 align-top">
+          <div className="flex items-center gap-2.5 min-w-[150px]">
+            <Avatar name={e.authorName} size="sm" />
+            <div className="leading-tight">
+              <div className="text-sm font-medium text-text-main">{e.authorName}</div>
+              <div className="text-[11px] text-text-muted">{e.authorRole}</div>
+            </div>
+          </div>
+        </td>
+      )}
+      <td className="px-4 py-3 align-top">
+        <div className="flex items-start gap-2">
+          <span className="text-sm text-text-main leading-snug">{e.task}</span>
+          {e.auto && (
+            <span className="shrink-0 mt-0.5 rounded-full bg-info-light text-info text-[10px] font-semibold px-2 py-0.5">
+              Auto
+            </span>
+          )}
+        </div>
+        {e.note && <div className="text-xs text-text-muted mt-1">{e.note}</div>}
+      </td>
+      <td className="px-4 py-3 align-top text-sm text-text-main">{e.project}</td>
+      <td className="px-4 py-3 align-top text-sm text-text-main whitespace-nowrap">{e.category}</td>
+      <td className="px-4 py-3 align-top text-sm font-semibold text-text-main whitespace-nowrap">{formatDuration(e.minutes)}</td>
+      <td className="px-4 py-3 align-top">
+        <StatusBadge status={e.status} size="sm" />
+      </td>
+      <td className="px-4 py-3 align-top">
+        {canChange(e) ? (
+          <div className="flex items-center justify-end gap-0.5">
+            <IconButton icon="edit" ariaLabel="Edit entry" size="sm" onClick={() => openEdit(e)} />
+            <IconButton icon="trash" ariaLabel="Delete entry" size="sm" onClick={() => setDeleting(e)} />
+          </div>
+        ) : (
+          <span className="text-text-muted text-sm">-</span>
+        )}
+      </td>
+    </tr>
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
-        title="Daily Site Reports (DSR)"
-        subtitle="SRS Section 3.8: Collects each employee's daily site log, verified photo gallery, and keeps clients informed via shareable web links"
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: 'Daily Site Reports' },
-        ]}
+        title="Daily Status Report"
+        subtitle={canViewAll ? "Everyone's submitted work" : 'Your submitted work'}
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              leadingIcon="link"
-              onClick={() => setIsShareModalOpen(true)}
-            >
-              Share Client Link
+          <>
+            <Button variant="outline" size="sm" leadingIcon="download" onClick={exportCsv}>
+              Export CSV
             </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              leadingIcon="plus"
-              onClick={() => setIsSubmitModalOpen(true)}
-            >
-              Submit Daily DSR
-            </Button>
-          </div>
+            <PermissionGate permission="dsr.submit">
+              <Button variant="primary" size="sm" leadingIcon="plus" onClick={openAdd}>
+                Add work
+              </Button>
+            </PermissionGate>
+          </>
         }
+        className="!mb-2"
       />
 
-      {/* KPI Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
-            <span>Sites Reporting Today</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <Icon name="projects" size={14} />
+      {/* Filters */}
+      <div className="bg-surface border border-border rounded p-3 space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="w-full lg:w-44 shrink-0">
+            <Select
+              aria-label="Period"
+              placeholder={null}
+              value={filters.from || filters.to ? 'custom' : filters.period}
+              onChange={(e) => setFilter('period', e.target.value)}
+              options={[...PERIODS, ...(filters.from || filters.to ? [{ value: 'custom', label: 'Custom range' }] : [])]}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted">From</span>
+            <Input aria-label="From date" type="date" value={filters.from} max={filters.to || undefined} onChange={(e) => setFilter('from', e.target.value)} />
+            <span className="text-xs text-text-muted">To</span>
+            <Input aria-label="To date" type="date" value={filters.to} min={filters.from || undefined} onChange={(e) => setFilter('to', e.target.value)} />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <SearchInput value={filters.search} onChange={(e) => setFilter('search', e.target.value)} placeholder="Search entries..." />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {canViewAll && (
+            <div className="w-full sm:w-44">
+              <Select aria-label="Person" placeholder={null} value={filters.person} onChange={(e) => setFilter('person', e.target.value)} options={selectOptions('All people', people)} />
             </div>
-          </div>
-          <div className="text-2xl font-extrabold text-text-main">3 Sites</div>
-          <p className="text-[11px] text-text-muted">100% active sites submitted progress</p>
-        </Card>
-
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
-            <span>Total DSR Logs</span>
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-              <Icon name="daily-reports" size={14} />
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold text-blue-600">{dsrLogs.length} Reports</div>
-          <p className="text-[11px] text-text-muted">Archived for client & audit records</p>
-        </Card>
-
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
-            <span>Missing Submissions</span>
-            <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
-              <Icon name="clock" size={14} />
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold text-rose-600">
-            {missingEmployees.length} Pending
-          </div>
-          <p className="text-[11px] text-text-muted">Employees on duty without DSR (FR-DSR-09)</p>
-        </Card>
-
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
-            <span>Client Link Visibility</span>
-            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-              <Icon name="eye" size={14} />
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold text-purple-700">
-            {dsrLogs.filter((l) => l.showOnClientLink).length} Visible
-          </div>
-          <p className="text-[11px] text-text-muted">Manager vetted for client link</p>
-        </Card>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-border">
-        <button
-          type="button"
-          onClick={() => setActiveTab('all-logs')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'all-logs'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
-          }`}
-        >
-          <Icon name="daily-reports" size={14} />
-          <span>All Site Daily Logs (FR-DSR-08)</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
-            {dsrLogs.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('missing')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'missing'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
-          }`}
-        >
-          <Icon name="clock" size={14} />
-          <span>Missing DSR Tracker (FR-DSR-09)</span>
-          {missingEmployees.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-100 text-rose-800 font-bold">
-              {missingEmployees.length}
-            </span>
           )}
-        </button>
+          <div className="w-full sm:w-52">
+            <Select aria-label="Project" placeholder={null} value={filters.project} onChange={(e) => setFilter('project', e.target.value)} options={selectOptions('All projects', projects)} />
+          </div>
+          <div className="w-full sm:w-44">
+            <Select aria-label="Category" placeholder={null} value={filters.category} onChange={(e) => setFilter('category', e.target.value)} options={selectOptions('All categories', DSR_CATEGORIES)} />
+          </div>
+          <div className="w-full sm:w-40">
+            <Select aria-label="Status" placeholder={null} value={filters.status} onChange={(e) => setFilter('status', e.target.value)} options={selectOptions('All statuses', DSR_STATUSES)} />
+          </div>
+          <div className="w-full sm:w-40">
+            <Select aria-label="Sort by" placeholder={null} value={filters.sort} onChange={(e) => setFilter('sort', e.target.value)} options={SORTS.filter((s) => canViewAll || s.value !== 'person')} />
+          </div>
+          <Button variant="ghost" size="sm" leadingIcon="close" disabled={!hasActiveFilters} onClick={clearFilters}>
+            Clear
+          </Button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('client-link')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'client-link'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
-          }`}
-        >
-          <Icon name="link" size={14} />
-          <span>Client Web Portal Preview (FR-DSR-05/06)</span>
-        </button>
+          <div className="ml-auto text-sm text-text-muted">
+            <span className="font-semibold text-text-main">{formatDuration(sum(filtered))}</span>
+            {' · '}
+            {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+            {' · '}
+            {completed} completed
+            {canViewAll && ` · ${peopleCount} ${peopleCount === 1 ? 'person' : 'people'}`}
+          </div>
+        </div>
       </div>
 
-      {/* TAB 1: All DSR Logs (FR-DSR-08: Admin and Manager single daily screen) */}
-      {activeTab === 'all-logs' && (
-        <Card className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-text-main">Daily Execution Timeline</h3>
-              <p className="text-xs text-text-muted">
-                Real-time evening reports with trade photos, material arrivals, and manpower counts
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-text-muted font-medium">Filter Site:</span>
-              <select
-                value={projectFilter}
-                onChange={(e) => setProjectFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs bg-white border border-border rounded-lg text-text-main font-medium focus:outline-none"
-              >
-                <option value="ALL">All Active Sites</option>
-                <option value="P1">Indiranagar 4BHK Villa</option>
-                <option value="P2">HSR Layout Contemporary 3BHK</option>
-                <option value="P4">Lavelle Road Commercial Studio</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {filteredLogs.map((log) => (
-              <div
-                key={log.id}
-                className="p-4 rounded-xl border border-border bg-surface hover:border-brand-300 transition-all shadow-2xs space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/70 pb-2">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name={log.authorName} size="sm" />
-                    <div>
-                      <div className="font-bold text-xs text-text-main flex items-center gap-2">
-                        <span>{log.authorName}</span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
-                          {log.authorRole}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            log.type === 'site'
-                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                              : 'bg-blue-50 text-blue-800 border border-blue-200'
-                          }`}
-                        >
-                          {log.type === 'site' ? 'On-Site Execution' : 'Studio / Office'}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-2">
-                        <span className="font-semibold text-text-main">{log.projectName}</span>
-                        <span>•</span>
-                        <span>Stage: {log.stageName}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 self-end sm:self-auto text-xs">
-                    <div className="text-right text-[11px] text-text-muted">
-                      <div>{formatDate(log.date)}</div>
-                      <div className="font-mono">{log.submissionTime}</div>
-                    </div>
-
-                    {/* FR-DSR-07: Manager controls client link visibility */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleClientVisibility(log.id)}
-                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-colors cursor-pointer flex items-center gap-1 ${
-                        log.showOnClientLink
-                          ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                      }`}
-                      title="Toggle client visibility"
-                    >
-                      <Icon name={log.showOnClientLink ? 'eye' : 'eye-off'} size={12} />
-                      <span>{log.showOnClientLink ? 'Visible to Client' : 'Internal Only'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Work Description */}
-                <div>
-                  <div className="text-xs text-text-main leading-relaxed font-medium">
-                    {log.workDone}
-                  </div>
-                </div>
-
-                {/* Manpower & Materials */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-border/80">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-text-muted uppercase text-[10px]">Manpower On Site:</span>
-                    <span className="font-semibold text-text-main">{log.manpowerCount} Artisans</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-text-muted uppercase text-[10px]">Material Deliveries:</span>
-                    <span className="text-text-main truncate">{log.materialArrivals}</span>
-                  </div>
-                </div>
-
-                {/* Verified Site Photos (FR-DSR-02) */}
-                {log.photos && log.photos.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
-                      <Icon name="camera" size={12} className="text-brand-600" />
-                      <span>Trade Progress Photos ({log.photos.length})</span>
-                    </div>
-                    <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
-                      {log.photos.map((url, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => setSelectedPhoto(url)}
-                          className="w-28 h-20 rounded-lg overflow-hidden border border-border cursor-pointer hover:opacity-90 transition-opacity shrink-0 shadow-2xs"
-                        >
-                          <img src={url} alt={`Site log ${idx}`} className="w-full h-full object-cover" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* TAB 2: Missing DSR Submissions (FR-DSR-09) */}
-      {activeTab === 'missing' && (
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-text-main">DSR Pending Submissions (FR-DSR-09)</h3>
-              <p className="text-xs text-text-muted">
-                Staff members checked-in today who have not submitted their evening report
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => toast.success('Broadcast WhatsApp reminder sent to 1 artisan lead')}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-800 text-white hover:bg-brand-900 transition-colors shadow-2xs cursor-pointer"
-            >
-              Send WhatsApp Reminder
-            </button>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-border/80">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-border/80 uppercase font-semibold text-[10px] text-text-muted tracking-wider">
-                <tr>
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Assigned Site</th>
-                  <th className="p-3">Check-In Time</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
+      {/* Table */}
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon="daily-reports"
+          title={visibleEntries.length === 0 ? 'No work logged yet' : 'No entries match these filters'}
+          description={
+            visibleEntries.length === 0
+              ? 'Add what you worked on and it will show up here.'
+              : 'Try a wider period or clear the filters.'
+          }
+          action={
+            hasActiveFilters ? (
+              <Button size="sm" variant="outline" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : (
+              <PermissionGate permission="dsr.submit">
+                <Button size="sm" onClick={openAdd}>
+                  Add work
+                </Button>
+              </PermissionGate>
+            )
+          }
+        />
+      ) : (
+        <div className="bg-surface border border-border rounded overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-left">
+              <thead>
+                <tr className="bg-brand-50 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                  {canViewAll && <th className="px-4 py-2.5">Person</th>}
+                  <th className="px-4 py-2.5 w-[34%]">Task</th>
+                  <th className="px-4 py-2.5 min-w-[170px]">Project</th>
+                  <th className="px-4 py-2.5">Category</th>
+                  <th className="px-4 py-2.5">Time</th>
+                  <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
-                {missingEmployees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="p-3 font-semibold text-text-main flex items-center gap-2">
-                      <Avatar name={emp.name} size="sm" />
-                      <div>
-                        <div>{emp.name}</div>
-                        <div className="text-[11px] text-text-muted font-normal">{emp.role}</div>
-                      </div>
-                    </td>
-                    <td className="p-3 font-medium text-text-main">{emp.assignedSite}</td>
-                    <td className="p-3 font-mono text-emerald-700">{emp.punchedInAt}</td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
-                        Missing Evening Log
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => toast.success(`Notification ping sent to ${emp.name}`)}
-                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-surface border border-border hover:bg-slate-50 text-text-main transition-colors cursor-pointer"
-                      >
-                        Ping Employee
-                      </button>
-                    </td>
-                  </tr>
+              <tbody>
+                {groups.map((group) => (
+                  <React.Fragment key={group.key}>
+                    {group.date && (
+                      <tr className="border-t border-border bg-brand-50/50">
+                        <td colSpan={columns} className="px-4 py-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-text-main">{dayLabel(group.date)}</span>
+                            <span className="text-text-muted">
+                              {formatDuration(sum(group.rows))} · {group.rows.length} {group.rows.length === 1 ? 'entry' : 'entries'}
+                              {canViewAll && ` · ${new Set(group.rows.map((r) => r.authorName)).size} people`}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {group.rows.map(renderRow)}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
           </div>
-        </Card>
-      )}
 
-      {/* TAB 3: Client Web Portal Preview (FR-DSR-05 / FR-DSR-06) */}
-      {activeTab === 'client-link' && (
-        <Card className="space-y-4">
-          <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-bold text-purple-950 flex items-center gap-1.5">
-                <Icon name="link" size={16} className="text-purple-700" />
-                <span>Zero-Install Client Shareable Link (FR-DSR-05 & FR-DSR-06)</span>
-              </div>
-              <p className="text-xs text-purple-800/80 mt-0.5">
-                Clients can tap this link in WhatsApp, iMessage, or SMS to view live photo progress without installing any app or password hurdles.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleCopyClientLink}
-              className="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-semibold text-xs transition-colors shrink-0 cursor-pointer shadow-2xs"
-            >
-              Copy Public Link
-            </button>
-          </div>
-
-          {/* Live Mobile Client Preview Screen */}
-          <div className="border border-border rounded-2xl p-6 bg-slate-50 max-w-2xl mx-auto space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <div className="text-xs uppercase font-bold text-text-muted">Aesthetic Interiors Client Portal</div>
-                <div className="text-base font-bold text-text-main mt-0.5">
-                  Indiranagar 4BHK Luxury Villa • Daily Log
-                </div>
-              </div>
-              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                Live Site
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-text-muted">
+              <span>
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
               </span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>
+                  Previous
+                </Button>
+                <span>
+                  Page {currentPage} of {pageCount}
+                </span>
+                <Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>
+                  Next
+                </Button>
+              </div>
             </div>
-
-            <div className="space-y-3">
-              {dsrLogs
-                .filter((l) => l.showOnClientLink)
-                .map((log) => (
-                  <div key={log.id} className="p-4 rounded-xl bg-white border border-border shadow-2xs space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-brand-700">{log.stageName}</span>
-                      <span className="text-text-muted">{formatDate(log.date)}</span>
-                    </div>
-                    <p className="text-xs text-text-main">{log.workDone}</p>
-                    {log.photos && log.photos.length > 0 && (
-                      <div className="grid grid-cols-2 gap-2 pt-2">
-                        {log.photos.map((p, i) => (
-                          <img key={i} src={p} alt="Site" className="rounded-lg h-28 w-full object-cover" />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
-          </div>
-        </Card>
+          )}
+        </div>
       )}
 
-      {/* MODAL 1: Submit Daily DSR (FR-DSR-01) */}
+      {/* Add / edit work. Clicking outside the box or pressing Esc closes it (Modal). */}
       <Modal
-        isOpen={isSubmitModalOpen}
-        onClose={() => setIsSubmitModalOpen(false)}
-        title="Submit Daily Site Report (DSR) • FR-DSR-01"
-      >
-        <form onSubmit={handleDsrSubmit} className="space-y-4 text-xs">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase">Select Project</label>
-              <select
-                value={dsrForm.projectId}
-                onChange={(e) => {
-                  const names = {
-                    P1: 'Indiranagar 4BHK Luxury Villa',
-                    P2: 'HSR Layout Contemporary 3BHK',
-                    P4: 'Lavelle Road Commercial Studio',
-                  };
-                  setDsrForm({
-                    ...dsrForm,
-                    projectId: e.target.value,
-                    projectName: names[e.target.value] || 'Site Project',
-                  });
-                }}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main font-medium"
-              >
-                <option value="P1">Indiranagar 4BHK Luxury Villa</option>
-                <option value="P2">HSR Layout Contemporary 3BHK</option>
-                <option value="P4">Lavelle Road Commercial Studio</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase">Execution Type</label>
-              <select
-                value={dsrForm.type}
-                onChange={(e) => setDsrForm({ ...dsrForm, type: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main font-medium"
-              >
-                <option value="site">On-Site Trade Work (Requires Photo)</option>
-                <option value="office">Office / Studio Design (Photo Optional)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-text-muted uppercase">
-              Current Project Stage Worked On (FR-DSR-04)
-            </label>
-            <input
-              type="text"
-              required
-              value={dsrForm.stageName}
-              onChange={(e) => setDsrForm({ ...dsrForm, stageName: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-text-muted uppercase">
-              Work Completed Today (FR-DSR-04)
-            </label>
-            <textarea
-              rows={3}
-              required
-              value={dsrForm.workDone}
-              onChange={(e) => setDsrForm({ ...dsrForm, workDone: e.target.value })}
-              placeholder="Detail specific trade tasks, room locations, or inspections completed today..."
-              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase">Artisans on Site</label>
-              <input
-                type="number"
-                min="1"
-                value={dsrForm.manpowerCount}
-                onChange={(e) => setDsrForm({ ...dsrForm, manpowerCount: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase">Materials Received</label>
-              <input
-                type="text"
-                value={dsrForm.materialArrivals}
-                onChange={(e) => setDsrForm({ ...dsrForm, materialArrivals: e.target.value })}
-                placeholder="e.g. 5 bags Birla white cement"
-                className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
-              />
-            </div>
-          </div>
-
-          {/* Photo validation (FR-DSR-02 & FR-DSR-03) */}
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-text-muted uppercase">
-              {dsrForm.type === 'site'
-                ? 'Site Progress Photo URL (Mandatory for On-Site • FR-DSR-02)'
-                : 'Design Render / Photo (Optional for Office • FR-DSR-03)'}
-            </label>
-            <input
-              type="url"
-              value={dsrForm.photoUrl}
-              onChange={(e) => setDsrForm({ ...dsrForm, photoUrl: e.target.value })}
-              placeholder="https://..."
-              className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="clientVis"
-              checked={dsrForm.showOnClientLink}
-              onChange={(e) => setDsrForm({ ...dsrForm, showOnClientLink: e.target.checked })}
-              className="rounded accent-brand-600"
-            />
-            <label htmlFor="clientVis" className="text-xs text-text-main">
-              Include in public Client WhatsApp Broadcast Link (FR-DSR-07)
-            </label>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-            <button
-              type="button"
-              onClick={() => setIsSubmitModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main"
-            >
+        isOpen={formOpen}
+        onClose={closeForm}
+        title={editing ? 'Edit work' : 'Add work'}
+        subtitle={editing ? 'Change what was logged for this entry.' : 'Add what you worked on. Only your own time counts.'}
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={closeForm}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-800 text-white hover:bg-brand-900"
-            >
-              Submit Daily DSR
-            </button>
+            </Button>
+            <Button type="submit" form="dsr-form" variant="primary" size="sm" leadingIcon={editing ? undefined : 'plus'}>
+              {editing ? 'Save changes' : 'Add entry'}
+            </Button>
+          </>
+        }
+      >
+        <form id="dsr-form" onSubmit={submitForm} className="space-y-4" noValidate>
+          <Input
+            label="What did you work on?"
+            required
+            autoFocus
+            value={form.task}
+            onChange={(e) => setForm({ ...form, task: e.target.value })}
+            placeholder="What did you work on?"
+            error={errors.task}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select label="Project" placeholder={null} value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })} options={projects} />
+            <Select label="Category" placeholder={null} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={DSR_CATEGORIES} />
+            <Input
+              label="Time"
+              required
+              value={form.time}
+              onChange={(e) => setForm({ ...form, time: e.target.value })}
+              placeholder="1h 30m"
+              error={errors.time}
+            />
+            <Select label="Status" placeholder={null} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={DSR_STATUSES} />
           </div>
+          <Input label="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Optional" />
         </form>
       </Modal>
 
-      {/* MODAL 2: Share Client Link */}
       <Modal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        title="Share Live DSR Link with Client (FR-DSR-05 / 06)"
+        isOpen={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        title="Delete this entry?"
+        subtitle="It will be removed from the report."
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setDeleting(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" size="sm" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </>
+        }
       >
-        <div className="space-y-4 text-xs">
-          <p className="text-text-muted">
-            Generate an instant web link for the client. Clients do not need an account or application install.
-          </p>
-
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-text-muted uppercase">Choose Project</label>
-            <select
-              value={shareProject}
-              onChange={(e) => setShareProject(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main font-medium"
-            >
-              <option value="P1">Indiranagar 4BHK Luxury Villa</option>
-              <option value="P2">HSR Layout Contemporary 3BHK</option>
-              <option value="P4">Lavelle Road Commercial Studio</option>
-            </select>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-border rounded-xl flex items-center justify-between font-mono text-[11px]">
-            <span className="truncate text-text-main">
-              {window.location.origin}/dsr-share/{shareProject}
-            </span>
-            <button
-              type="button"
-              onClick={handleCopyClientLink}
-              className="px-3 py-1 bg-brand-800 text-white rounded-lg font-semibold shrink-0 ml-2"
-            >
-              Copy
-            </button>
-          </div>
-
-          <div className="flex items-center justify-end pt-3 border-t border-border">
-            <button
-              type="button"
-              onClick={() => setIsShareModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main"
-            >
-              Done
-            </button>
-          </div>
-        </div>
+        <p className="text-sm text-text-main">{deleting?.task}</p>
       </Modal>
-
-      {/* MODAL 3: Photo Preview */}
-      {selectedPhoto && (
-        <Modal isOpen={!!selectedPhoto} onClose={() => setSelectedPhoto(null)} title="Site Inspection Photo">
-          <div className="space-y-3">
-            <img src={selectedPhoto} alt="Site preview" className="w-full rounded-xl max-h-[70vh] object-contain" />
-            <div className="text-right">
-              <button
-                type="button"
-                onClick={() => setSelectedPhoto(null)}
-                className="px-4 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold"
-              >
-                Close Preview
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
