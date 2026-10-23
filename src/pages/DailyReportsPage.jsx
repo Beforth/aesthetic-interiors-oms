@@ -79,6 +79,7 @@ export function DailyReportsPage() {
   const [entries, setEntries] = useState(mockDsrEntries);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
+  const [showMore, setShowMore] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // the entry being edited, or null when adding
@@ -101,6 +102,8 @@ export function DailyReportsPage() {
     setPage(1);
   };
 
+  // how many of the filters behind the Filters button are in use
+  const moreCount = ['person', 'project', 'category', 'status'].filter((k) => filters[k] !== 'ALL').length + (filters.from || filters.to ? 1 : 0);
   const hasActiveFilters = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
   const clearFilters = () => {
     setFilters(DEFAULT_FILTERS);
@@ -285,7 +288,7 @@ export function DailyReportsPage() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:-mx-4 lg:-mx-6">
       <PageHeader
         title="Daily Status Report"
         subtitle={canViewAll ? "Everyone's submitted work" : 'Your submitted work'}
@@ -304,10 +307,13 @@ export function DailyReportsPage() {
         className="!mb-2"
       />
 
-      {/* Filters */}
-      <div className="bg-surface border border-border rounded p-3 space-y-3">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-          <div className="w-full lg:w-44 shrink-0">
+      {/* Filters: one quiet row; the less-used filters sit behind the Filters button */}
+      <div className="space-y-2">
+        <div className="flex flex-col md:flex-row md:items-center gap-2">
+          <div className="flex-1 min-w-[200px]">
+            <SearchInput value={filters.search} onChange={(e) => setFilter('search', e.target.value)} placeholder="Search entries..." />
+          </div>
+          <div className="w-full md:w-40 shrink-0">
             <Select
               aria-label="Period"
               placeholder={null}
@@ -316,47 +322,42 @@ export function DailyReportsPage() {
               options={[...PERIODS, ...(filters.from || filters.to ? [{ value: 'custom', label: 'Custom range' }] : [])]}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">From</span>
-            <Input aria-label="From date" type="date" value={filters.from} max={filters.to || undefined} onChange={(e) => setFilter('from', e.target.value)} />
-            <span className="text-xs text-text-muted">To</span>
-            <Input aria-label="To date" type="date" value={filters.to} min={filters.from || undefined} onChange={(e) => setFilter('to', e.target.value)} />
-          </div>
-          <div className="flex-1 min-w-[200px]">
-            <SearchInput value={filters.search} onChange={(e) => setFilter('search', e.target.value)} placeholder="Search entries..." />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {canViewAll && (
-            <div className="w-full sm:w-44">
-              <Select aria-label="Person" placeholder={null} value={filters.person} onChange={(e) => setFilter('person', e.target.value)} options={selectOptions('All people', people)} />
-            </div>
-          )}
-          <div className="w-full sm:w-52">
-            <Select aria-label="Project" placeholder={null} value={filters.project} onChange={(e) => setFilter('project', e.target.value)} options={selectOptions('All projects', projects)} />
-          </div>
-          <div className="w-full sm:w-44">
-            <Select aria-label="Category" placeholder={null} value={filters.category} onChange={(e) => setFilter('category', e.target.value)} options={selectOptions('All categories', DSR_CATEGORIES)} />
-          </div>
-          <div className="w-full sm:w-40">
-            <Select aria-label="Status" placeholder={null} value={filters.status} onChange={(e) => setFilter('status', e.target.value)} options={selectOptions('All statuses', DSR_STATUSES)} />
-          </div>
-          <div className="w-full sm:w-40">
+          <div className="w-full md:w-40 shrink-0">
             <Select aria-label="Sort by" placeholder={null} value={filters.sort} onChange={(e) => setFilter('sort', e.target.value)} options={SORTS.filter((s) => canViewAll || s.value !== 'person')} />
           </div>
-          <Button variant="ghost" size="sm" leadingIcon="close" disabled={!hasActiveFilters} onClick={clearFilters}>
-            Clear
+          <Button variant="outline" size="md" leadingIcon="filter" onClick={() => setShowMore((v) => !v)} aria-expanded={showMore}>
+            Filters{moreCount > 0 ? ` · ${moreCount}` : ''}
           </Button>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="md" leadingIcon="close" onClick={clearFilters}>
+              Clear
+            </Button>
+          )}
+        </div>
 
-          <div className="ml-auto text-sm text-text-muted">
-            <span className="font-semibold text-text-main">{formatDuration(sum(filtered))}</span>
-            {' · '}
-            {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
-            {' · '}
-            {completed} completed
-            {canViewAll && ` · ${peopleCount} ${peopleCount === 1 ? 'person' : 'people'}`}
+        {showMore && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
+            {canViewAll && (
+              <Select aria-label="Person" placeholder={null} value={filters.person} onChange={(e) => setFilter('person', e.target.value)} options={selectOptions('All people', people)} />
+            )}
+            <Select aria-label="Project" placeholder={null} value={filters.project} onChange={(e) => setFilter('project', e.target.value)} options={selectOptions('All projects', projects)} />
+            <Select aria-label="Category" placeholder={null} value={filters.category} onChange={(e) => setFilter('category', e.target.value)} options={selectOptions('All categories', DSR_CATEGORIES)} />
+            <Select aria-label="Status" placeholder={null} value={filters.status} onChange={(e) => setFilter('status', e.target.value)} options={selectOptions('All statuses', DSR_STATUSES)} />
+            <div className="flex items-center gap-2">
+              <Input aria-label="From date" type="date" value={filters.from} max={filters.to || undefined} onChange={(e) => setFilter('from', e.target.value)} />
+              <span className="text-xs text-text-muted">to</span>
+              <Input aria-label="To date" type="date" value={filters.to} min={filters.from || undefined} onChange={(e) => setFilter('to', e.target.value)} />
+            </div>
           </div>
+        )}
+
+        <div className="text-sm text-text-muted">
+          <span className="font-semibold text-text-main">{formatDuration(sum(filtered))}</span>
+          {' · '}
+          {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+          {' · '}
+          {completed} completed
+          {canViewAll && ` · ${peopleCount} ${peopleCount === 1 ? 'person' : 'people'}`}
         </div>
       </div>
 

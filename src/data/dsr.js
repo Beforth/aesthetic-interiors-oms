@@ -6,7 +6,6 @@
  */
 
 export const DSR_CATEGORIES = [
-  'Ticket Completion',
   'Site Visit',
   'Client Meeting',
   'Design Work',
@@ -69,7 +68,7 @@ export const mockDsrEntries = [
   entry('dsr-5', 0, 'vikram', 'False ceiling framing for the master bedroom, gypsum boards fixed', 'Indiranagar 4BHK Luxury Villa', 'Site Visit', 240, 'completed', { note: '6 workers on site' }),
   entry('dsr-6', 0, 'vikram', 'Electrical conduit chasing in the living room', 'HSR Layout Contemporary 3BHK', 'Site Visit', 120, 'in progress'),
   entry('dsr-7', 0, 'suresh', 'Perimeter shadow groove work', 'Indiranagar 4BHK Luxury Villa', 'Site Visit', 300, 'completed'),
-  entry('dsr-8', 0, 'rohit', '[AEIO-003] Backend foundations, custom user model and roles', 'Aesthetic Interior - OMS', 'Ticket Completion', 15, 'completed', { auto: true }),
+  entry('dsr-8', 0, 'rohit', '[AEIO-003] Backend foundations, custom user model and roles', 'Aesthetic Interior - OMS', 'Other', 15, 'completed', { auto: true }),
   // yesterday
   entry('dsr-9', 1, 'rohit', 'Approved the revised payment schedule', 'HSR Layout Contemporary 3BHK', 'Review & Approval', 30, 'completed'),
   entry('dsr-10', 1, 'neha', 'Site inspection with the client, snag list prepared', 'Indiranagar 4BHK Luxury Villa', 'Site Visit', 150, 'completed'),
@@ -82,7 +81,7 @@ export const mockDsrEntries = [
   entry('dsr-16', 3, 'suresh', 'Material unloading and storage', 'Indiranagar 4BHK Luxury Villa', 'Other', 90, 'completed'),
   entry('dsr-17', 4, 'neha', 'Vendor negotiation for tiles', 'HSR Layout Contemporary 3BHK', 'Planning', 100, 'completed'),
   entry('dsr-18', 5, 'vikram', 'Stage hand-over checklist for civil work', 'Indiranagar 4BHK Luxury Villa', 'Review & Approval', 80, 'completed'),
-  entry('dsr-19', 6, 'rohit', '[AEIO-002] Monorepo setup, Docker and Postgres', 'Aesthetic Interior - OMS', 'Ticket Completion', 15, 'completed', { auto: true }),
+  entry('dsr-19', 6, 'rohit', '[AEIO-002] Monorepo setup, Docker and Postgres', 'Aesthetic Interior - OMS', 'Other', 15, 'completed', { auto: true }),
   entry('dsr-20', 6, 'suresh', 'Floor protection and cleaning', 'HSR Layout Contemporary 3BHK', 'Other', 120, 'completed'),
   // older
   entry('dsr-21', 9, 'neha', 'Monthly vendor performance review', NO_PROJECT, 'Review & Approval', 90, 'completed'),
