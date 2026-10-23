@@ -17,6 +17,7 @@ import EmptyState from '../components/ui/EmptyState';
 import PermissionGate from '../components/ui/PermissionGate';
 import { StatusBadge } from '../components/ui/Badge';
 import PersonMenu from '../components/dsr/PersonMenu';
+import useFixedShell from '../components/dsr/useFixedShell';
 
 const PAGE_SIZE = 50;
 
@@ -77,6 +78,7 @@ const sum = (rows) => rows.reduce((total, e) => total + e.minutes, 0);
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 export function DailyReportsPage() {
+  useFixedShell(); // sidebar and page each scroll on their own
   const toast = useToast();
   const { currentUser, role, hasPermission } = useAuth();
   const canViewAll = hasPermission('dsr.viewAll');
@@ -294,8 +296,10 @@ export function DailyReportsPage() {
   );
 
   return (
-    // The page fills the space under the top bar and scrolls the table itself, so the sidebar and header stay put.
-    <div className="flex flex-col gap-4 min-h-[520px] h-[calc(100dvh-184px)] lg:h-[calc(100dvh-144px)] sm:-mx-4 lg:-mx-6">
+    // The page is exactly as tall as the space under the top bar and scrolls inside itself, so the window never
+    // scrolls: the sidebar and top bar stay put. On tall screens the table fills the page and scrolls by itself;
+    // on short ones the whole page scrolls.
+    <div className="flex flex-col gap-4 h-[calc(100dvh-184px)] lg:h-[calc(100dvh-144px)] overflow-y-auto overflow-x-hidden pr-2 [scrollbar-gutter:stable] sm:-mx-4 lg:-mx-6">
       <PageHeader
         title="Daily Status Report"
         subtitle={`${whose} submitted work`}
@@ -390,7 +394,7 @@ export function DailyReportsPage() {
           }
         />
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col bg-surface border border-border rounded-lg overflow-hidden">
+        <div className="flex-1 min-h-[360px] flex flex-col bg-surface border border-border rounded-lg overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full min-w-[900px] text-left border-collapse">
               <thead className="sticky top-0 z-10">
