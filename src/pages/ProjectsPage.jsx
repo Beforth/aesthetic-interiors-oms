@@ -805,6 +805,33 @@ function ConfirmStageUpgradeModal({ isOpen, onClose, data, onConfirm }) {
   );
 }
 
+const STATUS_COLUMNS = [
+  {
+    key: 'not started',
+    aliases: ['not started', 'pending', 'planning'],
+    label: 'Planning & Kickoff',
+    color: 'border-t-sky-500',
+    countBadge: 'bg-sky-100 text-sky-800',
+    dotColor: 'bg-sky-500',
+  },
+  {
+    key: 'in progress',
+    aliases: ['in progress', 'active', 'ongoing'],
+    label: 'Fit-Out In Progress',
+    color: 'border-t-brand-600',
+    countBadge: 'bg-brand-100 text-brand-800',
+    dotColor: 'bg-brand-600',
+  },
+  {
+    key: 'completed',
+    aliases: ['completed', 'done', 'handed over'],
+    label: 'Completed & Handed Over',
+    color: 'border-t-emerald-600',
+    countBadge: 'bg-emerald-100 text-emerald-800',
+    dotColor: 'bg-emerald-600',
+  },
+];
+
 export function ProjectsPage() {
   const navigate = useNavigate();
   const { currentUser, role, hasPermission } = useAuth();
