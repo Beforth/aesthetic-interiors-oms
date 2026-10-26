@@ -13,6 +13,7 @@ import ClientsPage from '../pages/ClientsPage';
 import ClientDetailPage from '../pages/ClientDetailPage';
 import ProjectsPage from '../pages/ProjectsPage';
 import ProjectDetailPage from '../pages/ProjectDetailPage';
+import NewProjectPage from '../pages/NewProjectPage';
 import AgenciesPage from '../pages/AgenciesPage';
 import AttendancePage from '../pages/AttendancePage';
 import TasksPage from '../pages/TasksPage';
@@ -81,6 +82,14 @@ export function AppRoutes() {
           element={
             <RoleRoute permissions={['projects.viewAll', 'projects.viewAssigned', 'projects.viewOwn']}>
               <ProjectsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="projects/new"
+          element={
+            <RoleRoute permission="projects.create">
+              <NewProjectPage />
             </RoleRoute>
           }
         />

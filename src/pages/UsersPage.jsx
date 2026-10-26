@@ -600,11 +600,6 @@ export function UsersPage() {
       <PageHeader
         title="Settings > Users & Roles"
         subtitle="Manage personnel records, site access credentials, and master 12-stage sequential template"
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: 'Settings', path: '/settings/users' },
-          { label: 'Users & Roles' },
-        ]}
         actions={
           (canChangeRoles || canManageUsers) && (
             <div className="flex items-center gap-2">

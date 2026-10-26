@@ -34,8 +34,8 @@ export const SearchInput = forwardRef(function SearchInput(
 
   const baseInput = (
     <div className="relative flex items-center w-full">
-      <div className="absolute left-3.5 text-text-muted pointer-events-none flex items-center">
-        <Icon name="search" size={18} />
+      <div className="absolute left-3 text-text-muted pointer-events-none flex items-center">
+        <Icon name="search" size={15} />
       </div>
 
       <input
@@ -47,15 +47,14 @@ export const SearchInput = forwardRef(function SearchInput(
         disabled={disabled}
         placeholder={placeholder}
         aria-label={label || placeholder}
-        className={`w-full bg-surface border rounded text-sm text-text-main placeholder:text-text-muted/60 transition-colors
-          min-h-[44px] pl-10 pr-9 py-2.5
+        className={`w-full h-9 pl-9 pr-8 text-xs bg-card border rounded-lg text-foreground placeholder:text-muted-foreground/60 transition-colors
           ${
             error
-              ? 'border-danger focus:border-danger focus:ring-1 focus:ring-danger'
-              : 'border-border focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
+              ? 'border-destructive focus:border-destructive focus:ring-1 focus:ring-destructive'
+              : 'border-border focus:border-primary focus:ring-1 focus:ring-primary'
           }
-          focus:outline-none disabled:bg-brand-50 disabled:text-text-muted disabled:cursor-not-allowed
-          ${className}
+          focus:outline-none disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed
+          shadow-2xs ${className}
         `}
         {...rest}
       />
@@ -64,10 +63,10 @@ export const SearchInput = forwardRef(function SearchInput(
         <button
           type="button"
           onClick={handleClear}
-          className="absolute right-2.5 text-text-muted hover:text-text-main p-1 rounded transition-colors"
+          className="absolute right-2 text-text-muted hover:text-text-main p-1 rounded transition-colors cursor-pointer"
           aria-label="Clear search"
         >
-          <Icon name="close" size={14} />
+          <Icon name="close" size={13} />
         </button>
       )}
     </div>

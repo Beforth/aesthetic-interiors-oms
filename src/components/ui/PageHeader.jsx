@@ -18,17 +18,24 @@ export function PageHeader({
   actions,
   className = '',
 }) {
+  // Defensively filter out redundant 'Operations' breadcrumb root across any screen
+  const visibleBreadcrumbs = breadcrumbs?.filter(
+    (b) => b?.label && b.label.toLowerCase() !== 'operations'
+  );
+
   return (
-    <div className={`flex flex-col gap-2 mb-6 ${className}`}>
-      {breadcrumbs && <Breadcrumbs items={breadcrumbs} className="mb-1" />}
+    <div className={`flex flex-col gap-2 mb-4 sm:mb-6 ${className}`}>
+      {visibleBreadcrumbs && visibleBreadcrumbs.length > 0 && (
+        <Breadcrumbs items={visibleBreadcrumbs} className="mb-1" />
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text-main tracking-tight">
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">
             {title}
           </h1>
           {subtitle && (
-            <p className="text-xs sm:text-sm text-text-muted mt-0.5">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               {subtitle}
             </p>
           )}

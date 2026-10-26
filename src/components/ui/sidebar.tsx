@@ -160,7 +160,7 @@ export function Sidebar({ className, children, ...props }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'relative flex flex-col h-full shrink-0 border-r border-border bg-card transition-[width] duration-300 ease-in-out select-none',
+        'relative h-full z-30 flex flex-col shrink-0 border-r border-border bg-card transition-[width] duration-300 ease-in-out select-none',
         collapsed ? 'w-16' : 'w-64',
         className
       )}
@@ -182,7 +182,7 @@ export function SidebarHeader({ className, children, ...props }: SidebarHeaderPr
   return (
     <div
       className={cn(
-        'flex h-14 shrink-0 items-center gap-3 border-b border-border transition-all duration-200',
+        'flex h-12 shrink-0 items-center gap-3 border-b border-border transition-all duration-200',
         isCollapsed ? 'justify-center px-2' : 'px-4',
         className
       )}

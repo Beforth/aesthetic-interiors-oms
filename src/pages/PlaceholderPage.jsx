@@ -24,10 +24,6 @@ export function PlaceholderPage({
       <PageHeader
         title={title}
         subtitle={subtitle}
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: title },
-        ]}
       />
 
       <div className="py-8">

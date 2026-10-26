@@ -130,7 +130,6 @@ export function ComponentsShowcasePage() {
         title="Design System & Component Showcase"
         subtitle="Live catalogue of all reusable UI building blocks, WCAG 2.2 AA tokens, and interaction primitives."
         breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
           { label: 'Design System' },
         ]}
         actions={
@@ -670,7 +669,6 @@ export function ComponentsShowcasePage() {
             <div className="space-y-4">
               <Breadcrumbs
                 items={[
-                  { label: 'Operations', path: '/dashboard' },
                   { label: 'Projects', path: '/projects' },
                   { label: 'Indiranagar 4BHK Villa' },
                 ]}

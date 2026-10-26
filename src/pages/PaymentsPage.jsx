@@ -209,10 +209,6 @@ export function PaymentsPage() {
       <PageHeader
         title="Client Payments & Milestone Billing"
         subtitle="SRS Section 3.9: Set project contract budgets, split milestone installments, track advance & pending payments, and flag overdue payments"
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: 'Payments' },
-        ]}
         actions={
           isManagerOrAdmin && (
             <div className="flex items-center gap-2">
