@@ -19,7 +19,9 @@ import IconButton from '../components/ui/IconButton';
 import StatusBadge from '../components/ui/StatusBadge';
 import ProgressBar from '../components/ui/ProgressBar';
 import DetailList from '../components/ui/DetailList';
-import Avatar from '../components/ui/Avatar';
+import { Avatar } from '../components/ui/avatar';
+import { Badge } from '../components/ui/badge';
+import { Kanban } from '../components/ui/kanban';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import EmptyState from '../components/ui/EmptyState';
@@ -32,6 +34,12 @@ import AgencySelect from '../components/domain/AgencySelect';
 import PermissionGate from '../components/ui/PermissionGate';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 
+
+const DETAIL_TASK_KANBAN_COLUMNS = [
+  { id: 'todo', title: 'To Do', tone: 'default' },
+  { id: 'in progress', title: 'In Progress', tone: 'info' },
+  { id: 'done', title: 'Completed', tone: 'success' },
+];
 export function ProjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -52,7 +60,6 @@ export function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [projectTasks, setProjectTasks] = useState([]);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [dragOverCol, setDragOverCol] = useState(null);
   const [users, setUsers] = useState([]);
   const [agencies, setAgencies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +91,26 @@ export function ProjectDetailPage() {
     endDate: '2026-10-30',
     agencyId: '',
   });
+
+  // BefUI Kanban Board Data for Project Trade Tasks (Hook called unconditionally)
+  const taskKanbanBoard = React.useMemo(() => {
+    const board = {
+      todo: [],
+      'in progress': [],
+      done: [],
+    };
+    (projectTasks || []).forEach((t) => {
+      const s = (t.status || 'todo').toLowerCase();
+      if (s === 'todo' || s === 'pending' || s === 'to do') {
+        board.todo.push(t);
+      } else if (s === 'done' || s === 'completed') {
+        board.done.push(t);
+      } else {
+        board['in progress'].push(t);
+      }
+    });
+    return board;
+  }, [projectTasks]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -192,6 +219,27 @@ export function ProjectDetailPage() {
     (project.workers || []).includes(u.id)
   );
 
+
+
+  const handleTaskBoardChange = async (nextBoard) => {
+    if (!canManageTasks) {
+      toast.error('Only authorized personnel (Admin, Manager, Supervisor) can update task progress');
+      return;
+    }
+    for (const [targetColId, list] of Object.entries(nextBoard)) {
+      for (const task of list) {
+        const raw = (task.status || 'todo').toLowerCase();
+        let prevCol = 'in progress';
+        if (raw === 'todo' || raw === 'pending' || raw === 'to do') prevCol = 'todo';
+        else if (raw === 'done' || raw === 'completed') prevCol = 'done';
+
+        if (prevCol !== targetColId) {
+          await handleTaskStatusChange(task.id, targetColId);
+          return;
+        }
+      }
+    }
+  };
   // Handle task status progression for Kanban board
   const handleTaskStatusChange = async (taskId, newStatus) => {
     if (!canManageTasks) {
@@ -361,7 +409,6 @@ export function ProjectDetailPage() {
         title={project.name}
         subtitle={`Site Address: ${project.siteAddress} • Overall Progress: ${progress}%`}
         breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
           { label: 'Projects', path: '/projects' },
           { label: project.name },
         ]}
@@ -685,7 +732,7 @@ export function ProjectDetailPage() {
         </div>
       )}
 
-      {/* TAB 3: SITE TASKS KANBAN BOARD */}
+      {/* TAB 3: SITE TASKS KANBAN BOARD (BefUI Kanban Component) */}
       {activeTab === 'tasks' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-4 rounded-xl border border-border shadow-2xs">
@@ -697,7 +744,7 @@ export function ProjectDetailPage() {
                 </span>
               </h3>
               <p className="text-xs text-text-muted mt-0.5">
-                Authorized supervisors & managers can drag cards or advance stages to track real-time trade progress
+                Authorized supervisors & managers can drag cards or move with Alt+Arrows to track real-time trade progress
               </p>
             </div>
 
@@ -713,142 +760,76 @@ export function ProjectDetailPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { key: 'todo', label: 'To Do', color: 'border-t-brand-500 bg-brand-50/20' },
-              { key: 'in progress', label: 'In Progress', color: 'border-t-amber-500 bg-amber-50/20' },
-              { key: 'done', label: 'Completed', color: 'border-t-emerald-600 bg-emerald-50/20' },
-            ].map((col) => {
-              const colTasks = projectTasks.filter(
-                (t) =>
-                  t.status === col.key ||
-                  (col.key === 'todo' && (t.status === 'pending' || t.status === 'to do'))
-              );
-              const isTarget = dragOverCol === col.key;
-
-              return (
-                <div
-                  key={col.key}
-                  onDragOver={(e) => {
-                    if (!canManageTasks) return;
-                    e.preventDefault();
-                    if (dragOverCol !== col.key) setDragOverCol(col.key);
-                  }}
-                  onDragLeave={() => {
-                    if (dragOverCol === col.key) setDragOverCol(null);
-                  }}
-                  onDrop={(e) => {
-                    if (!canManageTasks) return;
-                    e.preventDefault();
-                    setDragOverCol(null);
-                    const taskId = e.dataTransfer.getData('text/plain');
-                    if (taskId) handleTaskStatusChange(taskId, col.key);
-                  }}
-                  className={`space-y-3 p-1 rounded-xl transition-all ${
-                    isTarget ? 'bg-brand-50/80 ring-2 ring-brand-400' : ''
-                  }`}
-                >
-                  <div
-                    className={`flex items-center justify-between p-2.5 rounded-lg border bg-surface border-t-4 ${col.color}`}
-                  >
-                    <div className="font-bold text-xs uppercase tracking-wider text-text-main flex items-center gap-2">
-                      <span>{col.label}</span>
-                      <span className="w-5 h-5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-mono flex items-center justify-center font-bold">
-                        {colTasks.length}
-                      </span>
-                    </div>
-                    {canManageTasks && col.key === 'todo' && (
-                      <IconButton
-                        icon="plus"
-                        size="xs"
-                        ariaLabel="Add task"
-                        onClick={() => setIsTaskModalOpen(true)}
-                      />
-                    )}
-                  </div>
-
-                  <div className="space-y-2.5 min-h-[350px]">
-                    {colTasks.map((t) => (
-                      <div
-                        key={t.id}
-                        draggable={canManageTasks}
-                        onDragStart={(e) => {
-                          if (!canManageTasks) return;
-                          e.dataTransfer.setData('text/plain', t.id);
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        className={canManageTasks ? 'cursor-grab active:cursor-grabbing' : ''}
-                      >
-                        <Card className="p-3.5 space-y-2.5 shadow-2xs hover:shadow-md transition-all border border-border">
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
-                              {t.stageName || 'Fit-Out'}
-                            </span>
-                            {t.priority === 'high' && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
-                                High Priority
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="font-semibold text-xs text-text-main leading-snug">
-                            {t.title}
-                          </div>
-
-                          {t.notes && (
-                            <div className="text-[11px] text-text-muted line-clamp-2">
-                              {t.notes}
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-between pt-2 border-t border-border/70 text-xs">
-                            <div className="flex items-center gap-1.5">
-                              <Avatar name={t.assignedToName || 'Artisan'} size="xs" />
-                              <span className="text-[11px] text-text-muted truncate max-w-[110px]">
-                                {t.assignedToName || 'Artisan'}
-                              </span>
-                            </div>
-
-                            {/* Status Changer Actions for Authorized Personnel */}
-                            {canManageTasks && (
-                              <div className="flex items-center gap-1">
-                                {col.key !== 'todo' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleTaskStatusChange(t.id, col.key === 'done' ? 'in progress' : 'todo')}
-                                    title="Move backward"
-                                    className="p-1 rounded text-text-muted hover:text-text-main hover:bg-slate-100 text-xs font-semibold"
-                                  >
-                                    ‹
-                                  </button>
-                                )}
-                                {col.key !== 'done' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleTaskStatusChange(t.id, col.key === 'todo' ? 'in progress' : 'done')}
-                                    title="Move forward"
-                                    className="px-2 py-0.5 rounded text-[11px] font-semibold bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 transition-colors"
-                                  >
-                                    {col.key === 'in progress' ? 'Complete ✓' : 'Start ›'}
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </Card>
-                      </div>
-                    ))}
-
-                    {colTasks.length === 0 && (
-                      <div className="p-6 text-center text-xs text-text-muted border-2 border-dashed rounded-lg bg-surface/50">
-                        No tasks in {col.label}
-                      </div>
-                    )}
-                  </div>
+          <Kanban
+            columns={DETAIL_TASK_KANBAN_COLUMNS}
+            value={taskKanbanBoard}
+            onChange={handleTaskBoardChange}
+            onAdd={canManageTasks ? () => setIsTaskModalOpen(true) : undefined}
+            renderCard={(t) => (
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <Badge variant={t.priority === 'high' ? 'danger' : 'default'} size="sm">
+                    {t.stageName || 'Fit-Out'}
+                  </Badge>
+                  {t.priority === 'high' && (
+                    <Badge variant="danger" size="sm">
+                      High Priority
+                    </Badge>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+
+                <p className="font-semibold text-xs text-foreground leading-snug">
+                  {t.title}
+                </p>
+
+                {t.notes && (
+                  <p className="text-[11px] text-muted-foreground line-clamp-2">
+                    {t.notes}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-between pt-1.5 border-t border-border/70 text-xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Avatar name={t.assignedToName || 'Artisan'} size="xs" />
+                    <span className="text-[11px] text-muted-foreground truncate max-w-[110px]">
+                      {t.assignedToName || 'Artisan'}
+                    </span>
+                  </div>
+
+                  {canManageTasks && (
+                    <div className="flex items-center gap-1">
+                      {t.status !== 'todo' && t.status !== 'pending' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTaskStatusChange(t.id, t.status === 'done' ? 'in progress' : 'todo');
+                          }}
+                          title="Move backward"
+                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary text-xs font-semibold"
+                        >
+                          ‹
+                        </button>
+                      )}
+                      {t.status !== 'done' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTaskStatusChange(t.id, (t.status === 'todo' || t.status === 'pending') ? 'in progress' : 'done');
+                          }}
+                          title="Move forward"
+                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                        >
+                          {(t.status === 'todo' || t.status === 'pending') ? 'Start ›' : 'Complete ✓'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          />
         </div>
       )}
 

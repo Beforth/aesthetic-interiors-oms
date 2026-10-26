@@ -7,24 +7,33 @@ import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { formatDate } from '../utils/formatters';
 import { validateRequired } from '../utils/validators';
+import { cn } from '../lib/utils';
 
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
-import Tabs from '../components/ui/Tabs';
 import Button from '../components/ui/Button';
-import IconButton from '../components/ui/IconButton';
 import SearchInput from '../components/ui/SearchInput';
 import Select from '../components/ui/Select';
 import StatusBadge from '../components/ui/StatusBadge';
-import Avatar from '../components/ui/Avatar';
+import { Avatar } from '../components/ui/avatar';
+import { Badge } from '../components/ui/badge';
+import { Kanban } from '../components/ui/kanban';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
-import Icon from '../components/ui/Icon';
+import {
+  KanbanIcon,
+  ListIcon,
+  PlusIcon,
+  CameraIcon,
+  AlertCircleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+} from '../components/ui/icons';
 
-const STATUS_COLUMNS = [
-  { key: 'todo', label: 'To Do', color: 'border-t-brand-400 bg-brand-50/20' },
-  { key: 'in progress', label: 'In Progress', color: 'border-t-amber-500 bg-amber-50/20' },
-  { key: 'done', label: 'Completed', color: 'border-t-emerald-600 bg-emerald-50/20' },
+const TASK_KANBAN_COLUMNS = [
+  { id: 'todo', title: 'To Do', tone: 'default' },
+  { id: 'in progress', title: 'In Progress', tone: 'info' },
+  { id: 'done', title: 'Completed', tone: 'success' },
 ];
 
 export function TasksPage() {
@@ -41,13 +50,13 @@ export function TasksPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters
+  // View & Density controls (Small cards default for high daily task volume)
   const [viewMode, setViewMode] = useState('board'); // 'board' or 'list'
+  const [cardDensity, setCardDensity] = useState('compact'); // 'compact' (small) | 'comfortable'
   const [searchTerm, setSearchTerm] = useState('');
   const [projectFilter, setProjectFilter] = useState('ALL');
   const [assigneeFilter, setAssigneeFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL'); // 'site' or 'office'
-  const [dragOverCol, setDragOverCol] = useState(null);
 
   // Create Task Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -111,6 +120,16 @@ export function TasksPage() {
     });
   }, [tasks, searchTerm, projectFilter, assigneeFilter, typeFilter]);
 
+  // Summary Metrics
+  const metrics = useMemo(() => {
+    const total = tasks.length;
+    const siteCount = tasks.filter((t) => t.type === 'site').length;
+    const officeCount = tasks.filter((t) => t.type === 'office').length;
+    const overdueCount = tasks.filter((t) => t.isOverdue && t.status !== 'done').length;
+    const completedCount = tasks.filter((t) => t.status === 'done').length;
+    return { total, siteCount, officeCount, overdueCount, completedCount };
+  }, [tasks]);
+
   // Create Task Submit
   const handleCreateTask = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -159,21 +178,41 @@ export function TasksPage() {
     }
   };
 
-  // Quick checkbox toggle handler
-  const handleToggleTaskStatus = async (taskId, currentStatus) => {
-    const nextStatus = currentStatus === 'done' ? 'in progress' : 'done';
-    try {
-      await taskService.updateTaskStatus(taskId, nextStatus);
-      toast.success(nextStatus === 'done' ? 'Task marked as completed!' : 'Task moved to in progress');
-      loadData();
-    } catch {
-      toast.error('Failed to update task status');
+  // BefUI Kanban Board Data & Handlers
+  const kanbanBoard = useMemo(() => {
+    const board = {
+      todo: [],
+      'in progress': [],
+      done: [],
+    };
+    filteredTasks.forEach((t) => {
+      const s = (t.status || 'todo').toLowerCase();
+      if (s === 'todo' || s === 'pending' || s === 'to do') {
+        board.todo.push(t);
+      } else if (s === 'done' || s === 'completed') {
+        board.done.push(t);
+      } else {
+        board['in progress'].push(t);
+      }
+    });
+    return board;
+  }, [filteredTasks]);
+
+  const handleBoardChange = async (nextBoard) => {
+    for (const [targetColId, list] of Object.entries(nextBoard)) {
+      for (const task of list) {
+        const raw = (task.status || 'todo').toLowerCase();
+        let prevCol = 'in progress';
+        if (raw === 'todo' || raw === 'pending' || raw === 'to do') prevCol = 'todo';
+        else if (raw === 'done' || raw === 'completed') prevCol = 'done';
+
+        if (prevCol !== targetColId) {
+          await handleDropTask(task.id, targetColId);
+          return;
+        }
+      }
     }
   };
-
-  const pendingTasks = useMemo(() => {
-    return tasks.filter((t) => t.status !== 'done');
-  }, [tasks]);
 
   // Status advance handler
   const handleAdvanceStatus = async (task) => {
@@ -218,44 +257,79 @@ export function TasksPage() {
       <PageHeader
         title="Tasks & Site Checklist"
         subtitle="SRS Section 3.7 - Assign and track site trades and office deliverables with photo proofs"
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: 'Tasks' },
-        ]}
         actions={
           <div className="flex items-center gap-2">
-            <div className="flex items-center border rounded-lg bg-surface p-0.5">
+            {/* View Mode: Board vs List */}
+            <div className="flex items-center border border-border rounded-lg bg-card p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode('board')}
-                className={`p-1.5 rounded text-xs font-medium flex items-center gap-1 ${
-                  viewMode === 'board' ? 'bg-brand-50 text-brand-700 shadow-2xs' : 'text-text-muted hover:text-text-main'
-                }`}
+                className={cn(
+                  'p-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors',
+                  viewMode === 'board'
+                    ? 'bg-secondary text-foreground font-semibold shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
                 title="Kanban Board View"
               >
-                <Icon name="columns" size={14} />
+                <KanbanIcon className="size-3.5" />
                 <span className="hidden sm:inline">Board</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded text-xs font-medium flex items-center gap-1 ${
-                  viewMode === 'list' ? 'bg-brand-50 text-brand-700 shadow-2xs' : 'text-text-muted hover:text-text-main'
-                }`}
+                className={cn(
+                  'p-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors',
+                  viewMode === 'list'
+                    ? 'bg-secondary text-foreground font-semibold shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
                 title="Table List View"
               >
-                <Icon name="list" size={14} />
+                <ListIcon className="size-3.5" />
                 <span className="hidden sm:inline">List</span>
               </button>
             </div>
+
+            {/* Density Selector for Board View */}
+            {viewMode === 'board' && (
+              <div className="flex items-center border border-border rounded-lg bg-card p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setCardDensity('compact')}
+                  className={cn(
+                    'px-2 py-1 rounded text-xs font-medium transition-colors',
+                    cardDensity === 'compact'
+                      ? 'bg-secondary text-foreground font-semibold shadow-2xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  title="Small compact cards (efficient for high volume of daily tasks)"
+                >
+                  Small
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCardDensity('comfortable')}
+                  className={cn(
+                    'px-2 py-1 rounded text-xs font-medium transition-colors',
+                    cardDensity === 'comfortable'
+                      ? 'bg-secondary text-foreground font-semibold shadow-2xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  title="Standard comfortable cards with photo previews"
+                >
+                  Comfortable
+                </button>
+              </div>
+            )}
 
             {canCreate && (
               <Button
                 variant="primary"
                 size="sm"
-                leadingIcon="plus"
                 onClick={() => setIsModalOpen(true)}
               >
+                <PlusIcon className="size-3.5 mr-1" />
                 Create Task
               </Button>
             )}
@@ -310,213 +384,264 @@ export function TasksPage() {
         </div>
       </Card>
 
-      {/* VIEW 1: Kanban Board View */}
+      {/* VIEW 1: BefUI Kanban Board View */}
       {viewMode === 'board' ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {STATUS_COLUMNS.map((col) => {
-            const colTasks = filteredTasks.filter(
-              (t) =>
-                t.status === col.key ||
-                (col.key === 'todo' && (t.status === 'pending' || t.status === 'to do'))
-            );
-            const isTarget = dragOverCol === col.key;
+        <Kanban
+          columns={TASK_KANBAN_COLUMNS}
+          value={kanbanBoard}
+          onChange={handleBoardChange}
+          density={cardDensity}
+          onAdd={canCreate ? () => setIsModalOpen(true) : undefined}
+          renderCard={(t) => {
+            if (cardDensity === 'compact') {
+              /* SMALL COMPACT CARD (< 68px tall) */
+              return (
+                <div className="space-y-1.5">
+                  {/* Top micro line: Priority indicator + Stage chip + Overdue/Photos */}
+                  <div className="flex items-center justify-between gap-1 text-[10px]">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {/* Priority indicator dot */}
+                      <span
+                        className={cn(
+                          'size-2 rounded-full shrink-0',
+                          t.priority === 'high'
+                            ? 'bg-destructive ring-2 ring-destructive/20'
+                            : t.priority === 'medium'
+                            ? 'bg-warning ring-2 ring-warning/20'
+                            : 'bg-muted-foreground/40'
+                        )}
+                        title={`Priority: ${t.priority || 'medium'}`}
+                      />
+                      <span className="font-medium text-secondary-foreground bg-secondary px-1.5 py-0.5 rounded text-[10px] truncate max-w-[100px]">
+                        {t.stageName || t.type}
+                      </span>
+                    </div>
 
-            return (
-              <div
-                key={col.key}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (dragOverCol !== col.key) setDragOverCol(col.key);
-                }}
-                onDragLeave={() => {
-                  if (dragOverCol === col.key) setDragOverCol(null);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOverCol(null);
-                  const taskId = e.dataTransfer.getData('text/plain');
-                  if (taskId) handleDropTask(taskId, col.key);
-                }}
-                className={`space-y-3 p-1 rounded-xl transition-all ${
-                  isTarget ? 'bg-brand-50/80 ring-2 ring-brand-400' : ''
-                }`}
-              >
-                <div
-                  className={`flex items-center justify-between p-2.5 rounded-lg border bg-surface border-t-4 ${col.color}`}
-                >
-                  <div className="font-bold text-xs uppercase tracking-wider text-text-main flex items-center gap-2">
-                    <span>{col.label}</span>
-                    <span className="w-5 h-5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-mono flex items-center justify-center font-bold">
-                      {colTasks.length}
-                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {t.photos && t.photos.length > 0 && (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded"
+                          title={`${t.photos.length} site proof photo(s)`}
+                        >
+                          <CameraIcon className="size-2.5" />
+                          {t.photos.length}
+                        </span>
+                      )}
+                      {t.isOverdue && (
+                        <span className="text-[10px] font-bold text-destructive bg-destructive/10 px-1 py-0.5 rounded">
+                          Overdue
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {canCreate && col.key === 'todo' && (
-                    <IconButton
-                      icon="plus"
-                      size="xs"
-                      ariaLabel="Add task"
-                      onClick={() => setIsModalOpen(true)}
-                    />
+
+                  {/* Task Title (Compact 1-2 lines) */}
+                  <p className="font-semibold text-xs text-foreground leading-snug line-clamp-2">
+                    {t.title}
+                  </p>
+
+                  {/* Project Name micro-text */}
+                  {t.projectName && (
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {t.projectName}
+                    </p>
+                  )}
+
+                  {/* Bottom micro-bar: Assignee + Fast Actions */}
+                  <div className="flex items-center justify-between pt-1 border-t border-border/70 text-[11px]">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Avatar name={t.assignedToName || 'Artisan'} size="xs" className="size-5 text-[9px]" />
+                      <span className="text-[10px] text-muted-foreground truncate max-w-[90px]">
+                        {t.assignedToName?.split(' ')[0] || 'Artisan'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                        title="Attach Photo Proof (FR-TSK-04)"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPhotoTargetTask(t);
+                          setPhotoInputUrl('https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=300');
+                        }}
+                      >
+                        <CameraIcon className="size-3" />
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                        title="Advance status"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAdvanceStatus(t);
+                        }}
+                      >
+                        {t.status === 'done' ? 'Reopen' : 'Next ›'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            /* COMFORTABLE (Expanded) CARD LAYOUT */
+            return (
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <Badge variant={t.priority === 'high' ? 'danger' : 'default'} size="sm">
+                    {t.stageName || t.type}
+                  </Badge>
+                  {t.isOverdue && (
+                    <Badge variant="danger" size="sm">
+                      Overdue
+                    </Badge>
                   )}
                 </div>
 
-                <div className="space-y-2.5 min-h-[400px]">
-                  {colTasks.map((t) => (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', t.id);
-                        e.dataTransfer.effectAllowed = 'move';
+                <p className="font-semibold text-xs text-foreground leading-snug">
+                  {t.title}
+                </p>
+
+                {t.projectName && (
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {t.projectName}
+                  </p>
+                )}
+
+                {/* Photo Attachments preview (FR-TSK-04) */}
+                {t.photos && t.photos.length > 0 && (
+                  <div className="flex items-center gap-1.5 pt-1">
+                    {t.photos.map((ph, idx) => (
+                      <img
+                        key={idx}
+                        src={ph}
+                        alt="Site proof"
+                        className="w-8 h-8 rounded object-cover border border-border"
+                      />
+                    ))}
+                    <span className="text-[10px] text-muted-foreground">
+                      {t.photos.length} photo{t.photos.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1.5 border-t border-border/70 text-xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Avatar name={t.assignedToName || 'Artisan'} size="xs" />
+                    <span className="text-[11px] text-muted-foreground truncate max-w-[100px]">
+                      {t.assignedToName || 'Artisan'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      title="Attach Photo Proof (FR-TSK-04)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPhotoTargetTask(t);
+                        setPhotoInputUrl('https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=300');
                       }}
-                      className="cursor-grab active:cursor-grabbing"
                     >
-                      <Card
-                        className={`p-3.5 space-y-2.5 shadow-2xs hover:shadow-md transition-all border ${
-                          t.isOverdue ? 'border-danger/60 bg-danger-light/10' : ''
-                        }`}
-                      >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
-                          {t.stageName || t.type}
-                        </span>
-                        {t.isOverdue && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-danger-light text-danger flex items-center gap-1">
-                            <Icon name="clock" size={10} />
-                            <span>Overdue</span>
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="font-semibold text-xs text-text-main leading-snug">
-                        {t.title}
-                      </div>
-
-                      <div className="text-[11px] text-text-muted truncate">
-                        {t.projectName}
-                      </div>
-
-                      {/* Photo Attachments preview (FR-TSK-04) */}
-                      {t.photos && t.photos.length > 0 && (
-                        <div className="flex items-center gap-1.5 pt-1">
-                          {t.photos.map((ph, idx) => (
-                            <img
-                              key={idx}
-                              src={ph}
-                              alt="Site proof"
-                              className="w-8 h-8 rounded object-cover border border-border"
-                            />
-                          ))}
-                          <span className="text-[10px] text-text-muted">
-                            {t.photos.length} photo{t.photos.length > 1 ? 's' : ''}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between pt-2 border-t text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <Avatar name={t.assignedToName} size="xs" />
-                          <span className="text-[11px] text-text-muted truncate max-w-[100px]">
-                            {t.assignedToName}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <IconButton
-                            icon="camera"
-                            size="xs"
-                            variant="ghost"
-                            ariaLabel="Attach photo"
-                            title="Attach Photo Proof (FR-TSK-04)"
-                            onClick={() => {
-                              setPhotoTargetTask(t);
-                              setPhotoInputUrl('https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=300');
-                            }}
-                          />
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() => handleAdvanceStatus(t)}
-                            title="Advance stage"
-                          >
-                            {t.status === 'done' ? 'Reopen' : 'Next >'}
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                    </div>
-                  ))}
-
-                  {colTasks.length === 0 && (
-                    <div className="p-6 text-center text-xs text-text-muted border-2 border-dashed rounded-lg bg-surface/50">
-                      No tasks in {col.label}
-                    </div>
-                  )}
+                      <CameraIcon className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      className="px-2 py-0.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                      title="Advance stage"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAdvanceStatus(t);
+                      }}
+                    >
+                      {t.status === 'done' ? 'Reopen' : 'Next ›'}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
-          })}
-        </div>
+          }}
+        />
       ) : (
         /* VIEW 2: Table List View */
         <Card>
           <div className="overflow-x-auto border border-border rounded-lg">
             <table className="w-full text-xs text-left">
-              <thead className="bg-brand-50 text-text-muted uppercase font-semibold border-b">
+              <thead className="bg-muted/60 text-muted-foreground uppercase font-semibold border-b border-border">
                 <tr>
-                  <th className="p-3">Task Details</th>
-                  <th className="p-3">Project & Stage</th>
-                  <th className="p-3">Assignee</th>
-                  <th className="p-3">Due Date</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
+                  <th className="py-2.5 px-3">Task Details</th>
+                  <th className="py-2.5 px-3">Project & Stage</th>
+                  <th className="py-2.5 px-3">Assignee</th>
+                  <th className="py-2.5 px-3">Due Date</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-border">
                 {filteredTasks.map((t) => (
-                  <tr key={t.id} className="hover:bg-brand-50/50">
-                    <td className="p-3 font-semibold text-text-main max-w-sm">
+                  <tr key={t.id} className="hover:bg-muted/40 transition-colors">
+                    <td className="py-2 px-3 font-semibold text-foreground max-w-sm">
                       <div className="truncate">{t.title}</div>
-                      <div className="text-[11px] text-text-muted font-normal uppercase">
+                      <div className="text-[11px] text-muted-foreground font-normal uppercase flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={cn(
+                            'size-1.5 rounded-full inline-block',
+                            t.priority === 'high'
+                              ? 'bg-destructive'
+                              : t.priority === 'medium'
+                              ? 'bg-warning'
+                              : 'bg-muted-foreground/40'
+                          )}
+                        />
                         {t.type} • Priority: {t.priority}
+                        {t.photos && t.photos.length > 0 && (
+                          <span className="text-muted-foreground font-mono inline-flex items-center gap-0.5">
+                            • <CameraIcon className="size-2.5" /> {t.photos.length}
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="p-3">
-                      <div className="text-text-main">{t.projectName}</div>
-                      <div className="text-[11px] text-brand-700">{t.stageName || '-'}</div>
+                    <td className="py-2 px-3">
+                      <div className="text-foreground">{t.projectName}</div>
+                      <div className="text-[11px] text-primary">{t.stageName || '-'}</div>
                     </td>
-                    <td className="p-3">
+                    <td className="py-2 px-3">
                       <div className="flex items-center gap-2">
                         <Avatar name={t.assignedToName} size="xs" />
-                        <span>{t.assignedToName}</span>
+                        <span className="text-foreground">{t.assignedToName}</span>
                       </div>
                     </td>
-                    <td className="p-3 font-mono">
-                      <span className={t.isOverdue ? 'text-danger font-bold' : 'text-text-muted'}>
+                    <td className="py-2 px-3 font-mono">
+                      <span className={t.isOverdue ? 'text-destructive font-bold' : 'text-muted-foreground'}>
                         {t.dueDate || '-'}
                       </span>
-                      {t.isOverdue && <span className="block text-[10px] text-danger">Overdue</span>}
+                      {t.isOverdue && <span className="block text-[10px] text-destructive">Overdue</span>}
                     </td>
-                    <td className="p-3">
+                    <td className="py-2 px-3">
                       <StatusBadge status={t.status} size="sm" />
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="py-2 px-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <IconButton
-                          icon="camera"
-                          size="xs"
-                          ariaLabel="Attach photo"
+                        <button
+                          type="button"
+                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                          title="Attach photo proof"
                           onClick={() => {
                             setPhotoTargetTask(t);
                             setPhotoInputUrl('https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=300');
                           }}
-                        />
+                        >
+                          <CameraIcon className="size-3.5" />
+                        </button>
                         <Button
                           variant="outline"
                           size="xs"
                           onClick={() => handleAdvanceStatus(t)}
                         >
-                          Change Status
+                          {t.status === 'done' ? 'Reopen' : 'Next ›'}
                         </Button>
                       </div>
                     </td>
@@ -660,7 +785,7 @@ export function TasksPage() {
             helperText="SRS FR-TSK-04: Captures real-time workmanship proofs on mobile or desktop"
           />
           {photoInputUrl && (
-            <div className="border rounded-lg p-2 bg-brand-50 flex items-center justify-center">
+            <div className="border border-border rounded-lg p-2 bg-muted/30 flex items-center justify-center">
               <img
                 src={photoInputUrl}
                 alt="Preview"

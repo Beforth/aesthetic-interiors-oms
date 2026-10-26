@@ -543,10 +543,6 @@ export function ClientsPage() {
       <PageHeader
         title="Clients"
         subtitle="Residential & commercial clients directory, site history, and project linkages"
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: 'Clients' },
-        ]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button

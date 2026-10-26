@@ -13,6 +13,7 @@ import Avatar from '../components/ui/Avatar';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import Icon from '../components/ui/Icon';
+import { CalendarDaysIcon, ClockIcon, CheckCircleIcon, ReceiptIcon } from '../components/ui/icons';
 
 export function LeavePayslipsPage() {
   const toast = useToast();
@@ -128,10 +129,6 @@ export function LeavePayslipsPage() {
       <PageHeader
         title="Leave & Monthly Payslips"
         subtitle="SRS Section 3.11: Worker leave applications, manager approvals, leave quotas, and automated attendance-linked payroll"
-        breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
-          { label: 'Leave & Payslips' },
-        ]}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -154,63 +151,87 @@ export function LeavePayslipsPage() {
         }
       />
 
-      {/* Top Summary Cards (FR-HR-03) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
-            <span className="font-semibold uppercase tracking-wider text-[11px]">Leave Balance</span>
-            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-              <Icon name="leave-payslips" size={14} />
+      {/* Top Summary Cards (FR-HR-03) - Small, Sleek UI Optimized for Android App */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+        {/* Card 1: Leave Balance */}
+        <div className="p-2.5 sm:p-3 rounded-xl bg-card border border-border shadow-2xs hover:border-foreground/20 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="font-semibold uppercase tracking-wider text-[10px] sm:text-[11px] text-muted-foreground truncate">
+              Leave Balance
+            </span>
+            <div className="size-6 sm:size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <CalendarDaysIcon className="size-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-text-main">
-            {mockLeaveBalances.balance} Days
+          <div className="mt-1">
+            <div className="text-base sm:text-xl font-bold tracking-tight text-foreground">
+              {mockLeaveBalances.balance} <span className="text-xs sm:text-sm font-semibold text-muted-foreground">Days</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+              {mockLeaveBalances.used} used of {mockLeaveBalances.totalAllotted} allotted
+            </p>
           </div>
-          <p className="text-[11px] text-text-muted">
-            {mockLeaveBalances.used} used of {mockLeaveBalances.totalAllotted} allotted days
-          </p>
-        </Card>
+        </div>
 
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
-            <span className="font-semibold uppercase tracking-wider text-[11px]">Pending Approvals</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-              <Icon name="clock" size={14} />
+        {/* Card 2: Pending Approvals */}
+        <div className="p-2.5 sm:p-3 rounded-xl bg-card border border-border shadow-2xs hover:border-foreground/20 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="font-semibold uppercase tracking-wider text-[10px] sm:text-[11px] text-muted-foreground truncate">
+              Pending
+            </span>
+            <div className="size-6 sm:size-7 rounded-lg bg-warning/15 text-warning flex items-center justify-center shrink-0">
+              <ClockIcon className="size-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-amber-600">
-            {pendingCount} Requests
+          <div className="mt-1">
+            <div className="text-base sm:text-xl font-bold tracking-tight text-warning">
+              {pendingCount} <span className="text-xs sm:text-sm font-semibold text-muted-foreground">Requests</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+              {isAdminOrManager ? 'Needs review' : 'Awaiting review'}
+            </p>
           </div>
-          <p className="text-[11px] text-text-muted">
-            {isAdminOrManager ? 'Requires manager review' : 'Awaiting review'}
-          </p>
-        </Card>
+        </div>
 
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
-            <span className="font-semibold uppercase tracking-wider text-[11px]">Approved (This Month)</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <Icon name="check" size={14} />
+        {/* Card 3: Approved (This Month) */}
+        <div className="p-2.5 sm:p-3 rounded-xl bg-card border border-border shadow-2xs hover:border-foreground/20 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="font-semibold uppercase tracking-wider text-[10px] sm:text-[11px] text-muted-foreground truncate">
+              Approved
+            </span>
+            <div className="size-6 sm:size-7 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0">
+              <CheckCircleIcon className="size-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-emerald-600">
-            {applications.filter((a) => a.status === 'approved').length} Approved
+          <div className="mt-1">
+            <div className="text-base sm:text-xl font-bold tracking-tight text-success">
+              {applications.filter((a) => a.status === 'approved').length} <span className="text-xs sm:text-sm font-semibold text-muted-foreground">Approved</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+              Factored into payroll
+            </p>
           </div>
-          <p className="text-[11px] text-text-muted">Factored into salary computation</p>
-        </Card>
+        </div>
 
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
-            <span className="font-semibold uppercase tracking-wider text-[11px]">Active Payslips</span>
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-              <Icon name="receipt" size={14} />
+        {/* Card 4: Active Payslips */}
+        <div className="p-2.5 sm:p-3 rounded-xl bg-card border border-border shadow-2xs hover:border-foreground/20 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="font-semibold uppercase tracking-wider text-[10px] sm:text-[11px] text-muted-foreground truncate">
+              Active Payslips
+            </span>
+            <div className="size-6 sm:size-7 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0">
+              <ReceiptIcon className="size-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-text-main">
-            {payslips.length} Slips
+          <div className="mt-1">
+            <div className="text-base sm:text-xl font-bold tracking-tight text-foreground">
+              {payslips.length} <span className="text-xs sm:text-sm font-semibold text-muted-foreground">Slips</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+              Ready for PDF download
+            </p>
           </div>
-          <p className="text-[11px] text-text-muted">Ready for PDF download (FR-HR-06)</p>
-        </Card>
+        </div>
       </div>
 
       {/* Tabs */}

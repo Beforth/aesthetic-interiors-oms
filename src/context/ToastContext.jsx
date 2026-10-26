@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { X, CheckCircle2, AlertTriangle, AlertCircle, Info } from 'lucide-react';
+import {
+  XIcon,
+  CheckCircleIcon,
+  TriangleAlertIcon,
+  AlertCircleIcon,
+  InfoIcon,
+} from '../components/ui/icons';
 import { toast as globalToast } from '../utils/toast';
 
 const ToastContext = createContext(null);
@@ -42,26 +48,26 @@ export function ToastProvider({ children }) {
   const getIcon = (type) => {
     switch (type) {
       case 'success':
-        return <CheckCircle2 className="w-5 h-5 text-success shrink-0" />;
+        return <CheckCircleIcon className="size-5 text-success shrink-0" />;
       case 'warning':
-        return <AlertTriangle className="w-5 h-5 text-warning shrink-0" />;
+        return <TriangleAlertIcon className="size-5 text-warning shrink-0" />;
       case 'danger':
-        return <AlertCircle className="w-5 h-5 text-danger shrink-0" />;
+        return <AlertCircleIcon className="size-5 text-destructive shrink-0" />;
       default:
-        return <Info className="w-5 h-5 text-info shrink-0" />;
+        return <InfoIcon className="size-5 text-info shrink-0" />;
     }
   };
 
   const getClasses = (type) => {
     switch (type) {
       case 'success':
-        return 'border-l-4 border-l-success bg-surface border-border text-text-main shadow-md';
+        return 'border-l-4 border-l-success bg-card border-border text-foreground shadow-lg';
       case 'warning':
-        return 'border-l-4 border-l-warning bg-surface border-border text-text-main shadow-md';
+        return 'border-l-4 border-l-warning bg-card border-border text-foreground shadow-lg';
       case 'danger':
-        return 'border-l-4 border-l-danger bg-surface border-border text-text-main shadow-md';
+        return 'border-l-4 border-l-destructive bg-card border-border text-foreground shadow-lg';
       default:
-        return 'border-l-4 border-l-info bg-surface border-border text-text-main shadow-md';
+        return 'border-l-4 border-l-info bg-card border-border text-foreground shadow-lg';
     }
   };
 
@@ -77,17 +83,17 @@ export function ToastProvider({ children }) {
           <div
             key={t.id}
             role="status"
-            className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded border ${getClasses(t.type)} animate-in fade-in slide-in-from-top-2 duration-200`}
+            className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-lg border ${getClasses(t.type)} animate-in fade-in slide-in-from-top-2 duration-200`}
           >
             {getIcon(t.type)}
             <div className="flex-1 text-sm font-medium leading-snug">{t.message}</div>
             <button
               type="button"
               onClick={() => removeToast(t.id)}
-              className="text-text-muted hover:text-text-main p-1 rounded transition-colors"
+              className="text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors cursor-pointer"
               aria-label="Close notification"
             >
-              <X className="w-4 h-4" />
+              <XIcon className="size-4" />
             </button>
           </div>
         ))}

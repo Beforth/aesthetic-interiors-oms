@@ -148,12 +148,14 @@ export const projectService = {
         clientEmail: projectData.clientEmail || '',
         siteAddress: projectData.siteAddress || '',
         startDate: projectData.startDate || '2026-10-20',
-        targetDate: projectData.targetDate || runningDate.toISOString().split('T')[0],
+        targetDate: projectData.endDate || projectData.targetDate || runningDate.toISOString().split('T')[0],
         totalCost: Number(projectData.totalCost) || 0,
         status: 'in progress',
         supervisors: projectData.supervisors || [],
         workers: projectData.workers || [],
-        stages: createdStages,
+        description: projectData.description || '',
+        projectLead: projectData.projectLead || null,
+        stages: (projectData.stages && projectData.stages.length > 0) ? projectData.stages : createdStages,
       };
 
       const updated = [newProject, ...projects];
@@ -231,7 +233,7 @@ export const projectService = {
       if (!project) return null;
 
       project.stages = project.stages.map((stg) =>
-        stg.id === stageId ? { ...stg, ...details } : stg
+        (stg.id === stageId || (details.stageName && stg.name && stg.name.toLowerCase() === details.stageName.toLowerCase())) ? { ...stg, ...details } : stg
       );
 
       saveProjects(projects);

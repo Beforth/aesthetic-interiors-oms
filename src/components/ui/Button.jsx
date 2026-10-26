@@ -19,25 +19,26 @@ export function Button({
   ...rest
 }) {
   const baseClasses =
-    'inline-flex shrink-0 items-center justify-center font-medium rounded-md transition-[background,box-shadow,transform,color] duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 select-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-[0.98] shadow-xs';
+    'inline-flex shrink-0 items-center justify-center font-semibold rounded-xl transition-[background,box-shadow,transform,color] duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 select-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-[0.98] shadow-2xs';
 
   const sizeClasses = {
-    sm: 'text-xs px-2.5 h-8 gap-1.5',
-    md: 'text-sm px-3.5 h-9 gap-2',
-    lg: 'text-sm px-4.5 h-10 gap-2.5',
+    xs: 'text-xs px-2.5 h-7 gap-1 rounded-lg font-medium',
+    sm: 'text-xs sm:text-sm px-4 py-2.5 min-h-[40px] gap-2 rounded-xl font-semibold',
+    md: 'text-xs sm:text-sm px-4 py-2.5 min-h-[40px] gap-2 rounded-xl font-semibold',
+    lg: 'text-sm sm:text-base px-5 py-3 min-h-[44px] gap-2.5 rounded-xl font-semibold',
   };
 
   const variantClasses = {
-    primary: 'bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent',
+    primary: 'bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent shadow-sm',
     secondary: 'bg-accent text-accent-foreground hover:bg-accent/80 border border-transparent',
-    outline: 'bg-card text-text-main border border-border hover:bg-muted',
-    danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border border-transparent',
-    destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border border-transparent',
+    outline: 'bg-surface text-text-main border border-border hover:bg-slate-50 shadow-2xs',
+    danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border border-transparent shadow-sm',
+    destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border border-transparent shadow-sm',
     ghost: 'bg-transparent text-text-main hover:bg-muted border border-transparent shadow-none',
   };
 
   const widthClass = fullWidth ? 'w-full' : '';
-  const iconSize = size === 'sm' ? 14 : size === 'lg' ? 18 : 15;
+  const iconSize = size === 'xs' ? 13 : 16;
 
   return (
     <button

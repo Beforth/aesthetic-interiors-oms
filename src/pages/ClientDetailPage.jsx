@@ -355,7 +355,6 @@ export function ClientDetailPage() {
         }
         subtitle={`Client ID: ${client.id} • Registered ${formatDate(client.createdAt)}`}
         breadcrumbs={[
-          { label: 'Operations', path: '/dashboard' },
           { label: 'Clients', path: '/clients' },
           { label: client.name },
         ]}

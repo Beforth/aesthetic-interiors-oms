@@ -12,6 +12,7 @@ import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
 import { SidebarTrigger } from '../ui/sidebar';
 import TaskAllocationModal from '../common/TaskAllocationModal';
+import { XIcon, CheckIcon, TrashIcon } from '../ui/icons';
 
 /**
  * Top navigation bar with live global search, Task Allocation shortcut,
@@ -238,19 +239,19 @@ export function Topbar({ onToggleMobileMenu }) {
 
   return (
     <>
-      <header className="h-16 bg-surface border-b border-border px-3 sm:px-5 lg:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <header className="h-12 bg-surface border-b border-border px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 shadow-2xs">
         {/* Left Section: Mobile Sidebar Drawer Trigger (Desktop trigger is beside Aesthetic Interiors heading) */}
         <div className="flex items-center lg:hidden">
           <SidebarTrigger />
         </div>
 
         {/* Center Section: Global Quick Search with Autocomplete */}
-        <div ref={searchContainerRef} className="relative flex-1 max-w-xl lg:max-w-2xl mx-3 sm:mx-6">
+        <div ref={searchContainerRef} className="relative flex-1 max-w-xs sm:max-w-sm lg:max-w-md mx-2 sm:mx-3">
           <div className="relative flex items-center">
             <Icon
               name="search"
-              size={18}
-              className="absolute left-3.5 text-text-muted pointer-events-none"
+              size={14}
+              className="absolute left-2.5 text-text-muted pointer-events-none"
             />
             <input
               ref={searchInputRef}
@@ -263,7 +264,7 @@ export function Topbar({ onToggleMobileMenu }) {
               onFocus={() => setIsSearchOpen(true)}
               onClick={() => setIsSearchOpen(true)}
               placeholder="Search projects, clients, tasks, muster..."
-              className="w-full h-11 pl-11 pr-24 py-2.5 text-sm bg-slate-50 border border-border rounded-xl text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all shadow-inner cursor-pointer focus:cursor-text"
+              className="w-full h-8 pl-8 pr-14 py-1 text-xs bg-slate-50 border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-1.5 focus:ring-brand-500 focus:bg-white transition-all shadow-inner cursor-pointer focus:cursor-text"
             />
             <div className="absolute right-3 flex items-center gap-1.5">
               {searchQuery ? (
@@ -473,12 +474,13 @@ export function Topbar({ onToggleMobileMenu }) {
           <div ref={notificationContainerRef} className="relative">
             <IconButton
               icon="bell"
+              size="sm"
               ariaLabel="View notifications"
               onClick={() => setIsNotificationsOpen((prev) => !prev)}
               className="cursor-pointer"
             />
             {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none shadow-xs">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
                 {unreadCount}
               </span>
             )}
@@ -495,49 +497,83 @@ export function Topbar({ onToggleMobileMenu }) {
                       </span>
                     )}
                   </div>
-                  {unreadCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
-                      }
-                      className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                    >
-                      Mark all as read
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2.5">
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
+                        }
+                        className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        title="Clear all notifications"
+                        onClick={() => setNotifications([])}
+                        className="text-[11px] font-semibold text-text-muted hover:text-destructive flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <TrashIcon className="size-3" />
+                        <span>Clear all</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="max-h-80 overflow-y-auto divide-y divide-border/40">
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => {
-                        setNotifications((prev) =>
-                          prev.map((item) => (item.id === n.id ? { ...item, unread: false } : item))
-                        );
-                        setIsNotificationsOpen(false);
-                        navigate(n.path);
-                      }}
-                      className={`p-3 hover:bg-slate-50 transition-colors flex items-start gap-3 cursor-pointer ${
-                        n.unread ? 'bg-primary/5' : ''
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border border-border/60 ${n.iconColor}`}>
-                        <Icon name={n.icon} size={15} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className={`text-xs truncate ${n.unread ? 'font-bold text-text-main' : 'font-medium text-text-muted'}`}>
-                            {n.title}
-                          </span>
-                          <span className="text-[10px] text-text-muted shrink-0">{n.time}</span>
-                        </div>
-                        <p className="text-[11px] text-text-muted mt-0.5 truncate">{n.description}</p>
-                      </div>
-                      {n.unread && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />}
+                  {notifications.length === 0 ? (
+                    <div className="py-8 px-4 text-center">
+                      <CheckIcon className="size-6 text-emerald-500 mx-auto mb-1.5" />
+                      <p className="text-xs font-semibold text-text-main">No notifications</p>
+                      <p className="text-[11px] text-text-muted mt-0.5">You're all caught up!</p>
                     </div>
-                  ))}
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          setNotifications((prev) =>
+                            prev.map((item) => (item.id === n.id ? { ...item, unread: false } : item))
+                          );
+                          setIsNotificationsOpen(false);
+                          navigate(n.path);
+                        }}
+                        className={`p-3 hover:bg-slate-50 transition-colors flex items-start gap-3 cursor-pointer group relative ${
+                          n.unread ? 'bg-primary/5' : ''
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border border-border/60 ${n.iconColor}`}>
+                          <Icon name={n.icon} size={15} />
+                        </div>
+                        <div className="flex-1 min-w-0 pr-2">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`text-xs truncate ${n.unread ? 'font-bold text-text-main' : 'font-medium text-text-muted'}`}>
+                              {n.title}
+                            </span>
+                            <span className="text-[10px] text-text-muted shrink-0">{n.time}</span>
+                          </div>
+                          <p className="text-[11px] text-text-muted mt-0.5 truncate">{n.description}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 self-center">
+                          {n.unread && <span className="w-2 h-2 rounded-full bg-primary" />}
+                          <button
+                            type="button"
+                            title="Dismiss notification"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNotifications((prev) => prev.filter((item) => item.id !== n.id));
+                            }}
+                            className="size-5 rounded flex items-center justify-center text-text-muted hover:text-destructive hover:bg-slate-200/70 transition-colors cursor-pointer"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 <div className="p-2.5 text-center bg-slate-50 border-t border-border/60">
@@ -561,11 +597,11 @@ export function Topbar({ onToggleMobileMenu }) {
             trigger={
               <button
                 type="button"
-                className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-brand-50 transition-colors select-none focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                className="flex items-center gap-1 p-0.5 rounded-lg hover:bg-brand-50 transition-colors select-none focus:outline-none focus:ring-1.5 focus:ring-brand-500 cursor-pointer"
                 aria-label="User account menu"
               >
-                <Avatar name={currentUser?.name || 'User'} size="sm" status="online" />
-                <Icon name="chevron-down" size={14} className="text-text-muted hidden sm:block" />
+                <Avatar name={currentUser?.name || 'User'} size="xs" status="online" />
+                <Icon name="chevron-down" size={13} className="text-text-muted hidden sm:block" />
               </button>
             }
             items={userMenuItems}
@@ -577,9 +613,9 @@ export function Topbar({ onToggleMobileMenu }) {
             onClick={handleSignOut}
             title="Sign Out"
             aria-label="Sign Out"
-            className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-danger/20 shrink-0 cursor-pointer"
+            className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors focus:outline-none focus:ring-1.5 focus:ring-danger/20 shrink-0 cursor-pointer"
           >
-            <Icon name="logout" size={18} />
+            <Icon name="logout" size={16} />
           </button>
         </div>
       </header>

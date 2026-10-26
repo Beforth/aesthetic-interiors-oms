@@ -4,7 +4,35 @@ import Skeleton from './Skeleton';
 import Pagination from './Pagination';
 
 /**
- * befui Table component conforming to https://befui.vercel.app/
+ * Renders a table cell using the column's render function or raw property value.
+ * Supports row-first signature (render(row, val, rIdx)) as well as val-first fallback,
+ * ensuring no unhandled TypeError can crash the table.
+ */
+function renderTableCell(col, row, rIdx) {
+  if (!col.render) {
+    const val = col.key ? row?.[col.key] : undefined;
+    return val !== undefined && val !== null ? val : '—';
+  }
+  if (typeof col.render !== 'function') {
+    return col.render;
+  }
+  const cellVal = col.key ? row?.[col.key] : undefined;
+  try {
+    // 1. Standard BefUI signature: render(row, cellVal, rIdx)
+    return col.render(row, cellVal, rIdx);
+  } catch (err1) {
+    try {
+      // 2. Alternative signature: render(cellVal, row, rIdx)
+      return col.render(cellVal, row, rIdx);
+    } catch (err2) {
+      console.error('Table cell render error for col:', col.key, err2);
+      return cellVal !== undefined && cellVal !== null ? cellVal : '—';
+    }
+  }
+}
+
+/**
+ * BefUI Table component conforming to https://befui.vercel.app/
  */
 export function Table({
   columns = [],
@@ -21,7 +49,7 @@ export function Table({
     <div className={`w-full rounded-xl border border-border overflow-hidden bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] ${className}`}>
       <div className="relative w-full overflow-x-auto">
         <table className="w-full text-left border-collapse text-[13px]">
-          <thead className="bg-muted/40 border-b border-border/80">
+          <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-xs border-b border-border/80">
             <tr>
               {columns.map((col, idx) => (
                 <th
@@ -70,7 +98,7 @@ export function Table({
                         col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
                       } ${col.cellClassName || ''}`}
                     >
-                      {col.render ? col.render(row[col.key], row, rIdx) : (row[col.key] ?? '—')}
+                      {renderTableCell(col, row, rIdx)}
                     </td>
                   ))}
                 </tr>

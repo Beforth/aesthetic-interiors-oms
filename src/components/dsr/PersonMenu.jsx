@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import Icon from '../ui/Icon';
+import { UserIcon, UsersIcon, ChevronDownIcon, CheckIcon } from '../ui/icons';
 
 /**
- * Person filter for the DSR: a small dropdown menu with checkbox items, so one or many people can be picked.
- * "Me" is the signed-in person, "Everyone" ticks every name, and the rest are the other people A to Z.
- * The menu stays open while ticking, and closes on an outside click or Esc.
+ * Person filter for the DSR: a sleek dropdown menu with checkbox items,
+ * allowing single or multiple team member selection.
  *
  * @param {Object} props
  * @param {string} props.me - the signed-in person's name
@@ -45,20 +44,35 @@ export function PersonMenu({ me, others, value, onChange }) {
   let label;
   if (allSelected && everyone.length > 1) label = 'Everyone';
   else if (value.length === 1) label = value[0] === me ? 'Me' : value[0];
-  else label = `${value.length} people`;
+  else label = `${value.length} team members`;
 
-  const Item = ({ checked, onClick, children }) => (
+  const Item = ({ checked, onClick, children, isMe = false }) => (
     <button
       type="button"
       role="menuitemcheckbox"
       aria-checked={checked}
       onClick={onClick}
-      className="relative flex w-full items-center rounded-md py-2 pl-8 pr-3 text-left text-[13px] text-text-main hover:bg-brand-50 focus:bg-brand-50 focus:outline-none"
+      className={`group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors cursor-pointer ${
+        checked
+          ? 'bg-muted/70 text-foreground'
+          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+      }`}
     >
-      <span className="absolute left-2.5 grid h-4 w-4 place-items-center text-brand-600">
-        {checked && <Icon name="check" size={14} />}
+      <span
+        className={`flex size-4 shrink-0 items-center justify-center rounded border transition-colors ${
+          checked
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-border bg-card group-hover:border-border/80'
+        }`}
+      >
+        {checked && <CheckIcon className="size-3 stroke-[2.5]" />}
       </span>
-      {children}
+      <span className="flex-1 truncate">{children}</span>
+      {isMe && (
+        <span className="text-[10px] font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+          You
+        </span>
+      )}
     </button>
   );
 
@@ -70,25 +84,38 @@ export function PersonMenu({ me, others, value, onChange }) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full min-h-[44px] sm:min-h-[38px] items-center gap-2 rounded border border-border bg-surface px-3 text-sm text-text-main transition-colors hover:bg-brand-50 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+        className="flex w-full h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground transition-all hover:border-border/80 hover:bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-2xs cursor-pointer"
       >
-        <Icon name="user" size={16} className="text-text-muted" />
+        {allSelected || value.length > 1 ? (
+          <UsersIcon className="size-3.5 text-muted-foreground shrink-0" />
+        ) : (
+          <UserIcon className="size-3.5 text-muted-foreground shrink-0" />
+        )}
         <span className="flex-1 truncate text-left">{label}</span>
-        <Icon name="chevron-down" size={16} className="text-text-muted" />
+        <ChevronDownIcon
+          className={`size-3.5 text-muted-foreground transition-transform duration-150 shrink-0 ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-64 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-lg"
+          className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-64 overflow-y-auto rounded-lg border border-border bg-popover p-1.5 shadow-lg animate-in fade-in zoom-in-95 duration-100"
         >
-          <Item checked={value.includes(me)} onClick={() => toggle(me)}>
-            Me
+          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Filter Team Members
+          </div>
+          <Item checked={value.includes(me)} onClick={() => toggle(me)} isMe>
+            {me}
           </Item>
-          <Item checked={allSelected} onClick={toggleEveryone}>
-            Everyone
-          </Item>
-          {others.length > 0 && <div role="separator" className="my-1 h-px bg-border" />}
+          {others.length > 0 && (
+            <Item checked={allSelected} onClick={toggleEveryone}>
+              All Team Members
+            </Item>
+          )}
+          {others.length > 0 && <div role="separator" className="my-1.5 h-px bg-border" />}
           {others.map((name) => (
             <Item key={name} checked={value.includes(name)} onClick={() => toggle(name)}>
               {name}

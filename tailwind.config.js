@@ -7,9 +7,15 @@ export default {
   theme: {
     extend: {
       colors: {
+        background: 'var(--background, #ffffff)',
+        foreground: 'var(--foreground, #0f172a)',
         primary: {
           DEFAULT: 'var(--primary)',
           foreground: 'var(--primary-foreground)',
+        },
+        secondary: {
+          DEFAULT: 'var(--secondary, #f1f5f9)',
+          foreground: 'var(--secondary-foreground, #0f172a)',
         },
         accent: {
           DEFAULT: 'var(--accent)',
@@ -19,14 +25,20 @@ export default {
           DEFAULT: 'var(--card, #ffffff)',
           foreground: 'var(--card-foreground, #0f172a)',
         },
+        popover: {
+          DEFAULT: 'var(--popover, #ffffff)',
+          foreground: 'var(--popover-foreground, #0f172a)',
+        },
         muted: {
           DEFAULT: 'var(--muted, #f8fafc)',
           foreground: 'var(--muted-foreground, #64748b)',
         },
         destructive: {
-          DEFAULT: 'var(--destructive, #ef4444)',
+          DEFAULT: 'var(--destructive, #e11d48)',
           foreground: '#ffffff',
         },
+        border: 'var(--border, #e2e8f0)',
+        input: 'var(--input, #e2e8f0)',
         ring: 'var(--ring)',
         brand: {
           50: '#EEF2FF',
@@ -46,23 +58,22 @@ export default {
           canvas: '#F8FAFC',
         },
         surface: '#FFFFFF',
-        border: '#E2E8F0',
         'text-main': '#0F172A',
         'text-muted': '#64748B',
         success: {
-          DEFAULT: '#10B981',
+          DEFAULT: 'var(--success, #059669)',
           light: '#ECFDF5',
         },
         warning: {
-          DEFAULT: '#F59E0B',
+          DEFAULT: 'var(--warning, #d97706)',
           light: '#FFFBEB',
         },
         danger: {
-          DEFAULT: '#EF4444',
+          DEFAULT: 'var(--destructive, #e11d48)',
           light: '#FEF2F2',
         },
         info: {
-          DEFAULT: '#0284C7',
+          DEFAULT: 'var(--info, #2563eb)',
           light: '#F0F9FF',
         },
       },
