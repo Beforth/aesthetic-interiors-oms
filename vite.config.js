@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
@@ -6,7 +6,9 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+const backend = loadEnv(mode, process.cwd(), '').VITE_API_URL || 'http://127.0.0.1:8000'
+return {
   envPrefix: ['VITE_', 'DEBUG'],
   resolve: {
     alias: {
@@ -18,12 +20,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: backend,
         changeOrigin: true,
         secure: false,
       },
       '/media': {
-        target: 'http://127.0.0.1:8000',
+        target: backend,
         changeOrigin: true,
         secure: false,
       },
@@ -60,4 +62,5 @@ export default defineConfig({
       }
     })
   ]
+}
 })
