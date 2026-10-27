@@ -35,21 +35,21 @@ export const FileInput = forwardRef(function FileInput(
     <div className="w-full">
       <label
         htmlFor={fileInputId}
-        className={`flex items-center justify-between border border-dashed rounded px-3 py-2 cursor-pointer bg-surface hover:bg-brand-50 transition-colors min-h-[44px]
-          ${error ? 'border-danger' : 'border-border'}
-          ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-50' : ''}
+        className={`flex items-center justify-between border border-dashed rounded-lg px-3 py-2 cursor-pointer bg-card hover:bg-muted transition-colors min-h-[44px]
+          ${error ? 'border-destructive' : 'border-border'}
+          ${disabled ? 'opacity-50 cursor-not-allowed bg-muted' : ''}
           ${className}
         `}
       >
         <div className="flex items-center gap-2 overflow-hidden text-sm">
-          <Icon name="upload" size={16} className="text-brand-500 shrink-0" />
-          <span className="truncate text-text-muted">
+          <Icon name="upload" size={16} className="text-primary shrink-0" />
+          <span className="truncate text-muted-foreground">
             {selectedFileNames.length > 0
               ? selectedFileNames.join(', ')
               : 'Choose file or drag & drop...'}
           </span>
         </div>
-        <span className="text-xs font-medium text-brand-600 shrink-0 ml-2">Browse</span>
+        <span className="text-xs font-medium text-primary shrink-0 ml-2">Browse</span>
       </label>
       <input
         ref={ref}

@@ -81,31 +81,31 @@ export function MultiSelect({
         aria-haspopup="listbox"
         tabIndex={disabled ? -1 : 0}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
-        className={`w-full min-h-[44px] bg-surface border rounded text-sm text-text-main p-1.5 pr-8 flex flex-wrap items-center gap-1.5 cursor-pointer transition-colors
+        className={`w-full min-h-[44px] bg-background border rounded-lg text-sm text-foreground p-1.5 pr-8 flex flex-wrap items-center gap-1.5 cursor-pointer transition-colors
           ${
             error
-              ? 'border-danger focus:border-danger'
-              : 'border-border focus:border-brand-500'
+              ? 'border-destructive focus:border-destructive'
+              : 'border-border focus:border-ring focus:ring-2 focus:ring-ring/20'
           }
-          ${disabled ? 'bg-brand-50 opacity-60 cursor-not-allowed' : 'hover:border-brand-500'}
+          ${disabled ? 'bg-muted opacity-60 cursor-not-allowed' : 'hover:border-muted-foreground/40'}
         `}
       >
         {selectedOptions.length === 0 ? (
-          <span className="text-text-muted px-2 py-1 text-sm select-none">
+          <span className="text-muted-foreground px-2 py-1 text-sm select-none">
             {placeholder}
           </span>
         ) : (
           selectedOptions.map((opt) => (
             <span
               key={opt.value}
-              className="inline-flex items-center gap-1 text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded font-medium"
+              className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium"
             >
               <span className="truncate max-w-[150px]">{opt.label}</span>
               {!disabled && (
                 <button
                   type="button"
                   onClick={(e) => handleRemove(e, opt.value)}
-                  className="hover:text-danger rounded p-0.5 transition-colors"
+                  className="hover:text-destructive rounded p-0.5 transition-colors"
                   aria-label={`Remove ${opt.label}`}
                 >
                   <Icon name="close" size={12} />
@@ -115,7 +115,7 @@ export function MultiSelect({
           ))
         )}
 
-        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none">
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
           <Icon name="chevron-down" size={16} />
         </div>
       </div>
@@ -123,23 +123,23 @@ export function MultiSelect({
       {isOpen && (
         <div
           role="listbox"
-          className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded shadow-lg z-30 max-h-60 overflow-y-auto p-1 animate-in fade-in zoom-in-95 duration-100"
+          className="absolute left-0 right-0 top-full mt-1 bg-popover text-popover-foreground border border-border rounded-xl shadow-lg z-30 max-h-60 overflow-y-auto p-1 animate-in fade-in zoom-in-95 duration-100"
         >
           {options.length > 5 && (
-            <div className="p-1 mb-1 border-b border-border sticky top-0 bg-surface">
+            <div className="p-1 mb-1 border-b border-border sticky top-0 bg-popover">
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search options..."
-                className="w-full text-xs px-2.5 py-1.5 border border-border rounded bg-brand-50 focus:outline-none focus:border-brand-500"
+                className="w-full text-xs px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring"
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
           )}
 
           {filteredOptions.length === 0 ? (
-            <div className="text-xs text-text-muted text-center py-3 select-none">
+            <div className="text-xs text-muted-foreground text-center py-3 select-none">
               No matching options
             </div>
           ) : (
@@ -154,21 +154,21 @@ export function MultiSelect({
                   className={`flex items-center justify-between p-2 rounded text-xs cursor-pointer select-none transition-colors min-h-[38px]
                     ${
                       isSelected
-                        ? 'bg-brand-50 text-brand-700 font-semibold'
-                        : 'text-text-main hover:bg-brand-50'
+                        ? 'bg-accent text-accent-foreground font-semibold'
+                        : 'text-foreground hover:bg-muted'
                     }
                   `}
                 >
                   <div className="min-w-0 pr-2">
                     <div className="truncate">{opt.label}</div>
                     {opt.subtitle && (
-                      <div className="text-[11px] text-text-muted truncate">
+                      <div className="text-[11px] text-muted-foreground truncate">
                         {opt.subtitle}
                       </div>
                     )}
                   </div>
                   {isSelected && (
-                    <Icon name="check" size={14} className="text-brand-600 shrink-0" />
+                    <Icon name="check" size={14} className="text-primary shrink-0" />
                   )}
                 </div>
               );

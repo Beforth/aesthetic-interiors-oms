@@ -117,17 +117,16 @@ export function DsrAttachmentUploader({
         </span>
       </div>
 
-      {/* Drop Target Area */}
+      {/* Upload Box Container with Inline Attached Items */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onClick={() => !disabled && !processing && fileInputRef.current?.click()}
-        className={`relative border border-dashed rounded-xl p-4 sm:p-5 text-center cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-2 ${
+        className={`relative border border-dashed rounded-xl p-3.5 sm:p-4 transition-all duration-150 ${
           isDragging
             ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-            : 'border-border bg-card hover:bg-muted/50 hover:border-border/80'
-        } ${disabled || processing ? 'opacity-60 cursor-not-allowed' : ''}`}
+            : 'border-border bg-card'
+        }`}
       >
         <input
           ref={fileInputRef}
@@ -139,114 +138,139 @@ export function DsrAttachmentUploader({
           onChange={(e) => handleFiles(e.target.files)}
         />
 
-        {processing ? (
-          <div className="flex flex-col items-center gap-2 py-2">
-            <Spinner size="md" />
-            <span className="text-xs font-medium text-foreground">
-              Optimizing and preparing files...
-            </span>
-          </div>
-        ) : (
-          <>
-            <div className="size-9 rounded-full bg-muted flex items-center justify-center text-primary border border-border/70">
-              <UploadIcon className="size-4.5" />
+        {/* Click to upload trigger area / Uploaded items container */}
+        <div
+          onClick={() => {
+            if (attachments.length === 0 && !disabled && !processing) {
+              fileInputRef.current?.click();
+            }
+          }}
+          className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg text-center transition-colors ${
+            attachments.length === 0
+              ? 'cursor-pointer hover:bg-muted/40'
+              : ''
+          } ${disabled || processing ? 'opacity-60 cursor-not-allowed' : ''}`}
+        >
+          {processing ? (
+            <div className="flex flex-col items-center gap-2 py-2">
+              <Spinner size="md" />
+              <span className="text-xs font-medium text-foreground">
+                Optimizing and preparing files...
+              </span>
             </div>
-            <div className="space-y-0.5">
-              <p className="text-xs font-medium text-foreground">
-                <span className="text-primary font-semibold hover:underline">
-                  Click to upload
-                </span>{' '}
-                or drag & drop site photos & files
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Camera photos will be optimized automatically
-              </p>
+          ) : attachments.length === 0 ? (
+            <>
+              <div className="size-9 rounded-full bg-muted flex items-center justify-center text-primary border border-border/70">
+                <UploadIcon className="size-4.5" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-foreground">
+                  <span className="text-primary font-semibold hover:underline">
+                    Click to upload
+                  </span>{' '}
+                  or drag & drop site photos & files
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Camera photos will be optimized automatically
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="w-full space-y-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
+                {attachments.map((att, idx) => {
+                  const isImg = att.type?.startsWith('image/') || att.isImage;
+                  return (
+                    <div
+                      key={att.id || idx}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded-lg border border-border bg-background p-2.5 shadow-2xs flex flex-col gap-2 text-left relative group"
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        {/* Thumbnail or Document Icon */}
+                        <div className="size-12 rounded-md bg-muted border border-border shrink-0 overflow-hidden flex items-center justify-center">
+                          {isImg && att.url ? (
+                            <img
+                              src={att.url}
+                              alt={att.caption || att.name}
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-muted-foreground p-1">
+                              <FileIcon className="size-5" />
+                              <span className="text-[9px] font-mono font-bold uppercase truncate max-w-[36px]">
+                                {att.name?.split('.').pop() || 'FILE'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-semibold text-foreground truncate block">
+                              {att.name}
+                            </span>
+                            {!disabled && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeAttachment(att.id);
+                                }}
+                                className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors cursor-pointer"
+                                aria-label="Remove attachment"
+                              >
+                                <XIcon className="size-3.5" />
+                              </button>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {formatFileSize(att.size)}
+                            {att.uploadedBy && ` • ${att.uploadedBy}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Caption input */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          disabled={disabled}
+                          value={att.caption || ''}
+                          onChange={(e) => updateCaption(att.id, e.target.value)}
+                          placeholder="Add caption (e.g. framing snag, wall conduit)..."
+                          className="w-full text-[11px] px-2 py-1 rounded bg-muted/60 border border-border/80 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:bg-card"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {attachments.length < maxFiles && (
+                <div className="pt-1 text-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer py-1 px-2.5 rounded-md hover:bg-primary/5 transition-colors"
+                  >
+                    <PlusIcon className="size-3.5" />
+                    <span>Upload more photos ({attachments.length}/{maxFiles})</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {errorMessage && (
         <div className="flex items-center gap-1.5 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-2.5">
           <AlertCircleIcon className="size-3.5 shrink-0" />
           <span>{errorMessage}</span>
-        </div>
-      )}
-
-      {/* Staged Attachments List */}
-      {attachments.length > 0 && (
-        <div className="space-y-2 pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Attached items ({attachments.length})
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {attachments.map((att, idx) => {
-              const isImg = att.type?.startsWith('image/') || att.isImage;
-              return (
-                <div
-                  key={att.id || idx}
-                  className="rounded-lg border border-border bg-card p-2.5 shadow-2xs flex flex-col gap-2 relative group"
-                >
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    {/* Thumbnail or Document Icon */}
-                    <div className="size-12 rounded-md bg-muted border border-border shrink-0 overflow-hidden flex items-center justify-center">
-                      {isImg && att.url ? (
-                        <img
-                          src={att.url}
-                          alt={att.caption || att.name}
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-muted-foreground p-1">
-                          <FileIcon className="size-5" />
-                          <span className="text-[9px] font-mono font-bold uppercase truncate max-w-[36px]">
-                            {att.name?.split('.').pop() || 'FILE'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-semibold text-foreground truncate block">
-                          {att.name}
-                        </span>
-                        {!disabled && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeAttachment(att.id);
-                            }}
-                            className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors"
-                            aria-label="Remove attachment"
-                          >
-                            <XIcon className="size-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-muted-foreground block">
-                        {formatFileSize(att.size)}
-                        {att.uploadedBy && ` • ${att.uploadedBy}`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Caption input */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      disabled={disabled}
-                      value={att.caption || ''}
-                      onChange={(e) => updateCaption(att.id, e.target.value)}
-                      placeholder="Add caption (e.g. framing snag, wall conduit)..."
-                      className="w-full text-[11px] px-2 py-1 rounded bg-muted/60 border border-border/80 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:bg-card"
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
     </div>

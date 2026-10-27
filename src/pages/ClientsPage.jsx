@@ -400,7 +400,7 @@ export function ClientsPage() {
         <a
           href={`tel:${c.phone}`}
           onClick={(e) => e.stopPropagation()}
-          className="font-mono text-xs text-text-main hover:text-brand-700 underline-offset-2 hover:underline"
+          className="font-mono text-xs text-foreground hover:text-primary underline-offset-2 hover:underline"
         >
           {c.phone}
         </a>
@@ -410,7 +410,7 @@ export function ClientsPage() {
       key: 'address',
       header: 'Site Address',
       render: (c) => (
-        <span className="text-xs text-text-muted truncate max-w-xs block" title={c.address}>
+        <span className="text-xs text-muted-foreground truncate max-w-xs block" title={c.address}>
           {c.address || 'Bengaluru, Karnataka'}
         </span>
       ),
@@ -422,7 +422,7 @@ export function ClientsPage() {
       render: (c) => {
         const stats = projectStatsMap[c.id] || { total: 0, active: 0, completed: 0 };
         if (stats.total === 0) {
-          return <span className="text-xs text-text-muted italic">No sites linked</span>;
+          return <span className="text-xs text-muted-foreground italic">No sites linked</span>;
         }
 
         return (
@@ -431,16 +431,16 @@ export function ClientsPage() {
               {stats.active > 0 && (
                 <span
                   title={`${stats.active} live fit-out project${stats.active > 1 ? 's' : ''}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-success/15 text-success border border-success/30 shadow-2xs"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                   {stats.active} {stats.active === 1 ? 'active' : 'active sites'}
                 </span>
               )}
               {stats.completed > 0 && (
                 <span
                   title={`${stats.completed} delivered fit-out contract${stats.completed > 1 ? 's' : ''}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-info/10 text-info border border-info/30"
                 >
                   <Icon name="check" size={11} className="stroke-[2.5]" />
                   {stats.completed} {stats.completed === 1 ? 'done' : 'completed'}
@@ -448,7 +448,7 @@ export function ClientsPage() {
               )}
             </div>
             {stats.total > 1 && (
-              <span className="text-[10px] text-text-muted font-mono font-medium">
+              <span className="text-[10px] text-muted-foreground font-mono font-medium">
                 {stats.total} total
               </span>
             )}
@@ -474,7 +474,7 @@ export function ClientsPage() {
       key: 'createdAt',
       header: 'Onboarding Date',
       render: (c) => (
-        <span className="text-xs text-text-muted whitespace-nowrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
           {formatDate(c.createdAt)}
         </span>
       ),
@@ -494,7 +494,7 @@ export function ClientsPage() {
             ariaLabel={`View client ${c.name}`}
             title="View Details"
             onClick={() => navigate(`/clients/${c.id}`)}
-            className="hover:bg-brand-100 text-brand-700"
+            className="hover:bg-primary/10 text-primary"
           />
           {canManageClients && (
             <>
@@ -504,7 +504,7 @@ export function ClientsPage() {
                 ariaLabel={`Edit client ${c.name}`}
                 title="Edit Client"
                 onClick={(e) => handleOpenEdit(c, e)}
-                className="hover:bg-brand-100 text-brand-700"
+                className="hover:bg-primary/10 text-primary"
               />
               <IconButton
                 icon="trash"
@@ -512,7 +512,7 @@ export function ClientsPage() {
                 ariaLabel={`Delete client ${c.name}`}
                 title="Delete Client"
                 onClick={(e) => handleOpenDelete(c, e)}
-                className="hover:bg-danger-light text-danger"
+                className="hover:bg-destructive/10 text-destructive"
               />
             </>
           )}
@@ -582,27 +582,27 @@ export function ClientsPage() {
       />
 
       {/* Modern BefUI DataToolbar with Search, Status, Sorting, and Date Filters */}
-      <div className="bg-surface border border-border rounded-xl p-3.5 shadow-sm space-y-3">
+      <div className="bg-card border border-border rounded-xl p-3.5 shadow-xs space-y-3">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* Search bar: searches name, phone, address, email, notes */}
           <div className="relative flex-1 w-full lg:max-w-md">
             <Icon
               name="search"
               size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, phone, address, email..."
-              className="w-full pl-9 pr-8 py-2 text-xs bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-text-main placeholder:text-text-muted transition-all"
+              className="w-full pl-9 pr-8 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 text-foreground placeholder:text-muted-foreground transition-all"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 <Icon name="x" size={14} />
               </button>
@@ -610,14 +610,14 @@ export function ClientsPage() {
           </div>
 
           {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-brand-50/70 border border-border rounded-lg self-start lg:self-auto overflow-x-auto">
+          <div className="flex items-center gap-1.5 p-1 bg-secondary border border-border rounded-lg self-start lg:self-auto overflow-x-auto">
             <button
               type="button"
               onClick={() => setTypeFilter('ALL')}
               className={`px-3 py-1 rounded text-xs font-semibold transition-all whitespace-nowrap ${
                 typeFilter === 'ALL'
-                  ? 'bg-surface text-brand-900 shadow-xs border border-border/80'
-                  : 'text-text-muted hover:text-text-main'
+                  ? 'bg-card text-foreground shadow-2xs border border-border'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               All Clients ({counts.total})
@@ -627,8 +627,8 @@ export function ClientsPage() {
               onClick={() => setTypeFilter('new')}
               className={`px-3 py-1 rounded text-xs font-semibold transition-all whitespace-nowrap ${
                 typeFilter === 'new'
-                  ? 'bg-surface text-emerald-800 shadow-xs border border-border/80'
-                  : 'text-text-muted hover:text-text-main'
+                  ? 'bg-card text-success shadow-2xs border border-border'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               New ({counts.newClients})
@@ -638,8 +638,8 @@ export function ClientsPage() {
               onClick={() => setTypeFilter('old')}
               className={`px-3 py-1 rounded text-xs font-semibold transition-all whitespace-nowrap ${
                 typeFilter === 'old'
-                  ? 'bg-surface text-brand-900 shadow-xs border border-border/80'
-                  : 'text-text-muted hover:text-text-main'
+                  ? 'bg-card text-foreground shadow-2xs border border-border'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Existing (Old) ({counts.oldClients})
@@ -652,13 +652,13 @@ export function ClientsPage() {
           <div className="flex flex-wrap items-center gap-2.5 text-xs">
             {/* Sorting Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-text-muted font-medium flex items-center gap-1">
+              <span className="text-muted-foreground font-medium flex items-center gap-1">
                 <Icon name="arrow-up-down" size={13} /> Sort:
               </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="py-1 px-2.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-main focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="py-1 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
               >
                 <option value="date_desc">Newest Registered</option>
                 <option value="date_asc">Oldest Registered</option>
@@ -671,13 +671,13 @@ export function ClientsPage() {
 
             {/* Date Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-text-muted font-medium flex items-center gap-1">
+              <span className="text-muted-foreground font-medium flex items-center gap-1">
                 <Icon name="calendar" size={13} /> Onboarding:
               </span>
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="py-1 px-2.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-main focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="py-1 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
               >
                 <option value="ALL">All Time</option>
                 <option value="THIS_MONTH">This Month</option>
@@ -694,15 +694,15 @@ export function ClientsPage() {
                   type="date"
                   value={customFromDate}
                   onChange={(e) => setCustomFromDate(e.target.value)}
-                  className="py-0.5 px-2 bg-surface border border-border rounded-lg text-xs text-text-main"
+                  className="py-0.5 px-2 bg-background border border-border rounded-lg text-xs text-foreground"
                   title="From Date"
                 />
-                <span className="text-text-muted">to</span>
+                <span className="text-muted-foreground">to</span>
                 <input
                   type="date"
                   value={customToDate}
                   onChange={(e) => setCustomToDate(e.target.value)}
-                  className="py-0.5 px-2 bg-surface border border-border rounded-lg text-xs text-text-main"
+                  className="py-0.5 px-2 bg-background border border-border rounded-lg text-xs text-foreground"
                   title="To Date"
                 />
               </div>
@@ -710,14 +710,14 @@ export function ClientsPage() {
 
             {/* Page Size Selector */}
             <div className="hidden sm:flex items-center gap-1.5 ml-2">
-              <span className="text-text-muted">Rows:</span>
+              <span className="text-muted-foreground">Rows:</span>
               <select
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="py-1 px-2 bg-surface border border-border rounded-lg text-xs font-medium text-text-main"
+                className="py-1 px-2 bg-background border border-border rounded-lg text-xs font-medium text-foreground"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -732,7 +732,7 @@ export function ClientsPage() {
             <button
               type="button"
               onClick={handleResetFilters}
-              className="inline-flex items-center gap-1 text-xs text-brand-700 hover:text-brand-900 font-medium underline underline-offset-2"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium underline underline-offset-2"
             >
               <Icon name="rotate-ccw" size={12} />
               Reset filters
@@ -742,7 +742,7 @@ export function ClientsPage() {
       </div>
 
       {/* Clients Table with Row Click */}
-      <div className="bg-surface rounded-xl border border-border overflow-hidden shadow-xs">
+      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-xs">
         <Table
           columns={columns}
           data={paginatedClients}

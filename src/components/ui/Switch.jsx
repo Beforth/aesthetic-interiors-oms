@@ -41,11 +41,11 @@ export const Switch = forwardRef(function Switch(
         />
         <div
           className={`w-11 h-6 rounded-full transition-colors ${
-            checked ? 'bg-brand-600' : 'bg-border'
-          } peer-focus:ring-2 peer-focus:ring-brand-500 peer-focus:ring-offset-1`}
+            checked ? 'bg-primary' : 'bg-muted-foreground/30'
+          } peer-focus:ring-2 peer-focus:ring-ring/20`}
         />
         <div
-          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow-sm transition-transform ${
+          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-card rounded-full shadow-sm transition-transform ${
             checked ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
@@ -53,8 +53,8 @@ export const Switch = forwardRef(function Switch(
 
       {(label || description) && (
         <div className="flex flex-col text-sm leading-tight">
-          {label && <span className="font-medium text-text-main">{label}</span>}
-          {description && <span className="text-xs text-text-muted">{description}</span>}
+          {label && <span className="font-medium text-foreground">{label}</span>}
+          {description && <span className="text-xs text-muted-foreground">{description}</span>}
         </div>
       )}
     </label>

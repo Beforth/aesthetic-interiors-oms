@@ -17,16 +17,26 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const addToast = useCallback((message, type = 'info', duration = 3500) => {
+  const addToast = useCallback((messageOrObj, type = 'info', duration = 3500) => {
+    let message = messageOrObj;
+    let toastType = type;
+    let toastDuration = duration;
+
+    if (typeof messageOrObj === 'object' && messageOrObj !== null) {
+      message = messageOrObj.message || messageOrObj.title || '';
+      toastType = messageOrObj.type === 'error' || messageOrObj.type === 'danger' ? 'danger' : (messageOrObj.type || type);
+      toastDuration = messageOrObj.duration || duration;
+    }
+
     const id = Date.now() + Math.random().toString(36).substring(2, 9);
-    const newToast = { id, message, type };
+    const newToast = { id, message, type: toastType };
 
     setToasts((prev) => [...prev, newToast]);
 
-    if (duration > 0) {
+    if (toastDuration > 0) {
       setTimeout(() => {
         removeToast(id);
-      }, duration);
+      }, toastDuration);
     }
   }, [removeToast]);
 
@@ -43,6 +53,7 @@ export function ToastProvider({ children }) {
     error: (msg, duration) => addToast(msg, 'danger', duration),
     warning: (msg, duration) => addToast(msg, 'warning', duration),
     info: (msg, duration) => addToast(msg, 'info', duration),
+    addToast: (msgOrObj, type, duration) => addToast(msgOrObj, type, duration),
   };
 
   const getIcon = (type) => {

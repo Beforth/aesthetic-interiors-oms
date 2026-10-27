@@ -28,7 +28,7 @@ export function Skeleton({
   return (
     <div
       style={style}
-      className={`animate-pulse bg-brand-100 ${variantClasses[variant] || variantClasses.text} ${className}`}
+      className={`animate-pulse bg-muted ${variantClasses[variant] || variantClasses.text} ${className}`}
       aria-hidden="true"
     />
   );

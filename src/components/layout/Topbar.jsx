@@ -264,14 +264,14 @@ export function Topbar({ onToggleMobileMenu }) {
               onFocus={() => setIsSearchOpen(true)}
               onClick={() => setIsSearchOpen(true)}
               placeholder="Search projects, clients, tasks, muster..."
-              className="w-full h-8 pl-8 pr-14 py-1 text-xs bg-slate-50 border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-1.5 focus:ring-brand-500 focus:bg-white transition-all shadow-inner cursor-pointer focus:cursor-text"
+              className="w-full h-8 pl-8 pr-14 py-1 text-xs bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:bg-card transition-all shadow-inner cursor-pointer focus:cursor-text"
             />
             <div className="absolute right-3 flex items-center gap-1.5">
               {searchQuery ? (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="text-text-muted hover:text-text-main text-xs p-1 rounded cursor-pointer"
+                  className="text-muted-foreground hover:text-foreground text-xs p-1 rounded cursor-pointer"
                   title="Clear query"
                 >
                   ✕
@@ -283,7 +283,7 @@ export function Topbar({ onToggleMobileMenu }) {
                   searchInputRef.current?.focus();
                   setIsSearchOpen(true);
                 }}
-                className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-mono font-medium text-text-muted bg-slate-200/70 hover:bg-slate-300/80 rounded border border-border/80 cursor-pointer shadow-2xs select-none transition-colors"
+                className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-mono font-medium text-muted-foreground bg-muted hover:bg-muted/80 rounded border border-border/80 cursor-pointer shadow-2xs select-none transition-colors"
                 title="Click or press Ctrl+K to search"
               >
                 <span>Ctrl</span>
@@ -294,19 +294,19 @@ export function Topbar({ onToggleMobileMenu }) {
 
           {/* Autocomplete Search Dropdown & Command Palette */}
           {isSearchOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1.5 bg-surface border border-border rounded-xl shadow-xl overflow-hidden z-50 max-h-96 overflow-y-auto divide-y divide-border/50 animate-fadeIn">
+            <div className="absolute top-full left-0 right-0 mt-1.5 bg-popover text-popover-foreground border border-border rounded-xl shadow-xl overflow-hidden z-50 max-h-96 overflow-y-auto divide-y divide-border/50 animate-fadeIn">
               {searchResults ? (
                 searchResults.totalMatches === 0 ? (
-                  <div className="p-4 text-center text-xs text-text-muted">
-                    No matches found for <span className="font-semibold text-text-main">"{searchQuery}"</span>
+                  <div className="p-4 text-center text-xs text-muted-foreground">
+                    No matches found for <span className="font-semibold text-foreground">"{searchQuery}"</span>
                   </div>
                 ) : (
                   <>
                     {/* Projects */}
                     {searchResults.projects.length > 0 && (
                       <div className="p-2">
-                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                          <Icon name="briefcase" size={12} className="text-brand-600" />
+                        <div className="text-[10px] uppercase font-bold text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="briefcase" size={12} className="text-primary" />
                           <span>Projects</span>
                         </div>
                         {searchResults.projects.map((proj) => (
@@ -314,13 +314,13 @@ export function Topbar({ onToggleMobileMenu }) {
                             key={proj.id}
                             type="button"
                             onClick={() => handleSelectSearchResult(`/projects/${proj.id}`)}
-                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-muted flex items-center justify-between text-xs transition-colors cursor-pointer"
                           >
                             <div className="truncate">
-                              <span className="font-semibold text-text-main">{proj.name}</span>
-                              <span className="text-[11px] text-text-muted ml-2">{proj.clientName}</span>
+                              <span className="font-semibold text-foreground">{proj.name}</span>
+                              <span className="text-[11px] text-muted-foreground ml-2">{proj.clientName}</span>
                             </div>
-                            <span className="text-[10px] text-brand-600 shrink-0 font-medium ml-2">
+                            <span className="text-[10px] text-primary shrink-0 font-medium ml-2">
                               View →
                             </span>
                           </button>
@@ -331,8 +331,8 @@ export function Topbar({ onToggleMobileMenu }) {
                     {/* Tasks */}
                     {searchResults.tasks.length > 0 && (
                       <div className="p-2">
-                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                          <Icon name="clipboard-list" size={12} className="text-amber-600" />
+                        <div className="text-[10px] uppercase font-bold text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="clipboard-list" size={12} className="text-warning" />
                           <span>Tasks</span>
                         </div>
                         {searchResults.tasks.map((task) => (
@@ -340,15 +340,15 @@ export function Topbar({ onToggleMobileMenu }) {
                             key={task.id}
                             type="button"
                             onClick={() => handleSelectSearchResult('/tasks')}
-                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-muted flex items-center justify-between text-xs transition-colors cursor-pointer"
                           >
                             <div className="truncate">
-                              <span className="font-medium text-text-main">{task.title}</span>
+                              <span className="font-medium text-foreground">{task.title}</span>
                               {task.assignedToName && (
-                                <span className="text-[11px] text-text-muted ml-2">({task.assignedToName})</span>
+                                <span className="text-[11px] text-muted-foreground ml-2">({task.assignedToName})</span>
                               )}
                             </div>
-                            <span className="text-[10px] text-amber-600 shrink-0 font-medium ml-2">
+                            <span className="text-[10px] text-warning shrink-0 font-medium ml-2">
                               Task Board →
                             </span>
                           </button>
@@ -359,8 +359,8 @@ export function Topbar({ onToggleMobileMenu }) {
                     {/* Clients */}
                     {searchResults.clients.length > 0 && (
                       <div className="p-2">
-                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                          <Icon name="users" size={12} className="text-blue-600" />
+                        <div className="text-[10px] uppercase font-bold text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="users" size={12} className="text-info" />
                           <span>Clients</span>
                         </div>
                         {searchResults.clients.map((client) => (
@@ -368,13 +368,13 @@ export function Topbar({ onToggleMobileMenu }) {
                             key={client.id}
                             type="button"
                             onClick={() => handleSelectSearchResult('/clients')}
-                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-muted flex items-center justify-between text-xs transition-colors cursor-pointer"
                           >
                             <div className="truncate">
-                              <span className="font-semibold text-text-main">{client.name}</span>
-                              <span className="text-[11px] text-text-muted ml-2">{client.city || client.phone}</span>
+                              <span className="font-semibold text-foreground">{client.name}</span>
+                              <span className="text-[11px] text-muted-foreground ml-2">{client.city || client.phone}</span>
                             </div>
-                            <span className="text-[10px] text-blue-600 shrink-0 font-medium ml-2">
+                            <span className="text-[10px] text-info shrink-0 font-medium ml-2">
                               Directory →
                             </span>
                           </button>
@@ -385,8 +385,8 @@ export function Topbar({ onToggleMobileMenu }) {
                     {/* Team Members */}
                     {searchResults.users.length > 0 && (
                       <div className="p-2">
-                        <div className="text-[10px] uppercase font-bold text-text-muted px-2 py-1 flex items-center gap-1.5">
-                          <Icon name="attendance" size={12} className="text-purple-600" />
+                        <div className="text-[10px] uppercase font-bold text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                          <Icon name="attendance" size={12} className="text-primary" />
                           <span>Staff & Team</span>
                         </div>
                         {searchResults.users.map((user) => (
@@ -394,13 +394,13 @@ export function Topbar({ onToggleMobileMenu }) {
                             key={user.id}
                             type="button"
                             onClick={() => handleSelectSearchResult('/attendance')}
-                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-muted flex items-center justify-between text-xs transition-colors cursor-pointer"
                           >
                             <div className="truncate">
-                              <span className="font-semibold text-text-main">{user.name}</span>
-                              <span className="text-[11px] text-text-muted ml-2">{user.role}</span>
+                              <span className="font-semibold text-foreground">{user.name}</span>
+                              <span className="text-[11px] text-muted-foreground ml-2">{user.role}</span>
                             </div>
-                            <span className="text-[10px] text-purple-600 shrink-0 font-medium ml-2">
+                            <span className="text-[10px] text-primary shrink-0 font-medium ml-2">
                               Muster →
                             </span>
                           </button>
@@ -412,24 +412,24 @@ export function Topbar({ onToggleMobileMenu }) {
               ) : (
                 /* Instant Command Palette on click / Ctrl+K */
                 <div className="p-3 space-y-2.5">
-                  <div className="px-1 text-[10px] uppercase font-bold text-text-muted flex items-center justify-between">
+                  <div className="px-1 text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
                     <span>Quick Navigation</span>
-                    <span className="text-[10px] font-mono font-medium text-text-muted">ESC to close</span>
+                    <span className="text-[10px] font-mono font-medium text-muted-foreground">ESC to close</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     {[
-                      { label: 'Dashboard', path: '/', icon: 'dashboard', color: 'text-brand-600' },
-                      { label: 'Site Tasks', path: '/tasks', icon: 'clipboard-list', color: 'text-amber-600' },
-                      { label: 'Projects', path: '/projects', icon: 'briefcase', color: 'text-indigo-600' },
-                      { label: 'Attendance', path: '/attendance', icon: 'attendance', color: 'text-emerald-600' },
-                      { label: 'Clients', path: '/clients', icon: 'users', color: 'text-sky-600' },
-                      { label: 'Billing', path: '/payments', icon: 'currency-inr', color: 'text-rose-600' },
+                      { label: 'Dashboard', path: '/', icon: 'dashboard', color: 'text-primary' },
+                      { label: 'Site Tasks', path: '/tasks', icon: 'clipboard-list', color: 'text-warning' },
+                      { label: 'Projects', path: '/projects', icon: 'briefcase', color: 'text-primary' },
+                      { label: 'Attendance', path: '/attendance', icon: 'attendance', color: 'text-success' },
+                      { label: 'Clients', path: '/clients', icon: 'users', color: 'text-info' },
+                      { label: 'Billing', path: '/payments', icon: 'currency-inr', color: 'text-destructive' },
                     ].map((nav) => (
                       <button
                         key={nav.path}
                         type="button"
                         onClick={() => handleSelectSearchResult(nav.path)}
-                        className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 hover:bg-brand-50 text-xs text-text-main transition-colors text-left border border-border/50"
+                        className="flex items-center gap-2 p-2 rounded-lg bg-secondary hover:bg-muted text-xs text-foreground transition-colors text-left border border-border/50"
                       >
                         <Icon name={nav.icon} size={15} className={nav.color} />
                         <span className="font-medium truncate">{nav.label}</span>
@@ -439,7 +439,7 @@ export function Topbar({ onToggleMobileMenu }) {
 
                   {searchData.projects.length > 0 && (
                     <div className="pt-2 border-t border-border/60">
-                      <div className="px-1 pb-1.5 text-[10px] uppercase font-bold text-text-muted">
+                      <div className="px-1 pb-1.5 text-[10px] uppercase font-bold text-muted-foreground">
                         Active Sites
                       </div>
                       <div className="space-y-1">
@@ -448,19 +448,19 @@ export function Topbar({ onToggleMobileMenu }) {
                             key={proj.id}
                             type="button"
                             onClick={() => handleSelectSearchResult(`/projects/${proj.id}`)}
-                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-brand-50 flex items-center justify-between text-xs transition-colors"
+                            className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-muted flex items-center justify-between text-xs transition-colors"
                           >
-                            <span className="font-medium text-text-main truncate">{proj.name}</span>
-                            <span className="text-[10px] text-brand-600 font-semibold shrink-0 ml-2">Open Site →</span>
+                            <span className="font-medium text-foreground truncate">{proj.name}</span>
+                            <span className="text-[10px] text-primary font-semibold shrink-0 ml-2">Open Site →</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  <div className="px-2.5 py-1.5 text-[11px] text-text-muted bg-slate-100/70 rounded-lg flex items-center justify-between">
+                  <div className="px-2.5 py-1.5 text-[11px] text-muted-foreground bg-muted/70 rounded-lg flex items-center justify-between">
                     <span>Type to search across projects, trades, clients, or team</span>
-                    <span className="font-mono text-[10px] font-semibold bg-white px-1.5 py-0.5 rounded border border-border">Ctrl+K</span>
+                    <span className="font-mono text-[10px] font-semibold bg-card px-1.5 py-0.5 rounded border border-border">Ctrl+K</span>
                   </div>
                 </div>
               )}
@@ -597,11 +597,11 @@ export function Topbar({ onToggleMobileMenu }) {
             trigger={
               <button
                 type="button"
-                className="flex items-center gap-1 p-0.5 rounded-lg hover:bg-brand-50 transition-colors select-none focus:outline-none focus:ring-1.5 focus:ring-brand-500 cursor-pointer"
+                className="flex items-center gap-1 p-0.5 rounded-lg hover:bg-muted transition-colors select-none focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer"
                 aria-label="User account menu"
               >
-                <Avatar name={currentUser?.name || 'User'} size="xs" status="online" />
-                <Icon name="chevron-down" size={13} className="text-text-muted hidden sm:block" />
+                <Avatar name={currentUser?.name || 'User'} size="md" status="online" />
+                <Icon name="chevron-down" size={13} className="text-muted-foreground hidden sm:block" />
               </button>
             }
             items={userMenuItems}

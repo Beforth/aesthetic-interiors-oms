@@ -30,13 +30,13 @@ export const Textarea = forwardRef(function Textarea(
       required={required}
       aria-invalid={!!error}
       aria-describedby={error ? `${textareaId}-error` : undefined}
-      className={`w-full bg-surface border rounded text-sm text-text-main placeholder:text-text-muted/60 transition-colors p-3
+      className={`w-full bg-background border rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 transition-colors p-3
         ${
           error
-            ? 'border-danger focus:border-danger focus:ring-1 focus:ring-danger'
-            : 'border-border focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
+            ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive focus:ring-2 focus:ring-destructive/30'
+            : 'border-border focus:border-ring focus:ring-2 focus:ring-ring/20'
         }
-        focus:outline-none disabled:bg-brand-50 disabled:text-text-muted disabled:cursor-not-allowed
+        focus:outline-none disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed
         ${className}
       `}
       {...rest}

@@ -59,8 +59,8 @@ export function ConfirmDialog({
         <div
           className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
             confirmVariant === 'danger'
-              ? 'bg-danger-light text-danger'
-              : 'bg-brand-100 text-brand-600'
+              ? 'bg-destructive/10 text-destructive'
+              : 'bg-primary/10 text-primary'
           }`}
         >
           <Icon
@@ -68,7 +68,7 @@ export function ConfirmDialog({
             size={20}
           />
         </div>
-        <div className="text-sm text-text-main leading-relaxed">
+        <div className="text-sm text-foreground leading-relaxed">
           {message}
         </div>
       </div>

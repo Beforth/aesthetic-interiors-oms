@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -57,9 +58,9 @@ export default {
           clay: '#6366F1',
           canvas: '#F8FAFC',
         },
-        surface: '#FFFFFF',
-        'text-main': '#0F172A',
-        'text-muted': '#64748B',
+        surface: 'var(--card, #FFFFFF)',
+        'text-main': 'var(--foreground, #0F172A)',
+        'text-muted': 'var(--muted-foreground, #64748B)',
         success: {
           DEFAULT: 'var(--success, #059669)',
           light: '#ECFDF5',

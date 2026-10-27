@@ -248,7 +248,7 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
 
         {/* Detailed Instructions */}
         <div>
-          <label className="block text-xs font-semibold text-text-main mb-1.5">
+          <label className="block text-xs font-semibold text-foreground mb-1.5">
             Detailed Work Instructions / Notes (Optional)
           </label>
           <textarea
@@ -256,7 +256,7 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
             onChange={(e) => handleChange('description', e.target.value)}
             rows={3}
             placeholder="Specify architectural tolerances, vendor coordination details, or material specifications..."
-            className="w-full text-xs sm:text-sm px-3 py-2 rounded-lg border border-border bg-surface text-text-main focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-text-muted resize-none"
+            className="w-full text-xs sm:text-sm px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground resize-none"
           />
         </div>
 

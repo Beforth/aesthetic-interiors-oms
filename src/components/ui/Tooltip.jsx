@@ -38,7 +38,7 @@ export function Tooltip({
       {isVisible && (
         <div
           role="tooltip"
-          className={`absolute z-40 px-2 py-1 text-[11px] font-medium text-surface bg-brand-700 rounded shadow-md whitespace-nowrap pointer-events-none animate-in fade-in duration-100 ${
+          className={`absolute z-40 px-2 py-1 text-[11px] font-medium text-popover-foreground bg-popover rounded-md border border-border shadow-md whitespace-nowrap pointer-events-none animate-in fade-in duration-100 ${
             placementClasses[placement] || placementClasses.top
           }`}
         >

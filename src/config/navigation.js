@@ -100,7 +100,7 @@ export const navigationItems = [
     path: '/settings/users',
     icon: 'settings',
     // Any one of these opens Settings; the page then shows only the tabs each permission allows.
-    permissions: ['users.manage', 'roles.change', 'settings.stageTemplate'],
+    permissions: ['users.manage', 'roles.change'],
     roles: permissionMatrix['users.manage'],
   },
   {

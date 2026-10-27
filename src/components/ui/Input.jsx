@@ -11,6 +11,7 @@ export const Input = forwardRef(function Input(
     error,
     helperText,
     required = false,
+    asteriskOnly = false,
     leadingIcon,
     trailingIcon,
     className = '',
@@ -39,13 +40,13 @@ export const Input = forwardRef(function Input(
         required={required}
         aria-invalid={!!error}
         aria-describedby={error ? `${inputId}-error` : undefined}
-        className={`w-full rounded-md border bg-background px-3 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] placeholder:text-muted-foreground/70 hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 h-9
+        className={`w-full rounded-lg border bg-background px-3 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] text-foreground placeholder:text-muted-foreground/70 disabled:cursor-not-allowed disabled:opacity-50 h-9
           ${leadingIcon ? 'pl-9' : ''}
           ${trailingIcon ? 'pr-9' : ''}
           ${
             error
-              ? 'border-destructive focus:border-destructive focus:ring-destructive/20 text-destructive'
-              : 'border-border'
+              ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive focus:ring-2 focus:ring-destructive/30'
+              : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
           }
           ${className}
         `}
@@ -64,6 +65,7 @@ export const Input = forwardRef(function Input(
       <FormField
         label={label}
         required={required}
+        asteriskOnly={asteriskOnly}
         error={error}
         helperText={helperText}
         htmlFor={inputId}

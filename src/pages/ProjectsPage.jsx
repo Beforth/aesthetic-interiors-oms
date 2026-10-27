@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { projectService } from '../services/projectService';
 import { clientService } from '../services/clientService';
 import { userService } from '../services/userService';
@@ -36,6 +36,8 @@ import {
   ChevronDownIcon,
   SearchIcon,
   XIcon,
+  TrashIcon,
+  FilterIcon,
 } from '../components/ui/icons';
 
 // 12 SRS Interior Fit-Out Stages in strict sequential order
@@ -212,35 +214,21 @@ function StageNavigationDropdown({ currentStageId, onSelectStage }) {
               left: `${coords.left}px`,
               width: '272px',
               zIndex: 99999,
-              backgroundColor: '#ffffff',
             }}
-            className="rounded-xl border border-border bg-white text-text-main shadow-xl overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
+            className="rounded-xl border border-border bg-popover text-popover-foreground shadow-xl overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
           >
-            {/* Header: Pure light surface with clear dark text */}
-            <div
-              style={{ backgroundColor: '#f8fafc' }}
-              className="px-3.5 py-2.5 bg-slate-50 border-b border-border flex items-center justify-between"
-            >
-              <span className="text-[11px] font-bold text-text-main uppercase tracking-wider">
+            {/* Header: Light surface with clear dark text */}
+            <div className="px-3.5 py-2.5 bg-muted border-b border-border flex items-center justify-between">
+              <span className="text-[11px] font-bold text-foreground uppercase tracking-wider">
                 Move to Site Stage
               </span>
-              <span
-                style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
-                className="text-[10px] font-bold text-text-main bg-white px-2 py-0.5 rounded-full border border-border shrink-0"
-              >
+              <span className="text-[10px] font-bold text-foreground bg-card px-2 py-0.5 rounded-full border border-border shrink-0">
                 12 Stages
               </span>
             </div>
 
-            {/* List of 12 stages with pure white background and clear text */}
-            <div
-              style={{
-                backgroundColor: '#ffffff',
-                scrollbarWidth: 'thin',
-                scrollbarColor: '#cbd5e1 transparent',
-              }}
-              className="p-1.5 max-h-64 overflow-y-auto space-y-0.5 bg-white"
-            >
+            {/* List of 12 stages */}
+            <div className="p-1.5 max-h-64 overflow-y-auto space-y-0.5 bg-card">
               {SITE_STAGE_COLUMNS.map((col, idx) => {
                 const isCurrent = col.id === currentStageId;
                 const stageNum = String(idx + 1).padStart(2, '0');
@@ -255,12 +243,11 @@ function StageNavigationDropdown({ currentStageId, onSelectStage }) {
                         onSelectStage(col.id);
                       }
                     }}
-                    style={{ backgroundColor: isCurrent ? '#eef2ff' : '#ffffff' }}
                     className={cn(
                       'w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-left cursor-pointer transition-colors',
                       isCurrent
-                        ? 'bg-primary/10 text-primary font-bold border-l-2 border-primary rounded-l-none'
-                        : 'text-text-main hover:bg-slate-100'
+                        ? 'bg-accent text-accent-foreground font-bold border-l-2 border-primary rounded-l-none'
+                        : 'text-foreground hover:bg-muted'
                     )}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -298,10 +285,7 @@ function StageNavigationDropdown({ currentStageId, onSelectStage }) {
             </div>
 
             {/* Footer */}
-            <div
-              style={{ backgroundColor: '#f8fafc' }}
-              className="px-3 py-1.5 bg-slate-50 border-t border-border flex items-center justify-between text-[10px] font-medium text-text-muted"
-            >
+            <div className="px-3 py-1.5 bg-muted border-t border-border flex items-center justify-between text-[10px] font-medium text-muted-foreground">
               <span>Click any stage to move</span>
               <span className="font-mono text-[9px]">Esc to close</span>
             </div>
@@ -394,12 +378,11 @@ function ScheduleStageModal({ isOpen, onClose, data, onSave }) {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
-            className="w-full rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-text-main shadow-2xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            className="w-full rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-2xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
           >
-            <option value="not started" style={{ backgroundColor: '#ffffff', color: '#0f172a' }}>Not Started / Planning</option>
-            <option value="in progress" style={{ backgroundColor: '#ffffff', color: '#0f172a' }}>In Progress (Active Trade)</option>
-            <option value="done" style={{ backgroundColor: '#ffffff', color: '#0f172a' }}>Completed & Handed Over</option>
+            <option value="not started">Not Started / Planning</option>
+            <option value="in progress">In Progress (Active Trade)</option>
+            <option value="done">Completed & Handed Over</option>
           </select>
         </div>
       </form>
@@ -498,39 +481,28 @@ function ProjectFilterSearchDropdown({
   }, [isOpen]);
 
   const selectedLabel = useMemo(() => {
-    if (selectedProjectId === 'ALL') return 'All Projects Progress';
+    if (selectedProjectId === 'ALL') return 'Projects';
     if (selectedProjectId === 'NONE') return 'No Project';
     const found = projects.find((p) => p.id === selectedProjectId);
-    return found ? `${found.id} · ${found.name}` : 'Select Project';
+    return found ? `${found.id} · ${found.name}` : 'Projects';
   }, [selectedProjectId, projects]);
 
   const q = query.trim().toLowerCase();
-  const matchesAll = q === '' || 'all projects progress'.includes(q) || 'all'.includes(q);
+  const matchesAll = q === '' || 'all projects'.includes(q) || 'projects'.includes(q) || 'all'.includes(q);
   const matchesNone = q === '' || 'no project'.includes(q) || 'none'.includes(q);
 
-  const filteredWorking = useMemo(() => {
-    if (!q) return workingProjects;
-    return workingProjects.filter(
+  const filteredProjectsList = useMemo(() => {
+    if (!q) return projects;
+    return projects.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.id.toLowerCase().includes(q) ||
         (p.clientName && p.clientName.toLowerCase().includes(q)) ||
         (p.siteAddress && p.siteAddress.toLowerCase().includes(q))
     );
-  }, [workingProjects, q]);
+  }, [projects, q]);
 
-  const filteredOther = useMemo(() => {
-    if (!q) return otherProjects;
-    return otherProjects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q) ||
-        (p.clientName && p.clientName.toLowerCase().includes(q)) ||
-        (p.siteAddress && p.siteAddress.toLowerCase().includes(q))
-    );
-  }, [otherProjects, q]);
-
-  const hasAnyMatch = matchesAll || matchesNone || filteredWorking.length > 0 || filteredOther.length > 0;
+  const hasAnyMatch = matchesAll || matchesNone || filteredProjectsList.length > 0;
 
   const handleSelect = (id) => {
     onSelectProject(id);
@@ -545,18 +517,17 @@ function ProjectFilterSearchDropdown({
         type="button"
         onClick={handleToggle}
         className={cn(
-          'h-8 rounded-lg border border-border bg-white px-2.5 py-1 text-xs font-bold text-[#0f172a] shadow-xs flex items-center justify-between gap-2 cursor-pointer transition-all hover:border-muted-foreground/40 max-w-[280px]',
+          'h-8 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-bold text-foreground shadow-xs flex items-center justify-between gap-2 cursor-pointer transition-all hover:border-muted-foreground/40 max-w-[280px]',
           isOpen && 'border-primary ring-2 ring-primary/20'
         )}
       >
         <div className="flex items-center gap-1.5 min-w-0 truncate">
-          <BuildingIcon className="size-3.5 text-text-muted shrink-0" />
-          <span className="text-text-muted font-medium shrink-0">Project:</span>
-          <span className="truncate font-bold text-text-main">{selectedLabel}</span>
+          <BuildingIcon className="size-3.5 text-muted-foreground shrink-0" />
+          <span className="truncate font-bold text-foreground">{selectedLabel}</span>
         </div>
         <ChevronDownIcon
           className={cn(
-            'size-3.5 text-text-muted shrink-0 transition-transform duration-150',
+            'size-3.5 text-muted-foreground shrink-0 transition-transform duration-150',
             isOpen && 'rotate-180'
           )}
         />
@@ -573,20 +544,19 @@ function ProjectFilterSearchDropdown({
               left: `${coords.left}px`,
               width: '310px',
               zIndex: 99999,
-              backgroundColor: '#ffffff',
             }}
-            className="rounded-xl border border-border bg-white text-text-main shadow-2xl overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
+            className="rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
           >
-            <div className="p-2 border-b border-border bg-slate-50/70">
+            <div className="p-2 border-b border-border bg-muted/70">
               <div className="relative flex items-center">
-                <SearchIcon className="size-3.5 text-text-muted absolute left-2.5 pointer-events-none" />
+                <SearchIcon className="size-3.5 text-muted-foreground absolute left-2.5 pointer-events-none" />
                 <input
                   ref={searchInputRef}
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Type project name to filter..."
-                  className="w-full pl-8 pr-7 py-1.5 rounded-lg border border-border bg-white text-xs font-semibold text-text-main placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
+                  className="w-full pl-8 pr-7 py-1.5 rounded-lg border border-border bg-background text-xs font-semibold text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
                 />
                 {query && (
                   <button
@@ -595,7 +565,7 @@ function ProjectFilterSearchDropdown({
                       setQuery('');
                       searchInputRef.current?.focus();
                     }}
-                    className="absolute right-2 text-text-muted hover:text-text-main p-0.5"
+                    className="absolute right-2 text-muted-foreground hover:text-foreground p-0.5"
                   >
                     <XIcon className="size-3" />
                   </button>
@@ -604,11 +574,7 @@ function ProjectFilterSearchDropdown({
             </div>
 
             <div
-              style={{
-                scrollbarWidth: 'thin',
-                scrollbarColor: '#cbd5e1 transparent',
-              }}
-              className="p-1.5 max-h-64 overflow-y-auto space-y-0.5 bg-white text-xs"
+              className="p-1.5 max-h-64 overflow-y-auto space-y-0.5 bg-card text-xs"
             >
               {matchesAll && (
                 <button
@@ -625,7 +591,7 @@ function ProjectFilterSearchDropdown({
                     <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 font-bold text-text-main border border-border shrink-0">
                       ALL
                     </span>
-                    <span className="font-bold truncate">All Projects Progress</span>
+                    <span className="font-bold truncate">All Projects</span>
                   </div>
                   {selectedProjectId === 'ALL' && <CheckIcon className="size-3.5 text-primary stroke-[2.5]" />}
                 </button>
@@ -652,16 +618,16 @@ function ProjectFilterSearchDropdown({
                 </button>
               )}
 
-              {filteredWorking.length > 0 && (
+              {filteredProjectsList.length > 0 && (
                 <>
                   <div className="px-2.5 pt-2 pb-1 text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center justify-between">
-                    <span>Active Working Projects</span>
+                    <span>Projects</span>
                     <span className="text-[9px] bg-slate-100 px-1.5 py-0.2 rounded-full border border-border font-mono">
-                      {filteredWorking.length}
+                      {filteredProjectsList.length}
                     </span>
                   </div>
 
-                  {filteredWorking.map((p) => {
+                  {filteredProjectsList.map((p) => {
                     const isSelected = selectedProjectId === p.id;
                     return (
                       <button
@@ -682,52 +648,15 @@ function ProjectFilterSearchDropdown({
                             </span>
                             <span className="font-bold truncate">{p.name}</span>
                           </div>
-                          {p.clientName && (
+                          {p.clientName ? (
                             <p className="text-[10px] text-text-muted truncate mt-0.5">
                               Client: {p.clientName}
                             </p>
+                          ) : (
+                            <p className="text-[10px] text-text-muted truncate mt-0.5">
+                              Status: {p.status}
+                            </p>
                           )}
-                        </div>
-                        {isSelected && <CheckIcon className="size-3.5 text-primary stroke-[2.5] shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-
-              {filteredOther.length > 0 && (
-                <>
-                  <div className="px-2.5 pt-2 pb-1 text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center justify-between">
-                    <span>Other Projects</span>
-                    <span className="text-[9px] bg-slate-100 px-1.5 py-0.2 rounded-full border border-border font-mono">
-                      {filteredOther.length}
-                    </span>
-                  </div>
-
-                  {filteredOther.map((p) => {
-                    const isSelected = selectedProjectId === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleSelect(p.id)}
-                        className={cn(
-                          'w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs text-left cursor-pointer transition-colors',
-                          isSelected
-                            ? 'bg-primary/10 text-primary font-bold border-l-2 border-primary rounded-l-none'
-                            : 'text-text-main hover:bg-slate-100'
-                        )}
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="flex items-center gap-1.5 truncate">
-                            <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-100 font-bold text-text-main border border-border shrink-0">
-                              {p.id}
-                            </span>
-                            <span className="font-semibold truncate">{p.name}</span>
-                          </div>
-                          <p className="text-[10px] text-text-muted truncate mt-0.5">
-                            Status: {p.status}
-                          </p>
                         </div>
                         {isSelected && <CheckIcon className="size-3.5 text-primary stroke-[2.5] shrink-0" />}
                       </button>
@@ -805,6 +734,214 @@ function ConfirmStageUpgradeModal({ isOpen, onClose, data, onConfirm }) {
   );
 }
 
+/**
+ * Modal to confirm deleting a stage from a project
+ */
+function ConfirmDeleteStageModal({ isOpen, onClose, data, onConfirm }) {
+  if (!data) return null;
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Delete Stage"
+      size="sm"
+      footer={
+        <div className="flex items-center justify-end gap-2.5">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onConfirm}>
+            Delete Stage
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3 py-1 text-xs">
+        <p className="text-text-main text-sm">
+          Are you sure you want to remove stage{' '}
+          <span className="font-bold text-destructive">{data.stageName}</span> from{' '}
+          <span className="font-bold text-text-main">{data.projectName}</span>?
+        </p>
+        <p className="text-[11px] text-text-muted">
+          This stage will be removed from the project workflow and fit-out timeline.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Confirm Delete Project Modal
+ */
+function ConfirmDeleteProjectModal({ isOpen, onClose, data, onConfirm }) {
+  if (!data) return null;
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Delete Project"
+      size="sm"
+      footer={
+        <div className="flex items-center justify-end gap-2.5">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onConfirm}>
+            <TrashIcon className="size-3.5 mr-1.5" />
+            Delete Project
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3 py-1 text-xs">
+        <p className="text-foreground text-sm">
+          Are you sure you want to delete project{' '}
+          <span className="font-bold text-destructive">"{data.name}"</span>?
+        </p>
+        <p className="text-xs text-muted-foreground">
+          This will permanently remove this project and all its site data from the system. This action cannot be undone.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * BefUI Status Filter Dropdown.
+ * Replaces horizontal status filter buttons with a clean dropdown showing All Status, Planning, In Progress, Completed.
+ */
+function StatusFilterDropdown({ statusFilter, onSelectStatus }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+
+  const statusOptions = [
+    { value: 'ALL', label: 'All Status' },
+    { value: 'not started', label: 'Planning' },
+    { value: 'in progress', label: 'In Progress' },
+    { value: 'completed', label: 'Completed' },
+  ];
+
+  const currentLabel =
+    statusOptions.find((o) => o.value === statusFilter)?.label || 'All Status';
+
+  const updatePosition = () => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const width = 150;
+    const height = 180;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove = spaceBelow < height && rect.top > height;
+
+    const top = placeAbove
+      ? Math.max(8, rect.top - height - 4)
+      : Math.min(window.innerHeight - height - 8, rect.bottom + 4);
+
+    let left = rect.left;
+    if (left + width > window.innerWidth - 12) {
+      left = Math.max(12, window.innerWidth - width - 12);
+    }
+
+    setCoords({ top, left });
+  };
+
+  const handleToggle = (e) => {
+    e.stopPropagation();
+    if (!isOpen) updatePosition();
+    setIsOpen((prev) => !prev);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handleClickOutside(e) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target)
+      ) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  return (
+    <div className="relative inline-block text-left">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={handleToggle}
+        className={cn(
+          'h-8 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-bold text-foreground shadow-xs flex items-center justify-between gap-2 cursor-pointer transition-all hover:border-muted-foreground/40 min-w-[120px]',
+          isOpen && 'border-primary ring-2 ring-primary/20'
+        )}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          <FilterIcon className="size-3.5 text-muted-foreground shrink-0" />
+          <span className="truncate font-bold text-foreground">{currentLabel}</span>
+        </div>
+        <ChevronDownIcon
+          className={cn(
+            'size-3.5 text-muted-foreground shrink-0 transition-transform duration-150',
+            isOpen && 'rotate-180'
+          )}
+        />
+      </button>
+
+      {isOpen &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: `${coords.top}px`,
+              left: `${coords.left}px`,
+              width: '150px',
+              zIndex: 99999,
+            }}
+            className="rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl p-1.5 select-none animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="text-[10px] font-bold text-text-muted px-2 py-1 uppercase tracking-wider">
+              Status
+            </div>
+            {statusOptions.map((opt) => {
+              const isSelected = statusFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onSelectStatus(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={cn(
+                    'w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold text-left cursor-pointer transition-colors',
+                    isSelected
+                      ? 'bg-primary/10 text-primary font-bold'
+                      : 'text-text-main hover:bg-slate-100'
+                  )}
+                >
+                  <span>{opt.label}</span>
+                  {isSelected && <CheckIcon className="size-3 text-primary stroke-[2.5]" />}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
 const STATUS_COLUMNS = [
   {
     key: 'not started',
@@ -818,9 +955,9 @@ const STATUS_COLUMNS = [
     key: 'in progress',
     aliases: ['in progress', 'active', 'ongoing'],
     label: 'Fit-Out In Progress',
-    color: 'border-t-brand-600',
-    countBadge: 'bg-brand-100 text-brand-800',
-    dotColor: 'bg-brand-600',
+    color: 'border-t-primary',
+    countBadge: 'bg-primary/10 text-primary',
+    dotColor: 'bg-primary',
   },
   {
     key: 'completed',
@@ -864,6 +1001,16 @@ export function ProjectsPage() {
 
   // View mode: 'board' (Kanban default) or 'grid' (cards)
   const [viewMode, setViewMode] = useState('board');
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const v = searchParams.get('view');
+    if (v === 'board' || v === 'kanban') {
+      setViewMode('board');
+    } else if (v === 'grid') {
+      setViewMode('grid');
+    }
+  }, [searchParams]);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -877,6 +1024,64 @@ export function ProjectsPage() {
 
   // Stage Upgrade Confirmation Modal state
   const [confirmStageChange, setConfirmStageChange] = useState(null);
+
+  // Stage Delete Confirmation Modal state
+  const [deleteStageConfirm, setDeleteStageConfirm] = useState(null);
+
+  const handleDeleteStage = (projectId, stageId, stageName, projectName) => {
+    if (!isManagerOrAdmin) {
+      toast.error('Only Managers and Admins have authority to delete project stages');
+      return;
+    }
+    setDeleteStageConfirm({ projectId, stageId, stageName, projectName });
+  };
+
+  const handleConfirmDeleteStage = async () => {
+    if (!deleteStageConfirm) return;
+    const { projectId, stageId, stageName, projectName } = deleteStageConfirm;
+    try {
+      const proj = projects.find((p) => p.id === projectId);
+      if (proj && proj.stages) {
+        const updatedStages = proj.stages.filter(
+          (s) => s.id !== stageId && s.name !== stageName
+        );
+        await projectService.updateProjectStages(projectId, updatedStages);
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? { ...p, stages: updatedStages } : p))
+        );
+        toast.success(`Stage "${stageName}" removed from ${projectName}`);
+      }
+    } catch {
+      toast.error('Failed to delete stage');
+    } finally {
+      setDeleteStageConfirm(null);
+    }
+  };
+
+  // Project Delete Confirmation Modal state
+  const [deleteProjectConfirm, setDeleteProjectConfirm] = useState(null);
+
+  const handleDeleteProject = (project) => {
+    if (!isManagerOrAdmin) {
+      toast.error('Only Managers and Admins have authority to delete projects');
+      return;
+    }
+    setDeleteProjectConfirm(project);
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!deleteProjectConfirm) return;
+    const { id, name } = deleteProjectConfirm;
+    try {
+      await projectService.deleteProject(id);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      toast.success(`Project "${name}" deleted successfully`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete project');
+    } finally {
+      setDeleteProjectConfirm(null);
+    }
+  };
 
   // Create Project Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -911,7 +1116,7 @@ export function ProjectsPage() {
 
   useEffect(() => {
     fetchAll();
-  }, [currentUser]);
+  }, [currentUser, searchParams]);
 
   // Working / In Progress Projects for the dropdown
   const workingProjects = useMemo(() => {
@@ -974,12 +1179,14 @@ export function ProjectsPage() {
 
     // Mode 2: All projects progress (shows all sites in their active stage)
     if (selectedProjectId === 'ALL') {
+      const addedProjectIds = new Set();
       filteredProjects.forEach((p) => {
+        if (addedProjectIds.has(p.id)) return;
+        addedProjectIds.add(p.id);
         const activeStageId = getProjectActiveStageId(p);
-        if (board[activeStageId]) {
-          board[activeStageId].push(p);
-        } else {
-          board['cleaning'].push(p);
+        const colKey = board[activeStageId] ? activeStageId : 'cleaning';
+        if (!board[colKey].some((item) => item.id === p.id)) {
+          board[colKey].push(p);
         }
       });
       return board;
@@ -989,6 +1196,7 @@ export function ProjectsPage() {
     const targetProject = projects.find((p) => p.id === selectedProjectId);
     if (!targetProject) return board;
 
+    const addedStageKeys = new Set();
     SITE_STAGE_COLUMNS.forEach((col, idx) => {
       let stage = (targetProject.stages || []).find(
         (s) => normalizeStageId(s.name) === col.id
@@ -1008,18 +1216,22 @@ export function ProjectsPage() {
         };
       }
 
-      board[col.id].push({
-        id: `stg_card_${targetProject.id}_${col.id}`,
-        isStageCard: true,
-        projectId: targetProject.id,
-        projectName: targetProject.name,
-        clientName: targetProject.clientName || 'Client',
-        stage: stage,
-        colId: col.id,
-        colTitle: col.title,
-        colIndex: idx,
-        colTone: col.tone,
-      });
+      const key = `${targetProject.id}_${col.id}`;
+      if (!addedStageKeys.has(key)) {
+        addedStageKeys.add(key);
+        board[col.id].push({
+          id: `stg_card_${targetProject.id}_${col.id}`,
+          isStageCard: true,
+          projectId: targetProject.id,
+          projectName: targetProject.name,
+          clientName: targetProject.clientName || 'Client',
+          stage: stage,
+          colId: col.id,
+          colTitle: col.title,
+          colIndex: idx,
+          colTone: col.tone,
+        });
+      }
     });
 
     return board;
@@ -1309,53 +1521,11 @@ export function ProjectsPage() {
 
               <div className="h-4 w-px bg-border hidden sm:block" />
 
-              {/* Status Filter Buttons */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('ALL')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer min-h-[36px] sm:min-h-0 ${
-                    statusFilter === 'ALL'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-white text-text-main border border-border hover:bg-slate-50'
-                  }`}
-                >
-                  All Status
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('not started')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer min-h-[36px] sm:min-h-0 ${
-                    statusFilter === 'not started'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-white text-text-main border border-border hover:bg-slate-50'
-                  }`}
-                >
-                  Planning
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('in progress')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer min-h-[36px] sm:min-h-0 ${
-                    statusFilter === 'in progress'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-white text-text-main border border-border hover:bg-slate-50'
-                  }`}
-                >
-                  In Progress
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('completed')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer min-h-[36px] sm:min-h-0 ${
-                    statusFilter === 'completed'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-white text-text-main border border-border hover:bg-slate-50'
-                  }`}
-                >
-                  Completed
-                </button>
-              </div>
+              {/* Status Filter Dropdown */}
+              <StatusFilterDropdown
+                statusFilter={statusFilter}
+                onSelectStatus={setStatusFilter}
+              />
             </div>
           }
         />
@@ -1455,6 +1625,7 @@ export function ProjectsPage() {
           onChange={handleBoardChange}
           onAdd={canCreateProject ? () => handleOpenCreate() : undefined}
           getCardClassName={getCardClassName}
+          showCount={false}
           renderCard={(item) => {
             // CASE 1: Single-Project Stage Card View
             if (item.isStageCard) {
@@ -1503,17 +1674,28 @@ export function ProjectsPage() {
 
                   {/* Manager Schedule Action Button */}
                   {isManagerOrAdmin && (
-                    <div className="pt-1 border-t border-border flex items-center justify-between text-xs">
+                    <div className="pt-1 border-t border-border flex items-center justify-between text-xs gap-1.5">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenScheduleModal(item.projectId, item.projectName, item.stage);
                         }}
-                        className="w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded text-[11px] font-bold text-primary hover:bg-primary/10 transition-colors cursor-pointer border border-primary/20"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded text-[11px] font-bold text-primary hover:bg-primary/10 transition-colors cursor-pointer border border-primary/20"
                       >
                         <CalendarIcon className="size-3" />
                         <span>Assign / Edit Dates</span>
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete stage from project"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteStage(item.projectId, item.stage.id, item.stage.name, item.projectName);
+                        }}
+                        className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors cursor-pointer border border-border hover:border-destructive/30"
+                      >
+                        <TrashIcon className="size-3.5" />
                       </button>
                     </div>
                   )}
@@ -1588,17 +1770,30 @@ export function ProjectsPage() {
                     </span>
                   </div>
                   {isManagerOrAdmin && activeStage && (
-                    <button
-                      type="button"
-                      title="Assign or edit stage dates"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenScheduleModal(project.id, project.name, activeStage);
-                      }}
-                      className="text-primary hover:underline text-[10px] font-bold flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <span>Edit</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        title="Assign or edit stage dates"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenScheduleModal(project.id, project.name, activeStage);
+                        }}
+                        className="text-primary hover:underline text-[10px] font-bold flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete stage from project"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteStage(project.id, activeStage.id, activeStage.name, project.name);
+                        }}
+                        className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors cursor-pointer"
+                      >
+                        <TrashIcon className="size-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -1634,6 +1829,8 @@ export function ProjectsPage() {
               teamUsers={users}
               canAdvance={canEditProjectStatus}
               onAdvance={handleAdvanceProjectStatus}
+              canDelete={isManagerOrAdmin}
+              onDelete={handleDeleteProject}
               onClick={() => navigate(`/projects/${project.id}`)}
             />
           ))}
@@ -1654,6 +1851,22 @@ export function ProjectsPage() {
         onClose={() => setConfirmStageChange(null)}
         data={confirmStageChange}
         onConfirm={handleConfirmStageChange}
+      />
+
+      {/* Confirm Delete Stage Modal */}
+      <ConfirmDeleteStageModal
+        isOpen={Boolean(deleteStageConfirm)}
+        onClose={() => setDeleteStageConfirm(null)}
+        data={deleteStageConfirm}
+        onConfirm={handleConfirmDeleteStage}
+      />
+
+      {/* Confirm Delete Project Modal */}
+      <ConfirmDeleteProjectModal
+        isOpen={Boolean(deleteProjectConfirm)}
+        onClose={() => setDeleteProjectConfirm(null)}
+        data={deleteProjectConfirm}
+        onConfirm={handleConfirmDeleteProject}
       />
 
       {/* Create Project Modal */}

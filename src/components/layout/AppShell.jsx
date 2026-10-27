@@ -25,7 +25,7 @@ export function AppShell() {
 
   return (
     <SidebarProvider>
-      <div className="h-dvh bg-brand-50 flex flex-col text-text-main w-full overflow-hidden">
+      <div className="h-dvh bg-background flex flex-col text-foreground w-full overflow-hidden">
         <div className="flex flex-1 h-full overflow-hidden">
           {/* Responsive Sidebar (collapsible rail on desktop, slide-over drawer on mobile < 1024px) */}
           <Sidebar />

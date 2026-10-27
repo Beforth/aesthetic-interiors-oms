@@ -2,16 +2,11 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { authService } from '../services/authService';
 import { apiClient, getAuthToken } from '../services/apiClient';
 import { isDebug } from '../config/env';
+import { ROLES } from '../config/roles';
+import { getPermissionsForRole } from '../config/permissions';
 
 const AuthContext = createContext(null);
 
-// Must match the backend refresh-token lifetime (JWT_REFRESH_MINUTES): after this long without any user
-// activity the session can no longer be refreshed, so the app signs out here too.
-// Switched off while developing (npm run dev), so a coffee break does not sign the developer out; production
-// builds keep it.
-const IDLE_LIMIT_MS = import.meta.env.DEV ? Infinity : 10 * 60 * 1000;
-// While the user is active, renew the session well inside the 5-minute access-token lifetime.
-const KEEPALIVE_MS = 4 * 60 * 1000;
 const TICK_MS = 30 * 1000;
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
 
@@ -21,7 +16,13 @@ export function AuthProvider({ children }) {
   });
 
   const [permissions, setPermissions] = useState(() => {
-    return authService.getStoredPermissions();
+    const stored = authService.getStoredPermissions();
+    const user = authService.getStoredUser();
+    if (user?.role) {
+      const rolePerms = getPermissionsForRole(user.role);
+      return Array.from(new Set([...(Array.isArray(stored) ? stored : []), ...rolePerms]));
+    }
+    return Array.isArray(stored) ? stored : [];
   });
 
   const [token, setToken] = useState(() => {
@@ -30,6 +31,8 @@ export function AuthProvider({ children }) {
 
   const lastActivityRef = useRef(Date.now());
   const lastRefreshRef = useRef(0);
+
+
 
   // Listen to live permission updates (the stored list is re-read when something changes it)
   useEffect(() => {
@@ -50,9 +53,14 @@ export function AuthProvider({ children }) {
   const hasPermission = useCallback(
     (permissionCodename) => {
       if (!permissionCodename) return false;
+      const isOwner =
+        currentUser?.role === ROLES.ADMIN ||
+        currentUser?.role === 'owner' ||
+        currentUser?.role === 'admin';
+      if (isOwner) return true;
       return Array.isArray(permissions) && permissions.includes(permissionCodename);
     },
-    [permissions]
+    [permissions, currentUser]
   );
 
   /**
@@ -94,6 +102,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!isAuthenticated || isDebug()) return undefined;
 
+    const idleLimitMs = import.meta.env.DEV ? Infinity : 30 * 60 * 1000;
+    const keepaliveMs = 4 * 60 * 1000;
+
     const markActive = () => {
       lastActivityRef.current = Date.now();
     };
@@ -102,12 +113,12 @@ export function AuthProvider({ children }) {
 
     const tick = async () => {
       const now = Date.now();
-      if (now - lastActivityRef.current >= IDLE_LIMIT_MS) {
+      if (now - lastActivityRef.current >= idleLimitMs) {
         await logout();
         return;
       }
       const activeSinceRefresh = lastActivityRef.current > lastRefreshRef.current;
-      if (activeSinceRefresh && now - lastRefreshRef.current >= KEEPALIVE_MS) {
+      if (activeSinceRefresh && now - lastRefreshRef.current >= keepaliveMs) {
         const refreshed = await apiClient.refresh();
         if (refreshed === true) {
           lastRefreshRef.current = Date.now();

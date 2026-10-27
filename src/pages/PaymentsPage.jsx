@@ -228,75 +228,75 @@ export function PaymentsPage() {
       {/* TOP SUMMARY STATS CARDS (FR-PAY-04: advance, paid and pending amounts) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Cost */}
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
+        <Card className="p-4 rounded-2xl bg-card border border-border shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Total Contract Cost</span>
-            <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
               <Icon name="payments" size={14} />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-text-main">
+          <div className="text-2xl font-extrabold text-foreground">
             {formatCurrency(portfolioStats.totalCost)}
           </div>
-          <p className="text-[11px] text-text-muted">Across active fit-out projects (FR-PAY-01)</p>
+          <p className="text-[11px] text-muted-foreground">Across active fit-out projects (FR-PAY-01)</p>
         </Card>
 
         {/* Total Paid */}
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
+        <Card className="p-4 rounded-2xl bg-card border border-border shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Total Paid / Received</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-success/10 text-success flex items-center justify-center">
               <Icon name="check" size={14} />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-emerald-600">
+          <div className="text-2xl font-extrabold text-success">
             {formatCurrency(portfolioStats.totalPaid)}
           </div>
-          <p className="text-[11px] text-text-muted">
+          <p className="text-[11px] text-muted-foreground">
             {Math.round((portfolioStats.totalPaid / portfolioStats.totalCost) * 100)}% realization rate
           </p>
         </Card>
 
         {/* Total Advance */}
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
+        <Card className="p-4 rounded-2xl bg-card border border-border shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Advance Collected</span>
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-info/10 text-info flex items-center justify-center">
               <Icon name="receipt" size={14} />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-blue-600">
+          <div className="text-2xl font-extrabold text-info">
             {formatCurrency(portfolioStats.totalAdvance)}
           </div>
-          <p className="text-[11px] text-text-muted">Booking advances received</p>
+          <p className="text-[11px] text-muted-foreground">Booking advances received</p>
         </Card>
 
         {/* Pending & Overdue */}
-        <Card className="p-4 rounded-2xl bg-surface border border-border shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-xs text-text-muted">
+        <Card className="p-4 rounded-2xl bg-card border border-border shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Pending Balance</span>
-            <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center">
               <Icon name="clock" size={14} />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-rose-600">
+          <div className="text-2xl font-extrabold text-destructive">
             {formatCurrency(portfolioStats.totalPending)}
           </div>
-          <p className="text-[11px] text-rose-700 font-semibold flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
+          <p className="text-[11px] text-destructive font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" />
             <span>{portfolioStats.overdueCount} installment overdue (FR-PAY-06)</span>
           </p>
         </Card>
       </div>
 
       {/* Project Selector Bar */}
-      <div className="p-4 rounded-2xl bg-surface border border-border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-4 rounded-2xl bg-card border border-border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-text-muted uppercase">Select Fit-Out Project:</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase">Select Fit-Out Project:</span>
           <select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="px-3 py-1.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main font-bold focus:outline-none"
+            className="px-3 py-1.5 text-xs bg-background border border-border rounded-lg text-foreground font-bold focus:outline-none"
           >
             {schedules.map((s) => (
               <option key={s.projectId} value={s.projectId}>
@@ -308,16 +308,16 @@ export function PaymentsPage() {
 
         <div className="flex items-center gap-4 text-xs">
           <div>
-            <span className="text-text-muted">Total: </span>
-            <span className="font-bold text-text-main">{formatCurrency(currentSchedule.totalCost)}</span>
+            <span className="text-muted-foreground">Total: </span>
+            <span className="font-bold text-foreground">{formatCurrency(currentSchedule.totalCost)}</span>
           </div>
           <div>
-            <span className="text-text-muted">Paid: </span>
-            <span className="font-bold text-emerald-700">{formatCurrency(currentSchedule.totalPaid)}</span>
+            <span className="text-muted-foreground">Paid: </span>
+            <span className="font-bold text-success">{formatCurrency(currentSchedule.totalPaid)}</span>
           </div>
           <div>
-            <span className="text-text-muted">Pending: </span>
-            <span className="font-bold text-rose-600">{formatCurrency(currentSchedule.totalPending)}</span>
+            <span className="text-muted-foreground">Pending: </span>
+            <span className="font-bold text-destructive">{formatCurrency(currentSchedule.totalPending)}</span>
           </div>
         </div>
       </div>
@@ -329,8 +329,8 @@ export function PaymentsPage() {
           onClick={() => setActiveTab('schedule')}
           className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
             activeTab === 'schedule'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
+              ? 'border-primary text-primary bg-card'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <Icon name="payments" size={14} />
@@ -342,8 +342,8 @@ export function PaymentsPage() {
           onClick={() => setActiveTab('client-view')}
           className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
             activeTab === 'client-view'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
+              ? 'border-primary text-primary bg-card'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <Icon name="users" size={14} />
@@ -449,7 +449,7 @@ export function PaymentsPage() {
                         <button
                           type="button"
                           onClick={() => toast.info(`Viewing receipt ${inst.receiptNumber}...`)}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-surface border border-border text-brand-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-card border border-border text-primary hover:bg-muted transition-colors cursor-pointer"
                         >
                           View Receipt
                         </button>
@@ -462,7 +462,7 @@ export function PaymentsPage() {
                               setPaymentForm((prev) => ({ ...prev, amount: inst.amount }));
                               setIsRecordPaymentOpen(true);
                             }}
-                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-success hover:bg-success/90 text-white transition-colors cursor-pointer"
                           >
                             Record Payment
                           </button>
@@ -479,15 +479,15 @@ export function PaymentsPage() {
 
       {/* TAB 2: Client View Preview (FR-PAY-05 & FR-PAY-07) */}
       {activeTab === 'client-view' && (
-        <Card className="space-y-4 max-w-3xl mx-auto p-6 bg-slate-50/50">
+        <Card className="space-y-4 max-w-3xl mx-auto p-6 bg-muted/30">
           <div className="flex items-center justify-between border-b border-border pb-3">
             <div>
-              <div className="text-xs font-bold text-text-muted uppercase">Client Payment Portal</div>
-              <h3 className="text-base font-bold text-text-main mt-0.5">
+              <div className="text-xs font-bold text-muted-foreground uppercase">Client Payment Portal</div>
+              <h3 className="text-base font-bold text-foreground mt-0.5">
                 {currentSchedule.projectName} • {currentSchedule.clientName}
               </h3>
             </div>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-brand-50 text-brand-800 border border-brand-200">
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
               Client View
             </span>
           </div>
@@ -708,13 +708,13 @@ export function PaymentsPage() {
             <button
               type="button"
               onClick={() => setIsSetCostOpen(false)}
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-card border border-border text-foreground hover:bg-muted transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-800 text-white hover:bg-brand-900"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
             >
               Generate Payment Schedule
             </button>

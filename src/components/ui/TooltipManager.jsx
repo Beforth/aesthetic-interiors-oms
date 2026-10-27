@@ -114,7 +114,7 @@ export function TooltipManager() {
             ? 'translate(-50%, -100%)'
             : 'translate(-50%, 0)',
       }}
-      className="z-50 px-2 py-1 text-[11px] font-medium text-surface bg-brand-700 rounded shadow-md pointer-events-none whitespace-nowrap transition-opacity animate-in fade-in duration-100"
+      className="z-50 px-2 py-1 text-[11px] font-medium text-popover-foreground bg-popover border border-border rounded-md shadow-md pointer-events-none whitespace-nowrap transition-opacity animate-in fade-in duration-100"
     >
       {tooltipState.text}
     </div>

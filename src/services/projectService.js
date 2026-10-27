@@ -4,6 +4,26 @@ import { apiClient, USER_KEY } from './apiClient';
 import { mockProjects } from '../data/projects';
 
 const STORAGE_KEY = 'osm_projects_v2';
+const DELETED_KEY = 'osm_deleted_projects_v2';
+
+function getDeletedProjectIds() {
+  try {
+    const raw = localStorage.getItem(DELETED_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function markProjectDeleted(id) {
+  try {
+    const set = getDeletedProjectIds();
+    set.add(id);
+    localStorage.setItem(DELETED_KEY, JSON.stringify([...set]));
+  } catch (e) {
+    console.error('Failed to mark project deleted in storage', e);
+  }
+}
 
 function getCurrentUser(user) {
   if (user) return user;
@@ -17,32 +37,36 @@ function getCurrentUser(user) {
 }
 
 function getStoredProjects() {
+  const deletedIds = getDeletedProjectIds();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // Exclude any deleted projects
+        const nonDeleted = parsed.filter((p) => !deletedIds.has(p.id));
         // Merge any new canonical mock projects that might not exist in cached storage
-        const existingIds = new Set(parsed.map((p) => p.id));
+        const existingIds = new Set(nonDeleted.map((p) => p.id));
         let merged = false;
         mockProjects.forEach((mp) => {
-          if (!existingIds.has(mp.id)) {
-            parsed.push(mp);
+          if (!existingIds.has(mp.id) && !deletedIds.has(mp.id)) {
+            nonDeleted.push(mp);
             merged = true;
           }
         });
-        if (merged) {
-          saveProjects(parsed);
+        if (merged || nonDeleted.length !== parsed.length) {
+          saveProjects(nonDeleted);
         }
-        return parsed;
+        return nonDeleted;
       }
     }
   } catch (e) {
     console.error('Failed to read projects from localStorage', e);
   }
   if (mockProjects && mockProjects.length > 0) {
-    saveProjects(mockProjects);
-    return mockProjects;
+    const nonDeleted = mockProjects.filter((mp) => !deletedIds.has(mp.id));
+    saveProjects(nonDeleted);
+    return nonDeleted;
   }
   return [];
 }
@@ -260,6 +284,23 @@ export const projectService = {
       }
       return updated.find((p) => p.id === projectId) || null;
     }, 'Project status updated successfully');
+  },
+
+  async deleteProject(projectId) {
+    return apiClient.execute(async () => {
+      markProjectDeleted(projectId);
+      const projects = getStoredProjects();
+      const filtered = projects.filter((p) => p.id !== projectId);
+      saveProjects(filtered);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('osm_project_deleted', {
+            detail: { projectId },
+          })
+        );
+      }
+      return true;
+    }, 'Project deleted successfully');
   },
 };
 

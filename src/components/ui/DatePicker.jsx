@@ -42,14 +42,14 @@ export const DatePicker = forwardRef(function DatePicker(
         max={max}
         aria-invalid={!!error}
         aria-describedby={error ? `${dateInputId}-error` : undefined}
-        className={`w-full bg-surface border rounded text-sm text-text-main transition-colors
+        className={`w-full bg-background border rounded-lg text-sm text-foreground transition-colors
           min-h-[44px] sm:min-h-[38px] pl-9 pr-3 py-2
           ${
             error
-              ? 'border-danger focus:border-danger focus:ring-1 focus:ring-danger'
-              : 'border-border focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
+              ? 'border-destructive focus:border-destructive focus:ring-1 focus:ring-destructive'
+              : 'border-border focus:border-ring focus:ring-2 focus:ring-ring/20'
           }
-          focus:outline-none disabled:bg-brand-50 disabled:text-text-muted disabled:cursor-not-allowed
+          focus:outline-none disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed
           ${className}
         `}
         {...rest}

@@ -309,7 +309,7 @@ export function ClientDetailPage() {
     {
       label: 'Architectural & Design Notes',
       value: (
-        <div className="p-3 rounded-lg bg-brand-50 border border-border text-xs text-text-main leading-relaxed">
+        <div className="p-3 rounded-lg bg-accent/40 border border-border text-xs text-foreground leading-relaxed">
           {client.notes || 'No custom notes provided.'}
         </div>
       ),
@@ -326,7 +326,7 @@ export function ClientDetailPage() {
           size="sm"
           leadingIcon="arrow-left"
           onClick={() => navigate('/clients')}
-          className="text-xs font-semibold hover:bg-brand-50"
+          className="text-xs font-semibold hover:bg-muted"
         >
           Back to Directory
         </Button>
@@ -381,13 +381,13 @@ export function ClientDetailPage() {
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-text-main flex items-center gap-2">
+            <h3 className="text-base font-bold text-foreground flex items-center gap-2">
               <span>Associated Projects</span>
-              <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-brand-100 text-brand-800">
+              <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                 {clientProjects.length}
               </span>
             </h3>
-            <p className="text-xs text-text-muted">
+            <p className="text-xs text-muted-foreground">
               Active working fit-out sites & past completed contracts for {client.name}
             </p>
           </div>
@@ -418,12 +418,12 @@ export function ClientDetailPage() {
 
         {/* Executive Multi-Project Summary Bar when multiple projects exist */}
         {clientProjects.length > 1 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-brand-50/60 p-3.5 rounded-xl border border-border">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-muted/60 p-3.5 rounded-xl border border-border">
             <div>
-              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                 Total Fit-outs
               </div>
-              <div className="text-base font-bold text-text-main mt-0.5">
+              <div className="text-base font-bold text-foreground mt-0.5">
                 {clientProjects.length} Sites
               </div>
             </div>
@@ -446,10 +446,10 @@ export function ClientDetailPage() {
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                 Combined Investment
               </div>
-              <div className="text-base font-bold text-brand-900 mt-0.5">
+              <div className="text-base font-bold text-foreground mt-0.5">
                 {formatCurrency(totalBudget)}
               </div>
             </div>
@@ -499,7 +499,7 @@ export function ClientDetailPage() {
               </div>
 
               {activeWorkingProjects.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-border bg-brand-50/30 text-xs text-text-muted text-center">
+                <div className="p-4 rounded-xl border border-dashed border-border bg-muted/30 text-xs text-muted-foreground text-center">
                   No active in-progress projects currently running for this client. Click "Add Project" to initialize one.
                 </div>
               ) : (
@@ -521,17 +521,17 @@ export function ClientDetailPage() {
               <div className="flex items-center justify-between border-b border-border pb-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                  <h4 className="text-sm font-bold text-text-main">
+                  <h4 className="text-sm font-bold text-foreground">
                     Previous & Completed Projects ({previousCompletedProjects.length})
                   </h4>
                 </div>
-                <span className="text-xs text-text-muted">
+                <span className="text-xs text-muted-foreground">
                   Successfully delivered fit-out contracts
                 </span>
               </div>
 
               {previousCompletedProjects.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-border bg-brand-50/30 text-xs text-text-muted text-center">
+                <div className="p-4 rounded-xl border border-dashed border-border bg-muted/30 text-xs text-muted-foreground text-center">
                   No previous completed contracts on record for this client.
                 </div>
               ) : (
@@ -645,7 +645,7 @@ export function ClientDetailPage() {
       >
         <form onSubmit={handleLinkProjectSubmit} className="space-y-4">
           {availableProjectsToLink.length === 0 ? (
-            <div className="p-4 bg-brand-50 rounded-xl text-xs text-text-muted text-center">
+            <div className="p-4 bg-muted/50 rounded-xl text-xs text-muted-foreground text-center">
               All active projects in the system are already linked to this client. Click "Add Project" to create a new one.
             </div>
           ) : (

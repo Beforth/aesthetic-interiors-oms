@@ -45,20 +45,20 @@ export const Radio = forwardRef(function Radio(
           className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors
             ${
               checked
-                ? 'border-brand-600 bg-surface'
-                : 'border-border bg-surface peer-focus:border-brand-500'
+                ? 'border-primary bg-card'
+                : 'border-border bg-card peer-focus:border-ring'
             }
-            peer-focus:ring-2 peer-focus:ring-brand-500 peer-focus:ring-offset-1
+            peer-focus:ring-2 peer-focus:ring-ring/20
           `}
         >
-          {checked && <div className="w-2.5 h-2.5 rounded-full bg-brand-600" />}
+          {checked && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
         </div>
       </div>
 
       {(label || description) && (
         <div className="flex flex-col text-sm leading-tight">
-          {label && <span className="font-medium text-text-main">{label}</span>}
-          {description && <span className="text-xs text-text-muted">{description}</span>}
+          {label && <span className="font-medium text-foreground">{label}</span>}
+          {description && <span className="text-xs text-muted-foreground">{description}</span>}
         </div>
       )}
     </label>

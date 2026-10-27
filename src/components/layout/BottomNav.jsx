@@ -17,7 +17,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Mobile Navigation"
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border flex items-center justify-around px-2 py-1 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border flex items-center justify-around px-2 py-1 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]"
     >
       {bottomItems.map((item) => (
         <NavLink
@@ -27,8 +27,8 @@ export function BottomNav() {
             flex flex-col items-center justify-center flex-1 py-1.5 px-1 min-h-[44px] text-[11px] font-medium transition-colors select-none
             ${
               isActive
-                ? 'text-brand-700 font-semibold'
-                : 'text-text-muted hover:text-text-main'
+                ? 'text-primary font-semibold'
+                : 'text-muted-foreground hover:text-foreground'
             }
           `}
         >
@@ -38,7 +38,7 @@ export function BottomNav() {
                 name={item.icon}
                 size={20}
                 className={`mb-0.5 transition-colors ${
-                  isActive ? 'text-brand-500' : 'text-text-muted'
+                  isActive ? 'text-primary' : 'text-muted-foreground'
                 }`}
               />
               <span className="truncate max-w-[64px] text-center leading-none">

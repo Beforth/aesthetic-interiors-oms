@@ -177,7 +177,7 @@ export function FileImportDialog({
       key: 'type',
       header: 'Type',
       render: (r) => (
-        <span className="capitalize px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-100 text-brand-700">
+        <span className="capitalize px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary">
           {r.type}
         </span>
       ),
@@ -217,14 +217,14 @@ export function FileImportDialog({
     >
       <div className="space-y-4">
         {result ? (
-          <div className="p-4 rounded border border-success/30 bg-success-light text-center space-y-2">
-            <div className="w-10 h-10 rounded-full bg-success text-surface mx-auto flex items-center justify-center">
+          <div className="p-4 rounded-lg border border-success/30 bg-success/10 text-center space-y-2">
+            <div className="w-10 h-10 rounded-full bg-success text-white mx-auto flex items-center justify-center">
               <Icon name="check" size={20} />
             </div>
-            <h4 className="font-bold text-sm text-text-main">
+            <h4 className="font-bold text-sm text-foreground">
               Import Completed Successfully
             </h4>
-            <p className="text-xs text-text-muted">
+            <p className="text-xs text-muted-foreground">
               <strong>{result.importedCount}</strong> records imported into database.{' '}
               {result.skippedCount > 0 && (
                 <span>(<strong>{result.skippedCount}</strong> duplicate or invalid records skipped)</span>
@@ -236,16 +236,16 @@ export function FileImportDialog({
             {error && <Alert type="danger">{error}</Alert>}
 
             {/* Upload Area & Sample Template Button */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border border-dashed border-border rounded bg-brand-50">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border border-dashed border-border rounded-lg bg-muted/40">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded bg-brand-100 text-brand-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                   <Icon name="upload" size={20} />
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-text-main">
+                  <div className="text-xs font-semibold text-foreground">
                     {file ? file.name : 'Choose a .CSV or .XLSX spreadsheet'}
                   </div>
-                  <div className="text-[11px] text-text-muted">
+                  <div className="text-[11px] text-muted-foreground">
                     Columns: Name, Phone, Email, Address, Type (old/new), Notes
                   </div>
                 </div>
@@ -259,7 +259,7 @@ export function FileImportDialog({
                     className="sr-only"
                     onChange={handleFileUpload}
                   />
-                  <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded border border-border bg-surface hover:bg-brand-50 text-text-main transition-colors min-h-[44px] sm:min-h-0">
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-card hover:bg-muted text-foreground transition-colors min-h-[44px] sm:min-h-0">
                     Browse File
                   </span>
                 </label>
@@ -279,7 +279,7 @@ export function FileImportDialog({
             {previewRows.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     Spreadsheet Preview (First {previewRows.length} of {allRows.length} rows)
                   </span>
                   <span className="text-xs text-success font-semibold">

@@ -48,8 +48,8 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
       duration: '04 Aug - 04 Aug (1d)',
       status: 'pending_hr',
       statusLabel: 'Level 2 (HR)',
-      badgeClass: 'bg-amber-50 text-amber-700 border border-amber-200',
-      dotClass: 'bg-amber-500',
+      badgeClass: 'bg-warning/15 text-warning border border-warning/30',
+      dotClass: 'bg-warning',
     },
     {
       id: 'leave-2',
@@ -59,7 +59,7 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
       duration: '08 Sep - 08 Sep (1d)',
       status: 'rejected',
       statusLabel: '✕ Rejected',
-      badgeClass: 'bg-rose-50 text-rose-700 border border-rose-200',
+      badgeClass: 'bg-destructive/15 text-destructive border border-destructive/30',
     },
     {
       id: 'leave-3',
@@ -69,7 +69,7 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
       duration: '19 Aug - 19 Aug (1d)',
       status: 'rejected',
       statusLabel: '✕ Rejected',
-      badgeClass: 'bg-rose-50 text-rose-700 border border-rose-200',
+      badgeClass: 'bg-destructive/15 text-destructive border border-destructive/30',
     },
     {
       id: 'leave-4',
@@ -79,7 +79,7 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
       duration: '03 Aug - 04 Aug (2d)',
       status: 'approved',
       statusLabel: '✓ Approved',
-      badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+      badgeClass: 'bg-success/15 text-success border border-success/30',
     },
   ];
 
@@ -118,12 +118,12 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
       {/* LEFT COLUMN: Recent Employees & Recent Leave Applications */}
       <div className="space-y-6">
         {/* Card A: Recent Employees */}
-        <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
+        <div className="p-5 bg-card rounded-xl border border-border shadow-2xs space-y-4">
           <div className="flex items-center justify-between border-b border-border/70 pb-3">
-            <h3 className="text-sm font-bold text-text-main">Recent Employees</h3>
+            <h3 className="text-sm font-bold text-foreground">Recent Employees</h3>
             <Link
               to="/users"
-              className="text-xs text-text-muted hover:text-brand-600 font-semibold cursor-pointer transition-colors"
+              className="text-xs text-muted-foreground hover:text-primary font-semibold cursor-pointer transition-colors"
             >
               View All
             </Link>
@@ -133,20 +133,20 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
             {employeesList.map((emp) => (
               <div
                 key={emp.id}
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0 border border-blue-100">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0 border border-primary/20">
                     {emp.initials}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-text-main truncate">{emp.name}</p>
-                    <p className="text-[11px] text-text-muted truncate">
+                    <p className="text-xs font-bold text-foreground truncate">{emp.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
                       {emp.department} • {emp.role}
                     </p>
                   </div>
                 </div>
-                <span className="text-[11px] text-text-muted font-medium shrink-0 ml-3">
+                <span className="text-[11px] text-muted-foreground font-medium shrink-0 ml-3">
                   {emp.joinedDate}
                 </span>
               </div>
@@ -155,12 +155,12 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
         </div>
 
         {/* Card B: Recent Leave Applications */}
-        <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
+        <div className="p-5 bg-card rounded-xl border border-border shadow-2xs space-y-4">
           <div className="flex items-center justify-between border-b border-border/70 pb-3">
-            <h3 className="text-sm font-bold text-text-main">Recent Leave Applications</h3>
+            <h3 className="text-sm font-bold text-foreground">Recent Leave Applications</h3>
             <Link
               to="/leaves"
-              className="text-xs text-text-muted hover:text-brand-600 font-semibold cursor-pointer transition-colors"
+              className="text-xs text-muted-foreground hover:text-primary font-semibold cursor-pointer transition-colors"
             >
               View All
             </Link>
@@ -170,15 +170,15 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
             {leavesList.map((leave) => (
               <div
                 key={leave.id}
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-amber-50 text-amber-700 font-bold text-xs flex items-center justify-center shrink-0 border border-amber-100">
+                  <div className="w-9 h-9 rounded-full bg-warning/10 text-warning font-bold text-xs flex items-center justify-center shrink-0 border border-warning/20">
                     {leave.initials}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-text-main truncate">{leave.name}</p>
-                    <p className="text-[11px] text-text-muted truncate">
+                    <p className="text-xs font-bold text-foreground truncate">{leave.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
                       {leave.leaveType} • {leave.duration}
                     </p>
                   </div>
@@ -201,44 +201,44 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
       {/* RIGHT COLUMN: Total Employees & Upcoming Holidays */}
       <div className="space-y-6">
         {/* Card C: Total Employees Card */}
-        <div className="p-6 bg-surface rounded-2xl border border-border shadow-2xs flex items-center justify-between">
+        <div className="p-6 bg-card rounded-xl border border-border shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               TOTAL EMPLOYEES
             </span>
-            <div className="text-4xl font-black text-text-main tracking-tight">
+            <div className="text-4xl font-black text-foreground tracking-tight">
               {totalEmployees}
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 pt-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-success pt-1">
               <Icon name="trending-up" size={14} className="stroke-[2.5]" />
               <span>+1 this month</span>
             </div>
           </div>
 
-          <div className="w-16 h-16 rounded-2xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shrink-0">
+          <div className="w-16 h-16 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
             <Icon name="users" size={28} />
           </div>
         </div>
 
         {/* Card D: Upcoming Holidays */}
-        <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
+        <div className="p-5 bg-card rounded-xl border border-border shadow-2xs space-y-4">
           <div className="flex items-center justify-between border-b border-border/70 pb-3">
-            <h3 className="text-sm font-bold text-text-main">Upcoming Holidays</h3>
-            <span className="text-xs text-text-muted font-semibold">Calendar</span>
+            <h3 className="text-sm font-bold text-foreground">Upcoming Holidays</h3>
+            <span className="text-xs text-muted-foreground font-semibold">Calendar</span>
           </div>
 
           <div className="space-y-3.5">
             {upcomingHolidays.map((hol) => (
-              <div key={hol.id} className="flex items-center gap-3.5 p-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <div key={hol.id} className="flex items-center gap-3.5 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                 {/* Date Badge */}
-                <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 border border-blue-100 flex flex-col items-center justify-center shrink-0">
+                <div className="w-11 h-11 rounded-lg bg-primary/10 text-primary border border-primary/20 flex flex-col items-center justify-center shrink-0">
                   <span className="text-[9px] font-bold tracking-wider uppercase leading-none">{hol.month}</span>
                   <span className="text-base font-extrabold leading-none mt-0.5">{hol.day}</span>
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-text-main truncate">{hol.name}</p>
-                  <p className="text-[11px] text-text-muted truncate mt-0.5">
+                  <p className="text-xs font-bold text-foreground truncate">{hol.name}</p>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                     {hol.dayOfWeek} • {hol.relativeTime}
                   </p>
                 </div>

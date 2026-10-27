@@ -1,20 +1,19 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   XIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
   TrashIcon,
-  ZoomInIcon,
   FileIcon,
 } from '../ui/icons';
 import Button from '../ui/Button';
-import IconButton from '../ui/IconButton';
 import { formatFileSize } from '../../utils/dsr';
 
 /**
- * BefUI Lightbox Modal for viewing, navigating, and managing DSR photos & files.
- * Provides Admin action triggers (Edit & Delete) and keyboard navigation.
+ * BefUI Minimal-Size Popup Modal for previewing DSR photos and attachments.
+ * Replaces the full-screen blackout overlay with a compact, centered modal dialog.
  */
 export function DsrPhotoLightboxModal({
   isOpen,
@@ -27,11 +26,9 @@ export function DsrPhotoLightboxModal({
   onDeletePhoto,
 }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [isZoomed, setIsZoomed] = useState(false);
 
   useEffect(() => {
     setCurrentIndex(initialIndex);
-    setIsZoomed(false);
   }, [initialIndex, isOpen]);
 
   useEffect(() => {
@@ -64,190 +61,146 @@ export function DsrPhotoLightboxModal({
     document.body.removeChild(link);
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
-      aria-label="Photo Preview Lightbox"
+      aria-label="Photo Preview Dialog"
+      onClick={onClose}
     >
-      {/* Top Header Bar */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/80 to-transparent text-white">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-white/10 text-white/90 border border-white/20">
-            {currentIndex + 1} / {attachments.length}
-          </span>
-          <div className="min-w-0">
-            <h4 className="text-sm font-semibold truncate text-white">
-              {current.caption || current.name}
-            </h4>
-            <span className="text-[11px] text-white/70 block truncate">
-              {current.name} • {formatFileSize(current.size)}
-              {current.uploadedBy && ` • Uploaded by ${current.uploadedBy}`}
-            </span>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          {isImage && (
-            <button
-              type="button"
-              onClick={() => setIsZoomed((v) => !v)}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-              title={isZoomed ? 'Fit to screen' : 'Zoom 100%'}
-              aria-label="Toggle zoom"
-            >
-              <ZoomInIcon className="size-4" />
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-            title="Download file"
-            aria-label="Download file"
-          >
-            <DownloadIcon className="size-4" />
-          </button>
-
-          {canDelete && (
-            <button
-              type="button"
-              onClick={() => onDeletePhoto?.(current)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/80 hover:bg-rose-600 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
-              title="Delete photo"
-            >
-              <TrashIcon className="size-3.5" />
-              <span className="hidden sm:inline">Delete</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg bg-white/15 hover:bg-white/30 text-white transition-colors cursor-pointer ml-1"
-            aria-label="Close preview"
-          >
-            <XIcon className="size-4.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Image / Document Canvas */}
-      <div className="relative size-full flex items-center justify-center p-4 pt-16 pb-20 select-none overflow-hidden">
-        {isImage && current.url ? (
-          <div
-            className={`transition-all duration-200 max-h-full max-w-full flex items-center justify-center ${
-              isZoomed ? 'cursor-zoom-out overflow-auto' : 'cursor-zoom-in'
-            }`}
-            onClick={() => setIsZoomed((v) => !v)}
-          >
-            <img
-              src={current.url}
-              alt={current.caption || current.name}
-              className={`rounded-lg shadow-2xl object-contain transition-transform duration-200 ${
-                isZoomed ? 'max-w-none scale-125' : 'max-h-[80vh] max-w-[90vw]'
-              }`}
-            />
-          </div>
-        ) : (
-          <div className="rounded-xl border border-white/20 bg-white/10 p-8 text-center text-white max-w-md shadow-2xl backdrop-blur-md space-y-4">
-            <div className="size-16 rounded-2xl bg-white/10 mx-auto flex items-center justify-center text-white">
-              <FileIcon className="size-8" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-white truncate">
-                {current.name}
-              </h3>
-              <p className="text-xs text-white/70 mt-1">
-                Document file ({formatFileSize(current.size)})
-              </p>
-            </div>
-            {current.caption && (
-              <p className="text-xs italic text-white/90 bg-white/5 rounded-lg p-3 border border-white/10">
-                "{current.caption}"
-              </p>
+      {/* Centered Minimal Popup Card */}
+      <div
+        className="relative w-full max-w-lg rounded-2xl border border-border bg-card text-foreground shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            {attachments.length > 1 && (
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                {currentIndex + 1} / {attachments.length}
+              </span>
             )}
-            <div className="flex justify-center pt-2">
+            <div className="min-w-0">
+              <h4 className="text-xs font-semibold truncate text-foreground" title={current.caption || current.name}>
+                {current.caption || current.name}
+              </h4>
+              <span className="text-[10px] text-muted-foreground block truncate">
+                {formatFileSize(current.size)}
+                {current.uploadedBy && ` • Uploaded by ${current.uploadedBy}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Icons */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              title="Download file"
+              aria-label="Download file"
+            >
+              <DownloadIcon className="size-4" />
+            </button>
+
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeletePhoto?.(current);
+                  if (attachments.length <= 1) onClose();
+                }}
+                className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                title="Delete photo"
+                aria-label="Delete photo"
+              >
+                <TrashIcon className="size-4" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer ml-0.5"
+              title="Close preview"
+              aria-label="Close preview"
+            >
+              <XIcon className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Minimal Image / File Preview Box */}
+        <div className="relative p-3 bg-muted/20 flex items-center justify-center min-h-[220px]">
+          {isImage && current.url ? (
+            <div className="relative flex items-center justify-center w-full">
+              <img
+                src={current.url}
+                alt={current.caption || current.name}
+                className="max-h-[340px] w-auto max-w-full rounded-xl object-contain border border-border/60 shadow-xs bg-background"
+              />
+
+              {/* Prev / Next controls inside the box */}
+              {attachments.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIndex((prev) => (prev > 0 ? prev - 1 : attachments.length - 1))}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 size-8 rounded-full bg-background/85 hover:bg-background border border-border text-foreground shadow-sm flex items-center justify-center transition-all cursor-pointer"
+                    aria-label="Previous photo"
+                  >
+                    <ChevronLeftIcon className="size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIndex((prev) => (prev < attachments.length - 1 ? prev + 1 : 0))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 size-8 rounded-full bg-background/85 hover:bg-background border border-border text-foreground shadow-sm flex items-center justify-center transition-all cursor-pointer"
+                    aria-label="Next photo"
+                  >
+                    <ChevronRightIcon className="size-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card p-6 text-center text-foreground max-w-xs shadow-xs space-y-3">
+              <div className="size-12 rounded-xl bg-muted mx-auto flex items-center justify-center text-muted-foreground">
+                <FileIcon className="size-6" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold truncate text-foreground">
+                  {current.name}
+                </h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Document file ({formatFileSize(current.size)})
+                </p>
+              </div>
               <Button
                 variant="primary"
-                size="md"
+                size="sm"
                 leadingIcon="download"
                 onClick={handleDownload}
               >
                 Download Document
               </Button>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Left / Right Arrow Controls */}
-      {attachments.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setCurrentIndex((prev) => (prev > 0 ? prev - 1 : attachments.length - 1));
-            }}
-            className="absolute left-3 top-1/2 -translate-y-1/2 size-11 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer backdrop-blur-sm shadow-lg hover:scale-105"
-            aria-label="Previous photo"
-          >
-            <ChevronLeftIcon className="size-6" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setCurrentIndex((prev) => (prev < attachments.length - 1 ? prev + 1 : 0));
-            }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 size-11 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer backdrop-blur-sm shadow-lg hover:scale-105"
-            aria-label="Next photo"
-          >
-            <ChevronRightIcon className="size-6" />
-          </button>
-        </>
-      )}
-
-      {/* Bottom Thumbnail Strip (if more than 1 attachment) */}
-      {attachments.length > 1 && (
-        <div className="absolute bottom-3 inset-x-0 z-20 flex justify-center px-4">
-          <div className="flex items-center gap-2 p-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/15 max-w-[90vw] overflow-x-auto">
-            {attachments.map((att, idx) => {
-              const isThumbImg = att.type?.startsWith('image/') || att.isImage;
-              const isSelected = idx === currentIndex;
-              return (
-                <button
-                  key={att.id || idx}
-                  type="button"
-                  onClick={() => setCurrentIndex(idx)}
-                  className={`size-12 rounded-lg overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
-                    isSelected
-                      ? 'border-primary ring-2 ring-primary/40 scale-105'
-                      : 'border-white/20 opacity-60 hover:opacity-100'
-                  }`}
-                >
-                  {isThumbImg && att.url ? (
-                    <img
-                      src={att.url}
-                      alt={att.caption || att.name}
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    <div className="size-full bg-white/10 flex items-center justify-center text-white">
-                      <FileIcon className="size-4" />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          )}
         </div>
-      )}
-    </div>
+
+        {/* Footer info & close */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-card text-xs">
+          <span className="text-[11px] text-muted-foreground truncate pr-2">
+            {current.caption ? `"${current.caption}"` : current.name}
+          </span>
+          <Button variant="outline" size="xs" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

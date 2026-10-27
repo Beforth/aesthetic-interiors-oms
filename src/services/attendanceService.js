@@ -106,7 +106,7 @@ function getStoredRequests() {
     const raw = localStorage.getItem(STORAGE_REQUESTS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (e) {
     console.error('Failed to read attendance requests from localStorage', e);
@@ -222,9 +222,12 @@ export const attendanceService = {
       const requests = getStoredRequests();
       const newReq = {
         id: `req-${Date.now()}`,
+        userId: req.userId || null,
         date: req.date || new Date().toISOString().split('T')[0],
         type: req.type || 'Regularization',
         reason: req.reason || '',
+        requestedCheckIn: req.requestedCheckIn || '',
+        requestedCheckOut: req.requestedCheckOut || '',
         status: 'pending',
         requestedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         employeeName: req.employeeName || 'Rohit Kumar',
@@ -233,6 +236,61 @@ export const attendanceService = {
       saveRequests(requests);
       return newReq;
     }, 'Attendance request submitted');
+  },
+
+  async decideRequest(id, decision) {
+    return apiClient.execute(async () => {
+      const requests = getStoredRequests();
+      const targetReq = requests.find((r) => r.id === id);
+      const updated = requests.map((req) => {
+        if (req.id === id) {
+          return {
+            ...req,
+            status: decision === 'approve' ? 'approved' : 'rejected',
+            decidedAt: new Date().toISOString(),
+          };
+        }
+        return req;
+      });
+      saveRequests(updated);
+
+      if (decision === 'approve' && targetReq) {
+        const records = getStoredAttendance();
+        const existingIdx = records.findIndex(
+          (r) => (targetReq.userId && String(r.userId) === String(targetReq.userId)) || r.userName === targetReq.employeeName
+        );
+        if (existingIdx !== -1) {
+          records[existingIdx] = {
+            ...records[existingIdx],
+            checkInTime: targetReq.requestedCheckIn || records[existingIdx].checkInTime || '09:00 AM',
+            checkOutTime: targetReq.requestedCheckOut || records[existingIdx].checkOutTime || '06:00 PM',
+            status: 'present',
+            correctionReason: `Regularization Approved: ${targetReq.reason}`,
+          };
+          saveAttendance(records);
+        }
+      }
+
+      return { success: true };
+    }, `Attendance request ${decision}d`);
+  },
+
+  async withdrawRequest(id) {
+    return apiClient.execute(async () => {
+      const requests = getStoredRequests();
+      const updated = requests.map((req) => {
+        if (req.id === id) {
+          return {
+            ...req,
+            status: 'withdrawn',
+            withdrawnAt: new Date().toISOString(),
+          };
+        }
+        return req;
+      });
+      saveRequests(updated);
+      return { success: true };
+    }, 'Attendance request withdrawn');
   },
 
   async getOverviewStats() {
@@ -339,38 +397,63 @@ export const attendanceService = {
   /**
    * Mark attendance manually for staff member (Admin/Manager action)
    */
-  async markForStaff({ user, status = 'present', checkInTime = '09:00 AM', checkOutTime = '06:00 PM', notes = '' }) {
+  async markForStaff({
+    user,
+    date,
+    action = 'in',
+    punchTime = '',
+    status = 'present',
+    checkInTime = '',
+    checkOutTime = '',
+    notes = '',
+  }) {
     return apiClient.execute(async () => {
       const records = getStoredAttendance();
-      const todayStr = new Date().toISOString().split('T')[0];
+      const attendanceDate = date || new Date().toISOString().split('T')[0];
       const office = getStoredOfficeLocation();
 
       const existingIdx = records.findIndex(
-        (r) => String(r.userId) === String(user.id) && r.date === todayStr
+        (r) => String(r.userId) === String(user.id) && r.date === attendanceDate
       );
+      const existing = existingIdx !== -1 ? records[existingIdx] : null;
+
+      let resolvedCheckIn = existing?.checkInTime || null;
+      let resolvedCheckOut = existing?.checkOutTime || null;
+
+      if (action === 'in') {
+        resolvedCheckIn = punchTime || checkInTime || '09:00 AM';
+      } else if (action === 'out') {
+        resolvedCheckOut = punchTime || checkOutTime || '06:00 PM';
+        if (!resolvedCheckIn) {
+          resolvedCheckIn = '09:00 AM';
+        }
+      } else {
+        if (checkInTime) resolvedCheckIn = checkInTime;
+        if (checkOutTime) resolvedCheckOut = checkOutTime;
+      }
 
       const record = {
-        id: `att-staff-${Date.now()}`,
+        id: existing?.id || `att-staff-${Date.now()}`,
         userId: user.id,
         userName: user.name,
         role: user.role || 'Staff',
         siteId: office.id,
         site: office.name,
-        date: todayStr,
-        checkInTime: status === 'present' ? checkInTime : null,
-        checkOutTime: status === 'present' ? checkOutTime : null,
-        status: status,
+        date: attendanceDate,
+        checkInTime: resolvedCheckIn,
+        checkOutTime: resolvedCheckOut,
+        status: 'present',
         verified: true,
         coordinates: { lat: office.lat, lng: office.lng },
         distanceMeters: 0,
         withinGeofence: true,
-        correctionReason: notes ? `Admin Marked: ${notes}` : 'Marked by Administrator',
+        correctionReason: notes ? `Admin Marked: ${notes}` : `Marked by Administrator (${action === 'out' ? 'Punch Out' : 'Punch In'})`,
       };
 
       if (existingIdx !== -1) {
         records[existingIdx] = record;
       } else {
-        records.push(record);
+        records.unshift(record);
       }
 
       saveAttendance(records);
