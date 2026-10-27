@@ -586,9 +586,12 @@ export function AttendancePage() {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
-    const today = now.toISOString().split('T')[0];
+    const today = localTodayIso();
     setStaffMarkForm((prev) => ({
-      userId: prev.userId || staffOptions[0]?.id || 'u1',
+      // keep the last choice only while that person is still in the list (the form starts on a demo id)
+      userId: staffOptions.some((s) => String(s.id) === String(prev.userId))
+        ? prev.userId
+        : staffOptions[0]?.id || '',
       punchType: 'in',
       date: today,
       punchTime: `${hh}:${mm}`,
@@ -1103,7 +1106,7 @@ export function AttendancePage() {
       setIsMarkStaffModalOpen(false);
       loadData();
     } catch (err) {
-      toast.error('Failed to mark staff attendance');
+      toast.error(err.message || 'Failed to mark staff attendance');
     }
   };
 
