@@ -103,7 +103,7 @@ export function DashboardPage() {
   }, [attendance, users]);
 
   const presentCount = useMemo(() => {
-    return attendance.filter((a) => a.status === 'present').length;
+    return attendance.filter((a) => ['present', 'late', 'overtime', 'half-day'].includes(a.status)).length;
   }, [attendance]);
 
   const absentCount = useMemo(() => {

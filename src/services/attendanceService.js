@@ -615,14 +615,16 @@ const DAY_STATUS = {
 };
 
 const liveAttendanceService = {
-  /** Today's roster (everyone expected, with people who have not punched shown as not checked in) plus the last week. */
+  /** Today's roster: everyone expected, with people who have not punched shown as not checked in. */
   async getTodayAttendance() {
     const today = localDate();
-    const [roster, earlier] = await Promise.all([
-      apiClient.getAll(`${BASE}/records/`, { from: today, to: today }),
-      apiClient.getAll(`${BASE}/records/`, { from: localDate(-6), to: localDate(-1) }),
-    ]);
-    return [...roster, ...earlier].map(fromApiRecord);
+    return (await apiClient.getAll(`${BASE}/records/`, { from: today, to: today })).map(fromApiRecord);
+  },
+
+  /** The real records of the six days before today, for the date filter of the Records tab. */
+  async getRecentAttendance() {
+    const rows = await apiClient.getAll(`${BASE}/records/`, { from: localDate(-6), to: localDate(-1) });
+    return rows.map(fromApiRecord);
   },
 
   async getOfficeLocation() {

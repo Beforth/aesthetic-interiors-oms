@@ -841,14 +841,15 @@ export function AttendancePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [records, office, leaves, reqs, stats] = await Promise.all([
+      const [records, office, leaves, reqs, stats, recent] = await Promise.all([
         attendanceService.getTodayAttendance(),
         attendanceService.getOfficeLocation(),
         attendanceService.getLeaveTypes(),
         attendanceService.getRequests(),
         attendanceService.getOverviewStats(),
+        attendanceService.getRecentAttendance(),
       ]);
-      setAttendanceList(records);
+      setAttendanceList([...records, ...(recent || [])]);
       setOfficeLocation(office);
       setOfficeForm({
         name: office.name,
