@@ -7,6 +7,10 @@ import {
   clearAuthSession,
   isNetworkOrServerError,
 } from './apiClient';
+import { isDebug } from '../config/env';
+import { mockUsers } from '../data/users';
+import { getPermissionsForRole } from '../config/permissions';
+import { ROLES, ROLE_LABELS } from '../config/roles';
 
 function readJson(key, fallback) {
   try {
@@ -15,6 +19,30 @@ function readJson(key, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function matchesMockUser(user, identifier) {
+  if (!user || !identifier) return false;
+  const idf = identifier.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const username = String(user.username || '').toLowerCase();
+  const email = String(user.email || '').toLowerCase();
+  const role = String(user.role || '').toLowerCase();
+
+  if (username === idf || email === identifier.trim().toLowerCase() || email.split('@')[0] === idf) {
+    return true;
+  }
+  if ((idf === 'admin' || idf === 'owner') && (role === 'owner' || role === 'admin')) {
+    return true;
+  }
+  if (idf === 'manager' && role === 'manager') return true;
+  if (idf === 'supervisor' && role === 'supervisor') return true;
+  if (idf === 'worker' && role === 'worker') return true;
+  if (idf === 'client' && role === 'client') return true;
+
+  const label = ROLE_LABELS[user.role];
+  if (label && label.toLowerCase().replace(/[\s_-]+/g, '') === idf) return true;
+
+  return false;
 }
 
 export const authService = {

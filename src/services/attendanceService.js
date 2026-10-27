@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { withBackend } from './serviceMode';
 import {
   mockTodayAttendance,
   mockOfficeLocation,
@@ -123,7 +124,7 @@ function saveRequests(requests) {
   }
 }
 
-export const attendanceService = {
+const mockAttendanceService = {
   async getTodayAttendance() {
     return apiClient.execute(async () => {
       return [...getStoredAttendance()];
@@ -526,5 +527,250 @@ export const attendanceService = {
     document.body.removeChild(link);
   },
 };
+
+// ----------------------------------------------------------------------------------------------------------------
+// Live (backend) implementation. Leave types stay on the mock side: they belong to the Leave tab, not Attendance.
+// ----------------------------------------------------------------------------------------------------------------
+const BASE = '/attendance';
+const isNumericId = (value) => /^\d+$/.test(String(value ?? ''));
+
+/** The backend sends 24-hour clock text ('18:05'); the page shows and sends '06:05 PM'. */
+function to12h(clock) {
+  if (!clock) return clock ?? null;
+  const [h, m] = String(clock).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return clock;
+  return `${String(h % 12 || 12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+function localDate(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** A roster row without a record has no id; the page needs one to key the row and to find it again. */
+function fromApiRecord(record) {
+  const placeholder = !record.id;
+  return {
+    ...record,
+    id: placeholder ? `ph-${record.userId}-${record.date}` : String(record.id),
+    placeholder,
+    status: record.status === 'not-checked-in' ? 'absent' : record.status,
+    checkInTime: to12h(record.checkInTime),
+    checkOutTime: to12h(record.checkOutTime),
+  };
+}
+
+function fromApiRequest(request) {
+  return {
+    ...request,
+    requestedCheckIn: to12h(request.requestedCheckIn) || '',
+    requestedCheckOut: to12h(request.requestedCheckOut) || '',
+    requestedAt: to12h(request.requestedAt) || '',
+  };
+}
+
+/** 'ph-12-2026-10-27' -> the person and day of a roster row that has no record yet. */
+function parsePlaceholder(id) {
+  const match = /^ph-(\d+)-(\d{4}-\d{2}-\d{2})$/.exec(String(id));
+  return match ? { userId: Number(match[1]), date: match[2] } : null;
+}
+
+function toApiOffice(settings) {
+  const body = {};
+  if (settings.name !== undefined) body.name = settings.name;
+  if (settings.address !== undefined) body.address = settings.address;
+  if (settings.lat !== undefined) body.lat = Number(settings.lat);
+  if (settings.lng !== undefined) body.lng = Number(settings.lng);
+  if (settings.radiusMeters !== undefined) body.radiusMeters = Number(settings.radiusMeters);
+  if (settings.geofenceMode) body.geofenceMode = settings.geofenceMode;
+  return body;
+}
+
+function query(params) {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
+  return entries.length ? `?${new URLSearchParams(entries).toString()}` : '';
+}
+
+/** The page's labels for a day's status in the Daily attendance table. */
+const DAILY_LABELS = {
+  present: 'Present',
+  late: 'Late',
+  'half-day': 'Half Day',
+  absent: 'Absent',
+  leave: 'Leave',
+  'not-marked': 'Not marked',
+  off: 'Not marked',
+};
+
+/** The summary dialog's status choices -> what the API takes (null means "remove the record"). */
+const DAY_STATUS = {
+  Present: 'present',
+  Late: 'late',
+  'Half Day': 'half-day',
+  Overtime: 'overtime',
+  Absent: 'absent',
+  'Unmarked Working Days': null,
+};
+
+const liveAttendanceService = {
+  /** Today's roster: everyone expected, with people who have not punched shown as not checked in. */
+  async getTodayAttendance() {
+    const today = localDate();
+    return (await apiClient.getAll(`${BASE}/records/`, { from: today, to: today })).map(fromApiRecord);
+  },
+
+  /** The real records of the six days before today, for the date filter of the Records tab. */
+  async getRecentAttendance() {
+    const rows = await apiClient.getAll(`${BASE}/records/`, { from: localDate(-6), to: localDate(-1) });
+    return rows.map(fromApiRecord);
+  },
+
+  async getOfficeLocation() {
+    return apiClient.get(`${BASE}/office/`);
+  },
+
+  async updateOfficeLocation(settings) {
+    return apiClient.patch(`${BASE}/office/`, toApiOffice(settings));
+  },
+
+  async getGeofenceSites() {
+    return apiClient.getAll(`${BASE}/sites/`);
+  },
+
+  async getRequests() {
+    return (await apiClient.getAll(`${BASE}/requests/`)).map(fromApiRequest);
+  },
+
+  async submitRequest(req) {
+    const body = { date: req.date, type: req.type, reason: req.reason };
+    if (isNumericId(req.userId)) body.userId = Number(req.userId);
+    if (req.requestedCheckIn) body.requestedCheckIn = req.requestedCheckIn;
+    if (req.requestedCheckOut) body.requestedCheckOut = req.requestedCheckOut;
+    return fromApiRequest(await apiClient.post(`${BASE}/requests/`, body));
+  },
+
+  async decideRequest(id, decision) {
+    return apiClient.post(`${BASE}/requests/${id}/${decision === 'approve' ? 'approve' : 'reject'}/`);
+  },
+
+  async withdrawRequest(id) {
+    await apiClient.delete(`${BASE}/requests/${id}/`);
+    return { success: true };
+  },
+
+  async getOverviewStats() {
+    return apiClient.get(`${BASE}/overview/`);
+  },
+
+  async punchAttendance({ coordinates, action = 'check-in' }) {
+    const record = await apiClient.post(`${BASE}/punch/`, {
+      action,
+      latitude: coordinates.lat,
+      longitude: coordinates.lng,
+      accuracy: coordinates.accuracy ?? undefined,
+    });
+    return fromApiRecord(record);
+  },
+
+  async deleteAttendanceRecord(id) {
+    if (!isNumericId(id)) throw new Error('This day has no record to delete.');
+    await apiClient.delete(`${BASE}/records/${id}/`);
+    return true;
+  },
+
+  /** Mark one punch (in or out) for a staff member, or a whole day by status. */
+  async markForStaff({ user, date, action = 'in', punchTime = '', status, checkInTime = '', checkOutTime = '', notes = '' }) {
+    const body = { userId: Number(user.id), date };
+    if (notes) body.notes = notes;
+    if (punchTime) {
+      body.punchType = action === 'out' ? 'out' : 'in';
+      body.punchTime = punchTime;
+    } else {
+      body.status = status || 'present';
+      if (checkInTime) body.checkInTime = checkInTime;
+      if (checkOutTime) body.checkOutTime = checkOutTime;
+    }
+    return fromApiRecord(await apiClient.post(`${BASE}/records/`, body));
+  },
+
+  async correctAttendance(recordId, correction) {
+    const place = parsePlaceholder(recordId);
+    const times = {};
+    if (correction.checkInTime) times.checkInTime = correction.checkInTime;
+    if (correction.checkOutTime) times.checkOutTime = correction.checkOutTime;
+    if (place) {
+      // nothing was recorded for that day yet, so correcting it means recording it
+      const body = { userId: place.userId, date: place.date, status: correction.status || 'present', ...times };
+      if (correction.reason) body.notes = correction.reason;
+      return fromApiRecord(await apiClient.post(`${BASE}/records/`, body));
+    }
+    const body = { ...times, reason: correction.reason || 'Corrected by manager' };
+    if (correction.status) body.status = correction.status;
+    return fromApiRecord(await apiClient.patch(`${BASE}/records/${recordId}/`, body));
+  },
+
+  // ---- the Daily attendance and Attendance summary tabs -------------------------------------------------------
+  /** One row per person for a day (`date` is YYYY-MM-DD), in the shape the Daily attendance table shows. */
+  async getDailyAttendance({ date, department } = {}) {
+    const rows = await apiClient.getAll(`${BASE}/daily/`, {
+      date,
+      department: department && department !== 'All' ? department : undefined,
+    });
+    return rows.map((row) => ({
+      id: row.userId,
+      recordId: row.recordId,
+      employeeCode: row.employeeCode,
+      name: row.name,
+      department: row.department,
+      designation: row.designation,
+      status: DAILY_LABELS[row.status] || row.status,
+      shift: row.shift,
+      checkIn: to12h(row.checkIn) || '—',
+      checkOut: to12h(row.checkOut) || '—',
+      hoursWorked: row.hoursWorked ?? 0,
+      overtimeHrs: row.overtimeHrs ?? 0,
+    }));
+  },
+
+  /** One row per person for a month (`month` is YYYY-MM). */
+  async getAttendanceSummary({ month, department } = {}) {
+    const rows = await apiClient.getAll(`${BASE}/summary/`, {
+      month,
+      department: department && department !== 'All' ? department : undefined,
+    });
+    return rows.map((row) => ({ ...row, id: row.userId }));
+  },
+
+  /** The days behind one number of the summary. `category` is the dialog's label ("Late", "Half Day"...). */
+  async getSummaryDays({ userId, month, category }) {
+    // the money columns open the days they come from
+    const base = { 'Late Penalty': 'Late', 'Overtime Amount': 'Overtime' }[category] || category;
+    const key = { 'Unmarked Working Days': 'unmarked', 'Half Day': 'half-day' }[base] || String(base).toLowerCase();
+    const days = await apiClient.get(`${BASE}/summary/days/${query({ user: userId, month, category: key })}`);
+    return days.map((day) => ({
+      date: day.date,
+      recordId: day.recordId,
+      status: base,
+      checkIn: to12h(day.checkIn),
+      checkOut: to12h(day.checkOut),
+    }));
+  },
+
+  /** Change one day from the summary dialog. "Unmarked" removes the record; anything else records or corrects it. */
+  async setDayStatus({ userId, date, recordId, status }) {
+    const wanted = DAY_STATUS[status];
+    const reason = 'Changed from the attendance summary';
+    if (wanted === null) {
+      if (recordId) await apiClient.delete(`${BASE}/records/${recordId}/`);
+      return null;
+    }
+    if (recordId) return apiClient.patch(`${BASE}/records/${recordId}/`, { status: wanted, reason });
+    return apiClient.post(`${BASE}/records/`, { userId: Number(userId), date, status: wanted, notes: reason });
+  },
+};
+
+export const attendanceService = withBackend(mockAttendanceService, liveAttendanceService);
 
 export default attendanceService;

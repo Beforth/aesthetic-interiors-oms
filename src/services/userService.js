@@ -2,6 +2,7 @@ import { apiClient, USER_KEY } from './apiClient';
 import { isDebug } from '../config/env';
 import { getPermissionsForRole } from '../config/permissions';
 import { mockUsers } from '../data/users';
+import { withBackend } from './serviceMode';
 
 const STORAGE_KEY = 'osm_users_store';
 const PURGED_OLD_IDS = new Set(['u6', 'u7', 'u8', 'u9', 'u10', 'u11']);
@@ -97,7 +98,7 @@ function syncSignedInUser(updated) {
   }
 }
 
-export const userService = {
+const baseUserService = {
   /**
    * MOCK until the tabs that use it are wired: users from the local demo store.
    * In debug mode, this is also the primary store.
@@ -216,5 +217,15 @@ export const userService = {
     return true;
   },
 };
+
+// The people pickers (project lead, team, filters) read the team directory, which every project role may call.
+// Without it the pages would be offered the demo users, whose ids the backend does not know.
+const liveUserService = {
+  async getAllUsers() {
+    return apiClient.getAll('/accounts/users/directory/');
+  },
+};
+
+export const userService = withBackend(baseUserService, liveUserService);
 
 export default userService;

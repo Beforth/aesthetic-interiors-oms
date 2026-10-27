@@ -1,5 +1,6 @@
 import { apiClient } from './apiClient';
 import { mockAgencies } from '../data/agencies';
+import { withBackend, pick, numberOrNull } from './serviceMode';
 
 const STORAGE_KEY = 'osm_agencies_v2';
 
@@ -61,7 +62,7 @@ function saveAgencies(agencies) {
   }
 }
 
-export const agencyService = {
+const mockAgencyService = {
   async getAllAgencies() {
     return apiClient.execute(async () => {
       return [...getStoredAgencies()];
@@ -148,5 +149,58 @@ export const agencyService = {
     }, 'Agency removed successfully');
   },
 };
+
+const AGENCY_URL = '/agencies/agencies/';
+const AGENCY_FIELDS = [
+  'name', 'trade', 'ownerName', 'contactPerson', 'phone', 'alternatePhone', 'email', 'address', 'city', 'pincode',
+  'skills', 'stages', 'teamSize', 'rateUnit', 'baseRate', 'paymentTerms', 'gstin', 'pan', 'bankDetails', 'status',
+  'establishedYear', 'notes', 'rating',
+];
+
+function toApiAgency(data) {
+  const body = pick(data, AGENCY_FIELDS);
+  ['teamSize', 'baseRate', 'rating'].forEach((key) => {
+    if (key in body) body[key] = numberOrNull(body[key]) ?? 0;
+  });
+  if ('establishedYear' in body) body.establishedYear = numberOrNull(body.establishedYear);
+  if (Array.isArray(body.stages)) {
+    body.stages = body.stages.map((stage) => ({
+      stageOrder: Number(stage.stageOrder),
+      stageName: stage.stageName,
+      products: Array.isArray(stage.products) ? stage.products : [],
+    }));
+  }
+  return body;
+}
+
+const liveAgencyService = {
+  async getAllAgencies() {
+    return apiClient.getAll(AGENCY_URL);
+  },
+
+  async getAgencyById(id) {
+    try {
+      return await apiClient.get(`${AGENCY_URL}${id}/`);
+    } catch (err) {
+      if (err.status === 404) return null;
+      throw err;
+    }
+  },
+
+  async createAgency(agencyData) {
+    return apiClient.post(AGENCY_URL, toApiAgency(agencyData));
+  },
+
+  async updateAgency(id, updateData) {
+    return apiClient.patch(`${AGENCY_URL}${id}/`, toApiAgency(updateData));
+  },
+
+  async deleteAgency(id) {
+    await apiClient.delete(`${AGENCY_URL}${id}/`);
+    return true;
+  },
+};
+
+export const agencyService = withBackend(mockAgencyService, liveAgencyService);
 
 export default agencyService;

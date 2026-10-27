@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { mockUsers } from '../data/users';
+import { isDebug } from '../config/env';
 import { validateRequired, validateGpsCoordinates, validatePositiveNumber } from '../utils/validators';
 
 import PageHeader from '../components/ui/PageHeader';
@@ -49,6 +50,39 @@ import {
   XIcon,
   FilterIcon,
 } from '../components/ui/icons';
+
+/** Today as DD-MM-YYYY, the format of the Daily attendance date box. */
+function todayDdMmYyyy() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+
+/** 'DD-MM-YYYY' -> 'YYYY-MM-DD', or '' while the box holds something else. */
+function ddMmYyyyToIso(text) {
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(text || '').trim());
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : '';
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** The month box shows 'October, 2026'; the API takes '2026-10'. */
+function monthLabelToIso(label) {
+  const [name, year] = String(label || '').split(',').map((part) => part.trim());
+  const index = MONTH_NAMES.indexOf(name);
+  return index === -1 || !/^\d{4}$/.test(year) ? '' : `${year}-${String(index + 1).padStart(2, '0')}`;
+}
+
+function currentMonthLabel() {
+  const d = new Date();
+  return `${MONTH_NAMES[d.getMonth()]}, ${d.getFullYear()}`;
+}
+
+function localTodayIso() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export function calculateWorkingHours(checkInStr, checkOutStr) {
   if (!checkInStr) return '—';
@@ -230,9 +264,9 @@ export function AttendancePage() {
   });
 
   // Daily Attendance View State & Mock Data (matches screenshots)
-  const [dailyDateDisplay, setDailyDateDisplay] = useState('26-10-2026');
+  const [dailyDateDisplay, setDailyDateDisplay] = useState(() => (isDebug() ? '26-10-2026' : todayDdMmYyyy()));
   const [dailyDeptFilter, setDailyDeptFilter] = useState('All');
-  const [dailyRecords, setDailyRecords] = useState([
+  const [dailyRecords, setDailyRecords] = useState(isDebug() ? [
     {
       id: 'd1',
       srNo: 1,
@@ -331,12 +365,12 @@ export function AttendancePage() {
       hoursWorked: 0,
       overtimeHrs: 0,
     },
-  ]);
+  ] : []);
 
   // Attendance Summary View State & Mock Data
-  const [summaryMonth, setSummaryMonth] = useState('October, 2026');
+  const [summaryMonth, setSummaryMonth] = useState(() => (isDebug() ? 'October, 2026' : currentMonthLabel()));
   const [summaryDeptFilter, setSummaryDeptFilter] = useState('All');
-  const [summaryRecords, setSummaryRecords] = useState([
+  const [summaryRecords, setSummaryRecords] = useState(isDebug() ? [
     {
       id: 's1',
       srNo: 1,
@@ -442,9 +476,42 @@ export function AttendancePage() {
       latePenalty: 0,
       overtimeAmount: 400,
     },
-  ]);
+  ] : []);
 
   const [summaryBreakdownTarget, setSummaryBreakdownTarget] = useState(null);
+
+  // With the backend on, the two report tabs are read from it for the date / month on screen.
+  const live = !isDebug();
+  const [reportsTick, setReportsTick] = useState(0);
+  useEffect(() => {
+    const date = ddMmYyyyToIso(dailyDateDisplay);
+    if (!live || !date) return undefined;
+    let cancelled = false;
+    attendanceService
+      .getDailyAttendance({ date, department: dailyDeptFilter })
+      .then((rows) => {
+        if (!cancelled && rows) setDailyRecords(rows);
+      })
+      .catch((err) => !cancelled && toast.error(err.message || 'Could not load the daily attendance'));
+    return () => {
+      cancelled = true;
+    };
+  }, [live, dailyDateDisplay, dailyDeptFilter, reportsTick]);
+
+  useEffect(() => {
+    const month = monthLabelToIso(summaryMonth);
+    if (!live || !month) return undefined;
+    let cancelled = false;
+    attendanceService
+      .getAttendanceSummary({ month, department: summaryDeptFilter })
+      .then((rows) => {
+        if (!cancelled && rows) setSummaryRecords(rows);
+      })
+      .catch((err) => !cancelled && toast.error(err.message || 'Could not load the attendance summary'));
+    return () => {
+      cancelled = true;
+    };
+  }, [live, summaryMonth, summaryDeptFilter, reportsTick]);
 
   const filteredDailyRecords = useMemo(() => {
     return dailyRecords.filter((r) => {
@@ -482,7 +549,7 @@ export function AttendancePage() {
     const seen = new Set();
 
     // 1. Authorized project users
-    mockUsers.forEach((u) => {
+    (isDebug() ? mockUsers : []).forEach((u) => {
       if (u.role !== 'client' && u.role !== ROLES.CLIENT && !seen.has(u.name)) {
         seen.add(u.name);
         const isAdmin =
@@ -519,9 +586,12 @@ export function AttendancePage() {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
-    const today = now.toISOString().split('T')[0];
+    const today = localTodayIso();
     setStaffMarkForm((prev) => ({
-      userId: prev.userId || staffOptions[0]?.id || 'u1',
+      // keep the last choice only while that person is still in the list (the form starts on a demo id)
+      userId: staffOptions.some((s) => String(s.id) === String(prev.userId))
+        ? prev.userId
+        : staffOptions[0]?.id || '',
       punchType: 'in',
       date: today,
       punchTime: `${hh}:${mm}`,
@@ -700,7 +770,20 @@ export function AttendancePage() {
     toast.success('Attendance summary downloaded for Excel');
   };
 
-  const handleOpenSummaryBreakdown = (record, category, count) => {
+  const handleOpenSummaryBreakdown = async (record, category, count) => {
+    if (live) {
+      try {
+        const days = await attendanceService.getSummaryDays({
+          userId: record.id,
+          month: monthLabelToIso(summaryMonth),
+          category,
+        });
+        setSummaryBreakdownTarget({ ...record, category, value: count, days });
+      } catch (err) {
+        toast.error(err.message || 'Could not load the days');
+      }
+      return;
+    }
     const generatedDays = [];
     const totalEntries = Math.max(1, typeof count === 'number' ? count : 1);
     for (let i = 1; i <= Math.min(totalEntries, 28); i++) {
@@ -721,8 +804,30 @@ export function AttendancePage() {
     });
   };
 
-  const handleUpdateBreakdownDayStatus = (dayIndex, newStatus) => {
+  const handleUpdateBreakdownDayStatus = async (dayIndex, newStatus) => {
     if (!summaryBreakdownTarget) return;
+    if (live) {
+      const day = summaryBreakdownTarget.days[dayIndex];
+      try {
+        await attendanceService.setDayStatus({
+          userId: summaryBreakdownTarget.id,
+          date: day.date,
+          recordId: day.recordId,
+          status: newStatus,
+        });
+        const days = await attendanceService.getSummaryDays({
+          userId: summaryBreakdownTarget.id,
+          month: monthLabelToIso(summaryMonth),
+          category: summaryBreakdownTarget.category,
+        });
+        setSummaryBreakdownTarget((prev) => (prev ? { ...prev, days, value: days.length } : prev));
+        setReportsTick((n) => n + 1);
+        toast.success(`Updated day status to ${newStatus}`);
+      } catch (err) {
+        toast.error(err.message || 'Could not change the day');
+      }
+      return;
+    }
     const updatedDays = [...summaryBreakdownTarget.days];
     updatedDays[dayIndex] = {
       ...updatedDays[dayIndex],
@@ -739,14 +844,15 @@ export function AttendancePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [records, office, leaves, reqs, stats] = await Promise.all([
+      const [records, office, leaves, reqs, stats, recent] = await Promise.all([
         attendanceService.getTodayAttendance(),
         attendanceService.getOfficeLocation(),
         attendanceService.getLeaveTypes(),
         attendanceService.getRequests(),
         attendanceService.getOverviewStats(),
+        attendanceService.getRecentAttendance(),
       ]);
-      setAttendanceList(records);
+      setAttendanceList([...records, ...(recent || [])]);
       setOfficeLocation(office);
       setOfficeForm({
         name: office.name,
@@ -757,8 +863,9 @@ export function AttendancePage() {
       setLeaveTypes(leaves);
       setRequestsList(reqs);
       if (stats) setOverviewStats(stats);
+      setReportsTick((n) => n + 1);
     } catch (err) {
-      toast.error('Failed to load attendance data');
+      toast.error(err.message || 'Failed to load attendance data');
     } finally {
       setLoading(false);
     }
@@ -843,13 +950,17 @@ export function AttendancePage() {
 
   // Check if current user is clocked in
   const myTodayRecord = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localTodayIso();
     return attendanceList.find(
       (r) => String(r.userId) === String(currentUser?.id || 'u1') && r.date === todayStr
     );
   }, [attendanceList, currentUser]);
 
-  const isCheckedIn = myTodayRecord && myTodayRecord.status === 'present' && myTodayRecord.checkInTime && !myTodayRecord.checkOutTime;
+  const isCheckedIn =
+    myTodayRecord &&
+    ['present', 'late', 'overtime', 'half-day'].includes(myTodayRecord.status) &&
+    myTodayRecord.checkInTime &&
+    !myTodayRecord.checkOutTime;
 
   // Punch In / Out Action with PWA Geofencing
   const handlePunchAction = async () => {
@@ -995,7 +1106,7 @@ export function AttendancePage() {
       setIsMarkStaffModalOpen(false);
       loadData();
     } catch (err) {
-      toast.error('Failed to mark staff attendance');
+      toast.error(err.message || 'Failed to mark staff attendance');
     }
   };
 

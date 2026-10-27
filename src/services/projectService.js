@@ -2,6 +2,7 @@ import { ROLES } from '../config/roles';
 import { stageService } from './stageService';
 import { apiClient, USER_KEY } from './apiClient';
 import { mockProjects } from '../data/projects';
+import { withBackend } from './serviceMode';
 
 const STORAGE_KEY = 'osm_projects_v2';
 const DELETED_KEY = 'osm_deleted_projects_v2';
@@ -79,7 +80,7 @@ function saveProjects(projects) {
   }
 }
 
-export const projectService = {
+const mockProjectService = {
   async getAllProjects(user) {
     return apiClient.execute(async () => {
       const currentUser = getCurrentUser(user);
@@ -303,5 +304,156 @@ export const projectService = {
     }, 'Project deleted successfully');
   },
 };
+
+const PROJECT_URL = '/projects/projects/';
+const isRealId = (value) => /^\d+$/.test(String(value ?? ''));
+const toIds = (list) => (Array.isArray(list) ? list.map(Number).filter(Number.isFinite) : undefined);
+
+function announce(name, detail) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
+/** One stage as the API takes it. The page gives new stages a temporary id; the server hands out the real one. */
+function toApiStage(stage, index) {
+  const body = {
+    order: stage.order || index + 1,
+    name: stage.name,
+    startDate: stage.startDate,
+    endDate: stage.endDate,
+  };
+  if (isRealId(stage.id)) body.id = String(stage.id);
+  if (stage.plannedHours !== undefined && stage.plannedHours !== '') body.plannedHours = Number(stage.plannedHours) || 0;
+  if (stage.status) body.status = stage.status;
+  const agencyId = stage.agencyId === 'internal' ? null : stage.agencyId;
+  body.agencyId = isRealId(agencyId) ? String(agencyId) : null;
+  if (stage.agencyName !== undefined) body.agencyName = stage.agencyName;
+  return body;
+}
+
+/** The project fields the API accepts, from the page's field names. */
+function toApiProject(data) {
+  const body = {};
+  ['name', 'description', 'siteAddress', 'startDate', 'status'].forEach((key) => {
+    if (data[key] !== undefined) body[key] = data[key];
+  });
+  const target = data.targetDate || data.endDate;
+  if (target !== undefined) body.targetDate = target || null;
+  if (data.totalCost !== undefined && data.totalCost !== '') body.totalCost = Number(data.totalCost) || 0;
+  if (data.projectLead !== undefined) body.projectLead = data.projectLead ? Number(data.projectLead) : null;
+  if (data.supervisors !== undefined) body.supervisors = toIds(data.supervisors);
+  if (data.workers !== undefined) body.workers = toIds(data.workers);
+  // a client is either an existing record (clientId) or just a phone number (clientContact)
+  if (data.clientContact) {
+    body.clientContact = String(data.clientContact).trim();
+    if (data.clientName) body.clientName = data.clientName;
+  } else if (isRealId(data.clientId)) {
+    body.clientId = Number(data.clientId);
+  }
+  return body;
+}
+
+const liveProjectService = {
+  async getAllProjects() {
+    return apiClient.getAll(PROJECT_URL);
+  },
+
+  async getProjectById(id) {
+    try {
+      return await apiClient.get(`${PROJECT_URL}${id}/`);
+    } catch (err) {
+      if (err.status === 404) return null;
+      throw err;
+    }
+  },
+
+  async getProjectsForClient(clientId) {
+    return apiClient.getAll(PROJECT_URL, { client: clientId });
+  },
+
+  async createProject(projectData) {
+    const body = toApiProject(projectData);
+    if (Array.isArray(projectData.stages) && projectData.stages.length > 0) {
+      body.stages = projectData.stages.map((stage, index) => {
+        const { id, ...rest } = toApiStage(stage, index);
+        return rest;
+      });
+    }
+    const created = await apiClient.post(PROJECT_URL, body);
+    announce('osm_project_updated', { projectId: created.id });
+    return created;
+  },
+
+  async updateProject(id, updateData) {
+    return apiClient.patch(`${PROJECT_URL}${id}/`, toApiProject(updateData));
+  },
+
+  async linkProjectToClient(projectId, client) {
+    const updated = await apiClient.patch(`${PROJECT_URL}${projectId}/`, { clientId: Number(client.id) });
+    announce('osm_project_updated', { projectId, clientId: client.id });
+    return updated;
+  },
+
+  /**
+   * Saves a whole stage list. When only statuses changed (the board and the quick status buttons), each changed
+   * stage is patched on its own, which needs only the "update status" permission; otherwise the list is replaced.
+   */
+  async updateProjectStages(projectId, stages) {
+    const current = await apiClient.get(`${PROJECT_URL}${projectId}/`);
+    const sameShape =
+      stages.length === current.stages.length &&
+      stages.every((stage, index) => {
+        const old = current.stages.find((item) => String(item.id) === String(stage.id));
+        return (
+          old &&
+          current.stages[index].id === old.id &&
+          old.name === stage.name &&
+          old.startDate === stage.startDate &&
+          old.endDate === stage.endDate &&
+          String(old.agencyId ?? '') === String(stage.agencyId === 'internal' ? '' : stage.agencyId ?? '')
+        );
+      });
+    if (sameShape) {
+      let project = current;
+      for (const stage of stages) {
+        const old = current.stages.find((item) => String(item.id) === String(stage.id));
+        const wanted = stage.status === 'pending' ? 'not started' : stage.status;
+        if (wanted && wanted !== old.status) {
+          project = await apiClient.patch(`${PROJECT_URL}${projectId}/stages/${stage.id}/`, { status: wanted });
+        }
+      }
+      return project;
+    }
+    return apiClient.put(`${PROJECT_URL}${projectId}/stages/`, { stages: stages.map(toApiStage) });
+  },
+
+  async updateStageStatus(projectId, stageId, newStatus) {
+    return apiClient.patch(`${PROJECT_URL}${projectId}/stages/${stageId}/`, { status: newStatus });
+  },
+
+  async updateStageDetails(projectId, stageId, details) {
+    const body = {};
+    ['name', 'startDate', 'endDate', 'status', 'plannedHours', 'agencyName'].forEach((key) => {
+      if (details[key] !== undefined && details[key] !== '') body[key] = details[key];
+    });
+    if ('agencyId' in details) {
+      body.agencyId = isRealId(details.agencyId) ? String(details.agencyId) : null;
+    }
+    return apiClient.patch(`${PROJECT_URL}${projectId}/stages/${stageId}/`, body);
+  },
+
+  async updateProjectStatus(projectId, newStatus) {
+    const updated = await apiClient.patch(`${PROJECT_URL}${projectId}/`, { status: newStatus });
+    announce('osm_project_updated', { projectId, status: newStatus });
+    return updated;
+  },
+
+  async deleteProject(projectId) {
+    await apiClient.delete(`${PROJECT_URL}${projectId}/`);
+    announce('osm_project_deleted', { projectId });
+    return true;
+  },
+};
+
+export const projectService = withBackend(mockProjectService, liveProjectService);
 
 export default projectService;
