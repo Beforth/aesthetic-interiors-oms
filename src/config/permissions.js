@@ -42,12 +42,7 @@ export const SYSTEM_PERMISSIONS = [
     hint: 'Assign roles, adjust permissions & reset passwords (FR-USR-05)',
     group: 'Users, Roles & Access',
   },
-  {
-    id: 'settings.stageTemplate',
-    label: 'Edit Stage Master Template',
-    hint: 'Configure default 12-stage sequential workflow (FR-STG-02)',
-    group: 'Users, Roles & Access',
-  },
+
 
   // --- MODULE 3.3: CLIENT RECORDS ---
   {
@@ -299,7 +294,6 @@ export const permissionMatrix = {
   // --- MODULE 3.2: USERS, ROLES & ACCESS ---
   'users.manage': [A],
   'roles.change': [A],
-  'settings.stageTemplate': [A],
 
   // --- MODULE 3.3: CLIENT RECORDS ---
   'clients.view': [A, M],

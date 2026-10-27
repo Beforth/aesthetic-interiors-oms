@@ -41,13 +41,13 @@ export const Checkbox = forwardRef(function Checkbox(
             {...rest}
           />
           <div
-            className={`w-5 h-5 rounded border flex items-center justify-center transition-colors
+            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors
               ${
                 checked
-                  ? 'bg-brand-600 border-brand-600 text-surface'
-                  : 'bg-surface border-border peer-focus:border-brand-500'
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'bg-card border-border peer-focus:border-ring'
               }
-              peer-focus:ring-2 peer-focus:ring-brand-500 peer-focus:ring-offset-1
+              peer-focus:ring-2 peer-focus:ring-ring/20
             `}
           >
             {checked && <Icon name="check" size={14} className="stroke-[3]" />}
@@ -56,13 +56,13 @@ export const Checkbox = forwardRef(function Checkbox(
 
         {(label || description) && (
           <div className="flex flex-col text-sm leading-tight">
-            {label && <span className="font-medium text-text-main">{label}</span>}
-            {description && <span className="text-xs text-text-muted">{description}</span>}
+            {label && <span className="font-medium text-foreground">{label}</span>}
+            {description && <span className="text-xs text-muted-foreground">{description}</span>}
           </div>
         )}
       </label>
 
-      {error && <span className="text-xs text-danger font-medium">{error}</span>}
+      {error && <span className="text-xs text-destructive font-medium">{error}</span>}
     </div>
   );
 });

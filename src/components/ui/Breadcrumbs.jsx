@@ -13,7 +13,7 @@ export function Breadcrumbs({ items = [], className = '' }) {
   if (!items || items.length === 0) return null;
 
   return (
-    <nav aria-label="Breadcrumb" className={`flex items-center text-xs text-text-muted ${className}`}>
+    <nav aria-label="Breadcrumb" className={`flex items-center text-xs text-muted-foreground ${className}`}>
       <ol className="flex items-center gap-1.5 flex-wrap">
         {items.map((item, index) => {
           const isLast = index === items.length - 1;
@@ -24,13 +24,13 @@ export function Breadcrumbs({ items = [], className = '' }) {
               {item.path && !isLast ? (
                 <Link
                   to={item.path}
-                  className="hover:text-brand-600 transition-colors"
+                  className="hover:text-primary transition-colors"
                 >
                   {item.label}
                 </Link>
               ) : (
                 <span
-                  className={isLast ? 'font-medium text-text-main' : ''}
+                  className={isLast ? 'font-medium text-foreground' : ''}
                   aria-current={isLast ? 'page' : undefined}
                 >
                   {item.label}

@@ -42,44 +42,44 @@ export function StageTimeline({ stages = [], today = TODAY_STR, onStageClick }) 
 
   const getBarColor = (stage) => {
     if (stage.status === 'done' || stage.status === 'completed') {
-      return 'bg-success text-surface border-success';
+      return 'bg-success text-white border-success';
     }
     if (isStageLate(stage, today)) {
-      return 'bg-danger text-surface border-danger';
+      return 'bg-destructive text-white border-destructive';
     }
     if (stage.status === 'in progress' || stage.status === 'in-progress') {
-      return 'bg-brand-500 text-surface border-brand-600';
+      return 'bg-primary text-primary-foreground border-primary';
     }
-    return 'bg-brand-100 text-brand-700 border-border';
+    return 'bg-primary/10 text-primary border-border';
   };
 
   return (
-    <div className="bg-surface border border-border rounded shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 overflow-hidden">
+    <div className="bg-card border border-border rounded-xl shadow-xs p-4 overflow-hidden">
       {/* Legend & Today Indicator */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-border text-xs">
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-semibold text-text-main">Legend:</span>
+          <span className="font-semibold text-foreground">Legend:</span>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-success inline-block" />
-            <span className="text-text-muted">Done</span>
+            <span className="text-muted-foreground">Done</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-brand-500 inline-block" />
-            <span className="text-text-muted">In Progress</span>
+            <span className="w-3 h-3 rounded bg-primary inline-block" />
+            <span className="text-muted-foreground">In Progress</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-danger inline-block" />
-            <span className="text-text-muted">Late</span>
+            <span className="w-3 h-3 rounded bg-destructive inline-block" />
+            <span className="text-muted-foreground">Late</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-brand-100 border border-border inline-block" />
-            <span className="text-text-muted">Not Started</span>
+            <span className="w-3 h-3 rounded bg-primary/10 border border-border inline-block" />
+            <span className="text-muted-foreground">Not Started</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-brand-600 ring-2 ring-brand-100 animate-pulse" />
-          <span className="font-bold text-brand-700">Today: {formatDate(today)}</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-primary/20 animate-pulse" />
+          <span className="font-bold text-primary">Today: {formatDate(today)}</span>
         </div>
       </div>
 
@@ -87,8 +87,8 @@ export function StageTimeline({ stages = [], today = TODAY_STR, onStageClick }) 
       <div className="overflow-x-auto">
         <div className="min-w-[850px] relative pb-4">
           {/* Timeline Date Header */}
-          <div className="flex items-center justify-between text-[11px] font-mono text-text-muted pb-2 border-b border-border mb-3 select-none">
-            <span className="w-64 font-sans font-semibold text-text-main text-xs uppercase tracking-wider">
+          <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground pb-2 border-b border-border mb-3 select-none">
+            <span className="w-64 font-sans font-semibold text-foreground text-xs uppercase tracking-wider">
               Stage & Agency Scope
             </span>
             <div className="flex-1 flex justify-between px-2">
@@ -101,13 +101,13 @@ export function StageTimeline({ stages = [], today = TODAY_STR, onStageClick }) 
 
           {/* Vertical Today Marker spanning whole height */}
           <div
-            className="absolute top-7 bottom-0 w-0.5 bg-brand-600 z-10 pointer-events-none flex flex-col items-center"
+            className="absolute top-7 bottom-0 w-0.5 bg-primary z-10 pointer-events-none flex flex-col items-center"
             style={{ left: `calc(16rem + (100% - 16rem) * ${todayPercent / 100})` }}
           >
-            <div className="bg-brand-600 text-surface text-[10px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap -mt-2">
+            <div className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap -mt-2">
               Today
             </div>
-            <div className="w-0.5 flex-1 bg-brand-600 border-l border-dashed border-surface" />
+            <div className="w-0.5 flex-1 bg-primary border-l border-dashed border-card" />
           </div>
 
           {/* Stage Rows */}
@@ -136,31 +136,31 @@ export function StageTimeline({ stages = [], today = TODAY_STR, onStageClick }) 
                   key={stage.id}
                   onClick={() => onStageClick && onStageClick(stage)}
                   className={`flex items-center group rounded p-1 transition-colors ${
-                    onStageClick ? 'hover:bg-brand-50 cursor-pointer' : ''
+                    onStageClick ? 'hover:bg-muted/50 cursor-pointer' : ''
                   }`}
                 >
                   {/* Left Label: Stage, Order & Agency */}
                   <div className="w-64 shrink-0 pr-3">
                     <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded bg-brand-100 text-brand-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                      <span className="w-5 h-5 rounded bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
                         {stage.order}
                       </span>
-                      <span className="text-xs font-bold text-text-main truncate">
+                      <span className="text-xs font-bold text-foreground truncate">
                         {stage.name}
                       </span>
                       {isLate && (
-                        <span className="text-[10px] font-bold px-1.5 rounded bg-danger-light text-danger shrink-0">
+                        <span className="text-[10px] font-bold px-1.5 rounded bg-destructive/15 text-destructive shrink-0">
                           Late
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-text-muted truncate ml-7">
+                    <div className="text-[11px] text-muted-foreground truncate ml-7">
                       {stage.agencyName || 'Unallocated Agency'}
                     </div>
                   </div>
 
                   {/* Right Track: Bar with Duration & Dates */}
-                  <div className="flex-1 relative h-8 bg-brand-50/50 rounded flex items-center px-1">
+                  <div className="flex-1 relative h-8 bg-secondary rounded flex items-center px-1">
                     <div
                       className={`absolute h-6 rounded flex items-center px-2 text-[11px] font-semibold transition-all shadow-xs overflow-hidden select-none border ${getBarColor(
                         stage

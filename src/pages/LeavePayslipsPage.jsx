@@ -241,14 +241,14 @@ export function LeavePayslipsPage() {
           onClick={() => setActiveTab('applications')}
           className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
             activeTab === 'applications'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
+              ? 'border-primary text-primary bg-card'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <Icon name="attendance" size={14} />
           <span>Leave Requests & Approvals</span>
           {pendingCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-bold">
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-warning/15 text-warning font-bold">
               {pendingCount}
             </span>
           )}
@@ -259,8 +259,8 @@ export function LeavePayslipsPage() {
           onClick={() => setActiveTab('balances')}
           className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
             activeTab === 'balances'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
+              ? 'border-primary text-primary bg-card'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <Icon name="calendar" size={14} />
@@ -272,8 +272,8 @@ export function LeavePayslipsPage() {
           onClick={() => setActiveTab('payslips')}
           className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
             activeTab === 'payslips'
-              ? 'border-brand-600 text-brand-700 bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
+              ? 'border-primary text-primary bg-card'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <Icon name="receipt" size={14} />
@@ -405,9 +405,9 @@ export function LeavePayslipsPage() {
                   </div>
                 </div>
 
-                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mt-2">
+                <div className="w-full bg-secondary rounded-full h-2 overflow-hidden mt-2">
                   <div
-                    className="bg-brand-600 h-2 rounded-full"
+                    className="bg-primary h-2 rounded-full"
                     style={{ width: `${(cat.balance / cat.allotted) * 100}%` }}
                   />
                 </div>
@@ -497,7 +497,7 @@ export function LeavePayslipsPage() {
                         <button
                           type="button"
                           onClick={() => setSelectedPayslip(ps)}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-colors cursor-pointer"
                         >
                           View Slip →
                         </button>
@@ -578,13 +578,13 @@ export function LeavePayslipsPage() {
             <button
               type="button"
               onClick={() => setIsApplyModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-card border border-border text-foreground hover:bg-muted transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-800 text-white hover:bg-brand-900"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
             >
               Submit Application
             </button>

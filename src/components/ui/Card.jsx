@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '../../lib/utils';
 
 /**
  * befui Card component conforming to https://befui.vercel.app/
@@ -11,6 +12,7 @@ export const Card = React.forwardRef(function Card(
     headerAction,
     children,
     className = '',
+    bodyClassName = '',
     hoverable = false,
     ...rest
   },
@@ -21,21 +23,23 @@ export const Card = React.forwardRef(function Card(
   return (
     <div
       ref={ref}
-      className={`rounded-xl border border-border bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] overflow-hidden ${
-        hoverable ? 'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md' : ''
-      } ${className}`}
+      className={cn(
+        'rounded-xl border border-border bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] overflow-hidden',
+        hoverable && 'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
+        className
+      )}
       {...rest}
     >
       {hasHeader && (
         <div className="px-5 py-3.5 border-b border-border/80 flex items-center justify-between gap-4 bg-muted/20">
           <div>
-            {title && <h3 className="text-sm font-semibold tracking-tight text-text-main leading-tight">{title}</h3>}
+            {title && <h3 className="text-sm font-semibold tracking-tight text-foreground leading-tight">{title}</h3>}
             {subtitle && <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
           {headerAction && <div className="shrink-0">{headerAction}</div>}
         </div>
       )}
-      <div className="p-5">{children}</div>
+      <div className={cn('p-5', bodyClassName)}>{children}</div>
     </div>
   );
 });

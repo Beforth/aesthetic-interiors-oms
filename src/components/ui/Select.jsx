@@ -13,6 +13,7 @@ export const Select = forwardRef(function Select(
     required = false,
     options = [],
     placeholder = 'Select an option',
+    leadingIcon,
     className = '',
     id,
     disabled = false,
@@ -27,6 +28,11 @@ export const Select = forwardRef(function Select(
 
   const baseSelect = (
     <div className="relative flex items-center w-full">
+      {leadingIcon && (
+        <div className="absolute left-3 text-muted-foreground pointer-events-none flex items-center z-10">
+          <Icon name={leadingIcon} size={15} />
+        </div>
+      )}
       <select
         ref={ref}
         id={selectId}
@@ -36,11 +42,13 @@ export const Select = forwardRef(function Select(
         onChange={onChange}
         aria-invalid={!!error}
         aria-describedby={error ? `${selectId}-error` : undefined}
-        className={`w-full rounded-md border bg-background px-3 pr-9 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 h-9 appearance-none cursor-pointer text-text-main
+        className={`w-full rounded-lg border bg-background ${
+          leadingIcon ? 'pl-9' : 'px-3'
+        } pr-9 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 h-9 appearance-none cursor-pointer text-foreground
           ${
             error
-              ? 'border-destructive focus:border-destructive focus:ring-destructive/20 text-destructive'
-              : 'border-border'
+              ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive focus:ring-2 focus:ring-destructive/30'
+              : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
           }
           ${className}
         `}

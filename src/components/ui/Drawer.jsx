@@ -60,7 +60,7 @@ export function Drawer({
     >
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-text-main/50 transition-opacity"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -71,18 +71,18 @@ export function Drawer({
         } flex max-w-full`}
       >
         <div
-          className={`w-screen ${sizeClasses[size] || sizeClasses.md} bg-surface border-border shadow-2xl flex flex-col ${
+          className={`w-screen ${sizeClasses[size] || sizeClasses.md} bg-card border-border shadow-2xl flex flex-col ${
             isRight ? 'border-l' : 'border-r'
           } animate-in ${isRight ? 'slide-in-from-right' : 'slide-in-from-left'} duration-200`}
         >
           {/* Header */}
-          <div className="flex items-start justify-between px-5 py-4 border-b border-border bg-surface">
+          <div className="flex items-start justify-between px-5 py-4 border-b border-border bg-card">
             <div>
               {title && (
-                <h3 className="text-base font-bold text-text-main">{title}</h3>
+                <h3 className="text-base font-bold text-foreground">{title}</h3>
               )}
               {subtitle && (
-                <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
               )}
             </div>
             <IconButton
@@ -90,7 +90,7 @@ export function Drawer({
               ariaLabel="Close drawer"
               size="sm"
               onClick={onClose}
-              className="-mr-1 -mt-1 text-text-muted hover:text-text-main"
+              className="-mr-1 -mt-1 text-muted-foreground hover:text-foreground"
             />
           </div>
 
@@ -99,7 +99,7 @@ export function Drawer({
 
           {/* Footer */}
           {footer && (
-            <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border bg-brand-50">
+            <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border bg-muted/40">
               {footer}
             </div>
           )}

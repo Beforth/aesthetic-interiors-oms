@@ -75,8 +75,8 @@ export function Dropdown({
                 className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors min-h-[44px] sm:min-h-0
                   ${
                     item.danger
-                      ? 'text-danger hover:bg-danger-light'
-                      : 'text-text-main hover:bg-brand-50'
+                      ? 'text-destructive hover:bg-destructive/10'
+                      : 'text-foreground hover:bg-muted'
                   }
                   ${item.disabled ? 'opacity-40 cursor-not-allowed' : ''}
                 `}
@@ -85,7 +85,7 @@ export function Dropdown({
                   <Icon
                     name={item.icon}
                     size={15}
-                    className={item.danger ? 'text-danger' : 'text-text-muted'}
+                    className={item.danger ? 'text-destructive' : 'text-muted-foreground'}
                   />
                 )}
                 <span className="flex-1 truncate">{item.label}</span>

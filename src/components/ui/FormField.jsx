@@ -16,6 +16,7 @@ export function FormField({
   label,
   htmlFor,
   required = false,
+  asteriskOnly = false,
   error,
   helperText,
   children,
@@ -26,17 +27,21 @@ export function FormField({
       {label && (
         <label
           htmlFor={htmlFor}
-          className="text-xs font-semibold text-text-main flex items-center gap-1 select-none"
+          className="text-xs font-semibold text-foreground flex items-center gap-1 select-none"
         >
-          {label}
-          {required && <span className="text-danger" aria-hidden="true">*</span>}
+          <span>{label}</span>
+          {required && (
+            <span className="text-destructive font-bold ml-0.5" title="Required">
+              *
+            </span>
+          )}
         </label>
       )}
 
       {children}
 
       {error ? (
-        <p className="text-xs text-danger font-medium flex items-center gap-1" role="alert">
+        <p className="text-xs text-destructive font-medium flex items-center gap-1 mt-0.5" role="alert">
           {error}
         </p>
       ) : helperText ? (

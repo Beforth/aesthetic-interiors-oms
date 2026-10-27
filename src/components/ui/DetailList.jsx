@@ -32,17 +32,17 @@ export function DetailList({ items = [], columns = 2, className = '' }) {
               item.fullWidth ? 'col-span-full' : ''
             }`}
           >
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider select-none">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider select-none">
               {item.icon && (
                 <Icon
                   name={item.icon}
                   size={14}
-                  className="text-brand-500 shrink-0"
+                  className="text-primary shrink-0"
                 />
               )}
               <span>{item.label}</span>
             </div>
-            <div className="text-sm font-medium text-text-main break-words">
+            <div className="text-sm font-medium text-foreground break-words">
               {item.value ?? '-'}
             </div>
           </div>

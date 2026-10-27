@@ -25,7 +25,9 @@ export function Kanban<T extends { id: string }>({
   getCardClassName,
   onAdd,
   className,
+  columnClassName,
   density = 'compact',
+  showCount = true,
 }: {
   columns: KanbanColumn[];
   value: Record<string, T[]>;
@@ -34,7 +36,9 @@ export function Kanban<T extends { id: string }>({
   getCardClassName?: (item: T) => string | undefined;
   onAdd?: (columnId: string) => void;
   className?: string;
+  columnClassName?: string;
   density?: 'compact' | 'comfortable';
+  showCount?: boolean;
 }) {
   const [dragId, setDragId] = React.useState<string | null>(null);
   const [over, setOver] = React.useState<{ col: string; index: number } | null>(null);
@@ -106,13 +110,16 @@ export function Kanban<T extends { id: string }>({
             className={cn(
               'flex w-72 shrink-0 flex-col rounded-xl bg-muted/60 p-2 transition-colors',
               columns.length <= 4 && 'md:flex-1',
-              over?.col === c.id && 'bg-accent/60'
+              over?.col === c.id && 'bg-accent/60',
+              columnClassName
             )}
           >
             <header className="flex items-center gap-2 px-1.5 pb-2 pt-1 text-[13px] font-medium shrink-0">
               <span className={cn('size-2 rounded-full', dot[c.tone ?? 'default'])} />
               {c.title}
-              <span className="rounded-full bg-background px-1.5 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
+              {showCount && (
+                <span className="rounded-full bg-background px-1.5 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
+              )}
               {onAdd && <button type="button" aria-label={`Add to ${c.title}`} onClick={() => onAdd(c.id)} className="ml-auto grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground cursor-pointer">+</button>}
             </header>
             <div

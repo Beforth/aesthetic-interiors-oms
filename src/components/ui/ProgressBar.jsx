@@ -30,18 +30,19 @@ export function ProgressBar({
   };
 
   const fillClasses = {
-    brand: 'bg-brand-500',
+    brand: 'bg-primary',
+    primary: 'bg-primary',
     success: 'bg-success',
     warning: 'bg-warning',
-    danger: 'bg-danger',
+    danger: 'bg-destructive',
   };
 
   return (
     <div className={`w-full flex flex-col gap-1.5 ${className}`}>
       {(showLabel || label) && (
-        <div className="flex items-center justify-between text-xs text-text-muted">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{label || 'Progress'}</span>
-          <span className="font-semibold text-text-main">{percentage}%</span>
+          <span className="font-semibold text-foreground">{percentage}%</span>
         </div>
       )}
 
@@ -50,10 +51,10 @@ export function ProgressBar({
         aria-valuenow={percentage}
         aria-valuemin={0}
         aria-valuemax={100}
-        className={`w-full bg-brand-100 rounded-full overflow-hidden ${heightClasses[size] || heightClasses.md}`}
+        className={`w-full bg-secondary rounded-full overflow-hidden ${heightClasses[size] || heightClasses.md}`}
       >
         <div
-          className={`h-full rounded-full transition-all duration-300 ${fillClasses[color] || fillClasses.brand}`}
+          className={`h-full rounded-full transition-all duration-300 ${fillClasses[color] || fillClasses.primary}`}
           style={{ width: `${percentage}%` }}
         />
       </div>

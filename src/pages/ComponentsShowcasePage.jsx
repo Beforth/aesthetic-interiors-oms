@@ -322,10 +322,10 @@ export function ComponentsShowcasePage() {
               {Object.keys(iconMap).map((key) => (
                 <div
                   key={key}
-                  className="flex flex-col items-center justify-center p-3 rounded border border-border bg-surface text-center hover:bg-brand-50 transition-colors"
+                  className="flex flex-col items-center justify-center p-3 rounded-lg border border-border bg-card text-center hover:bg-muted/50 transition-colors"
                 >
-                  <Icon name={key} size={20} className="text-brand-600 mb-1.5" />
-                  <span className="text-[11px] font-mono text-text-muted truncate max-w-full">
+                  <Icon name={key} size={20} className="text-primary mb-1.5" />
+                  <span className="text-[11px] font-mono text-muted-foreground truncate max-w-full">
                     {key}
                   </span>
                 </div>
@@ -682,7 +682,7 @@ export function ComponentsShowcasePage() {
                 </Tooltip>
 
                 <Tooltip content="Displays detailed client specification sheet" placement="right">
-                  <span className="text-xs text-brand-600 underline cursor-help">
+                  <span className="text-xs text-primary underline cursor-help">
                     Helpful Tooltip Link
                   </span>
                 </Tooltip>
@@ -810,9 +810,9 @@ export function ComponentsShowcasePage() {
                 Slide-over panels are ideal for inspecting drawing specifications, subcontractor contact cards,
                 and mobile menus without full page navigation.
               </p>
-              <div className="p-3 rounded bg-brand-50 border border-border">
-                <span className="font-semibold text-text-main">Indiranagar 4BHK Villa</span>
-                <div className="text-[11px] text-brand-600 mt-1">Lead: Amit Patel</div>
+              <div className="p-3 rounded-lg bg-muted/40 border border-border">
+                <span className="font-semibold text-foreground">Indiranagar 4BHK Villa</span>
+                <div className="text-[11px] text-primary mt-1">Lead: Amit Patel</div>
               </div>
             </div>
           </Drawer>

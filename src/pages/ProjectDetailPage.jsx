@@ -455,7 +455,7 @@ export function ProjectDetailPage() {
                 showLabel
                 label="Overall Contract Completion (Averaged Across 12 Stages)"
                 size="lg"
-                color={progress > 70 ? 'success' : 'brand'}
+                color={progress > 70 ? 'success' : 'primary'}
               />
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted pt-2 border-t border-border">
                 <span>
@@ -469,7 +469,7 @@ export function ProjectDetailPage() {
                 </span>
                 <span>
                   In Progress:{' '}
-                  <strong className="text-brand-600">
+                  <strong className="text-primary">
                     {stages.filter((s) => s.status === 'in progress').length}
                   </strong>
                 </span>
@@ -516,14 +516,14 @@ export function ProjectDetailPage() {
                       {assignedSupervisors.map((s) => (
                         <div
                           key={s.id}
-                          className="flex items-center gap-3 p-2 rounded bg-brand-50 border border-border"
+                          className="flex items-center gap-3 p-2 rounded bg-secondary border border-border"
                         >
                           <Avatar name={s.name} size="sm" />
                           <div className="min-w-0">
-                            <div className="text-xs font-bold text-text-main truncate">
+                            <div className="text-xs font-bold text-foreground truncate">
                               {s.name}
                             </div>
-                            <div className="text-[11px] text-text-muted">
+                            <div className="text-[11px] text-muted-foreground">
                               {s.phone} • {s.title}
                             </div>
                           </div>
@@ -534,24 +534,24 @@ export function ProjectDetailPage() {
                 </div>
 
                 <div className="pt-2 border-t border-border">
-                  <h5 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-2">
+                  <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
                     Workers & Artisans ({assignedWorkers.length})
                   </h5>
                   {assignedWorkers.length === 0 ? (
-                    <p className="text-xs text-text-muted italic">No workers assigned</p>
+                    <p className="text-xs text-muted-foreground italic">No workers assigned</p>
                   ) : (
                     <div className="space-y-2">
                       {assignedWorkers.map((w) => (
                         <div
                           key={w.id}
-                          className="flex items-center gap-3 p-2 rounded bg-brand-50 border border-border"
+                          className="flex items-center gap-3 p-2 rounded bg-secondary border border-border"
                         >
                           <Avatar name={w.name} size="sm" />
                           <div className="min-w-0">
-                            <div className="text-xs font-bold text-text-main truncate">
+                            <div className="text-xs font-bold text-foreground truncate">
                               {w.name}
                             </div>
-                            <div className="text-[11px] text-text-muted">
+                            <div className="text-[11px] text-muted-foreground">
                               {w.phone} • {w.title}
                             </div>
                           </div>
@@ -571,11 +571,11 @@ export function ProjectDetailPage() {
                   .map((s) => (
                     <div
                       key={s.id}
-                      className="flex items-center justify-between p-2 rounded bg-surface border border-border text-xs"
+                      className="flex items-center justify-between p-2 rounded bg-card border border-border text-xs"
                     >
                       <div>
-                        <span className="font-semibold text-text-main">{s.name}</span>
-                        <div className="text-[11px] text-brand-600">{s.agencyName}</div>
+                        <span className="font-semibold text-foreground">{s.name}</span>
+                        <div className="text-[11px] text-primary">{s.agencyName}</div>
                       </div>
                       <StatusBadge status={s.status} size="sm" />
                     </div>
@@ -629,7 +629,7 @@ export function ProjectDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-border bg-brand-50 text-text-muted font-semibold uppercase tracking-wider">
+                  <tr className="border-b border-border bg-muted text-muted-foreground font-semibold uppercase tracking-wider">
                     <th className="p-3 w-12 text-center">#</th>
                     <th className="p-3">Stage Name</th>
                     <th className="p-3">Allocated Agency</th>
@@ -644,8 +644,8 @@ export function ProjectDetailPage() {
                     const isLate = isStageLate(stage, TODAY_STR);
 
                     return (
-                      <tr key={stage.id} className="hover:bg-brand-50/50 transition-colors">
-                        <td className="p-3 text-center font-bold text-brand-700">
+                      <tr key={stage.id} className="hover:bg-muted/50 transition-colors">
+                        <td className="p-3 text-center font-bold text-primary">
                           {stage.order}
                         </td>
                         <td className="p-3">
@@ -735,15 +735,15 @@ export function ProjectDetailPage() {
       {/* TAB 3: SITE TASKS KANBAN BOARD (BefUI Kanban Component) */}
       {activeTab === 'tasks' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-4 rounded-xl border border-border shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border shadow-2xs">
             <div>
-              <h3 className="text-sm font-bold text-text-main flex items-center gap-2">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 <span>Site Trade Tasks & Execution Kanban</span>
-                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
                   {projectTasks.length} Total
                 </span>
               </h3>
-              <p className="text-xs text-text-muted mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Authorized supervisors & managers can drag cards or move with Alt+Arrows to track real-time trade progress
               </p>
             </div>

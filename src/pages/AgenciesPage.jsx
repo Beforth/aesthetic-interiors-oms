@@ -13,8 +13,10 @@ import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
 import IconButton from '../components/ui/IconButton';
 import Modal from '../components/ui/Modal';
+import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import Textarea from '../components/ui/Textarea';
 import PermissionGate from '../components/ui/PermissionGate';
 import { Badge } from '../components/ui/Badge';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -34,6 +36,7 @@ import {
   TrashIcon,
   CheckIcon,
   XIcon,
+  ArrowLeftIcon,
 } from '../components/ui/icons';
 import {
   validatePhone,
@@ -77,6 +80,31 @@ const PAYMENT_TERMS_OPTIONS = [
   { value: 'Net 15 Days', label: 'Net 15 Days' },
 ];
 
+const CUSTOM_TRADES_KEY = 'osm_custom_trades';
+
+function getStoredCustomTrades() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_TRADES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomTrade(newTrade) {
+  try {
+    const existing = getStoredCustomTrades();
+    if (!existing.some((t) => t.value.toLowerCase() === newTrade.value.toLowerCase())) {
+      const updated = [...existing, newTrade];
+      localStorage.setItem(CUSTOM_TRADES_KEY, JSON.stringify(updated));
+      return updated;
+    }
+    return existing;
+  } catch {
+    return [];
+  }
+}
+
 const DEFAULT_FORM = {
   name: '',
   trade: 'Ceiling',
@@ -86,7 +114,7 @@ const DEFAULT_FORM = {
   alternatePhone: '',
   email: '',
   address: '',
-  city: 'Bangalore',
+  city: '',
   pincode: '',
   skills: [],
   stages: [],
@@ -115,13 +143,39 @@ export function AgenciesPage() {
   const [stageFilter, setStageFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Modals state
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  // Custom trade state & options
+  const [customTrades, setCustomTrades] = useState(() => getStoredCustomTrades());
+  const [isAddTradeModalOpen, setIsAddTradeModalOpen] = useState(false);
+  const [newTradeName, setNewTradeName] = useState('');
+
+  const allTradeOptions = useMemo(() => {
+    return [...TRADE_OPTIONS, ...customTrades];
+  }, [customTrades]);
+
+  const handleAddNewTrade = (e) => {
+    e?.preventDefault?.();
+    const trimmed = newTradeName.trim();
+    if (!trimmed) {
+      toast.error('Please enter a trade category name');
+      return;
+    }
+    const tradeObj = { value: trimmed, label: trimmed };
+    const updated = saveCustomTrade(tradeObj);
+    setCustomTrades(updated);
+    setFormData((prev) => ({ ...prev, trade: trimmed }));
+    setNewTradeName('');
+    setIsAddTradeModalOpen(false);
+    toast.success(`Trade category "${trimmed}" added and selected.`);
+  };
+
+  // Full Page Form view state instead of cramped popup
+  const [isFullFormOpen, setIsFullFormOpen] = useState(false);
   const [editingAgency, setEditingAgency] = useState(null);
   const [viewingAgency, setViewingAgency] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [projectsModalAgency, setProjectsModalAgency] = useState(null);
+  const [stagesModalAgency, setStagesModalAgency] = useState(null);
 
   const handleOpenProjects = (agency) => {
     const pIds = agency.activeProjects || [];
@@ -208,22 +262,22 @@ export function AgenciesPage() {
 
   const handleOpenAdd = () => {
     setEditingAgency(null);
-    const defaultStage = FITOUT_12_STAGES.find((s) => s.trade === 'Ceiling') || FITOUT_12_STAGES[1];
     setFormData({
       ...DEFAULT_FORM,
-      skills: [...(TRADE_SKILLS_CATALOG.Ceiling?.slice(0, 3) || [])],
+      city: '',
+      skills: [],
       stages: [
         {
-          stageOrder: defaultStage.order,
-          stageName: defaultStage.name,
-          products: [...defaultStage.defaultProducts.slice(0, 4)],
+          stageOrder: 2,
+          stageName: 'Ceiling',
+          products: [],
         },
       ],
     });
     setSkillInput('');
     setStageProductInputs({});
     setFormErrors({});
-    setIsFormModalOpen(true);
+    setIsFullFormOpen(true);
   };
 
   const handleOpenEdit = (agency) => {
@@ -237,7 +291,7 @@ export function AgenciesPage() {
       alternatePhone: agency.alternatePhone || '',
       email: agency.email || '',
       address: agency.address || '',
-      city: agency.city || 'Bangalore',
+      city: agency.city || '',
       pincode: agency.pincode || '',
       skills: Array.isArray(agency.skills) ? [...agency.skills] : [],
       stages: Array.isArray(agency.stages) ? JSON.parse(JSON.stringify(agency.stages)) : [],
@@ -255,7 +309,7 @@ export function AgenciesPage() {
     setSkillInput('');
     setStageProductInputs({});
     setFormErrors({});
-    setIsFormModalOpen(true);
+    setIsFullFormOpen(true);
   };
 
   // Skill management in form
@@ -405,7 +459,7 @@ export function AgenciesPage() {
         await agencyService.createAgency(formData);
         toast.success(`Agency "${formData.name}" registered successfully`);
       }
-      setIsFormModalOpen(false);
+      setIsFullFormOpen(false);
       fetchAgencies();
     } catch (err) {
       toast.error(err.message || 'Failed to save agency');
@@ -458,7 +512,7 @@ export function AgenciesPage() {
     },
     {
       key: 'stages',
-      header: '12 Fit-Out Stages',
+      header: 'Work Stages',
       width: '20%',
       render: (a) => {
         const stagesList = [...(Array.isArray(a.stages) ? a.stages : [])].sort(
@@ -470,19 +524,37 @@ export function AgenciesPage() {
           return name.split('(')[0].replace(/agencies/i, '').trim();
         };
 
+        const visibleStages = stagesList.slice(0, 2);
+        const remainingStages = stagesList.slice(2);
+
         return (
-          <div className="flex flex-wrap items-center gap-1.5 max-w-[220px]">
+          <div className="flex flex-wrap items-center gap-1.5 max-w-[240px]">
             {stagesList.length > 0 ? (
-              stagesList.map((st) => (
-                <span
-                  key={st.stageOrder}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 shadow-2xs whitespace-nowrap"
-                  title={`Stage ${st.stageOrder}: ${st.stageName} (${st.products?.length || 0} products)`}
-                >
-                  <span className="font-bold opacity-80 font-mono text-[10px]">S{st.stageOrder}:</span>
-                  <span>{getShortStageName(st.stageName)}</span>
-                </span>
-              ))
+              <>
+                {visibleStages.map((st) => (
+                  <span
+                    key={st.stageOrder}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 shadow-2xs whitespace-nowrap"
+                    title={`Stage ${st.stageOrder}: ${st.stageName} (${st.products?.length || 0} materials)`}
+                  >
+                    <span className="font-bold opacity-80 font-mono text-[10px]">S{st.stageOrder}:</span>
+                    <span>{getShortStageName(st.stageName)}</span>
+                  </span>
+                ))}
+                {remainingStages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStagesModalAgency(a);
+                    }}
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-muted text-foreground hover:bg-muted/80 border border-border/80 transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
+                    title={`Click to view all ${stagesList.length} assigned stages`}
+                  >
+                    +{remainingStages.length} more
+                  </button>
+                )}
+              </>
             ) : (
               <Badge variant="secondary" size="sm">
                 {a.trade}
@@ -650,17 +722,445 @@ export function AgenciesPage() {
     return TRADE_SKILLS_CATALOG[formData.trade] || [];
   }, [formData.trade]);
 
+  // If user clicked "Register New Agency" or "Edit Agency", render the full page form view
+  if (isFullFormOpen) {
+    return (
+      <div className="w-full space-y-6 pb-12 animate-fadeIn">
+        {/* Top Navigation & Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+          <div>
+            <button
+              type="button"
+              onClick={() => setIsFullFormOpen(false)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer mb-2"
+            >
+              <ArrowLeftIcon className="size-3.5" />
+              <span>Back to Agencies Directory</span>
+            </button>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              {editingAgency ? `Edit Agency: ${editingAgency.name}` : 'Register New Agency'}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Enter contractor details, assigned work stages, materials, team size, and commercial terms.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFullFormOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleSubmit}
+            >
+              {editingAgency ? 'Save Changes' : 'Register Agency'}
+            </Button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <Card>
+            <div className="space-y-8 p-1 sm:p-2">
+              {/* 1. Agency & Contact Details */}
+              <div className="space-y-4">
+                <div className="border-b border-border/70 pb-2">
+                  <h3 className="text-sm font-bold text-foreground">Agency & Contact Details</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Company name, contractor owner, trade category, and status</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Agency / Company Name"
+                    required
+                    placeholder="e.g. Royal Touch Tiles & Masonry"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    error={formErrors.name}
+                  />
+
+                  <Input
+                    label="Owner Name"
+                    required
+                    placeholder="e.g. Sunil Sharma"
+                    value={formData.ownerName}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        ownerName: e.target.value,
+                        contactPerson: formData.contactPerson || e.target.value,
+                      })
+                    }
+                    error={formErrors.ownerName}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <div className="flex items-end gap-1.5">
+                      <div className="flex-1">
+                        <Select
+                          label="Trade Category"
+                          required
+                          value={formData.trade}
+                          onChange={(e) => handleTradeChange(e.target.value)}
+                          options={allTradeOptions}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddTradeModalOpen(true)}
+                        title="Add new trade category"
+                        className="p-2 h-9 rounded-lg border border-border bg-card hover:bg-muted text-foreground transition-colors cursor-pointer flex items-center justify-center shrink-0 mb-0.5"
+                      >
+                        <PlusIcon className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <Input
+                    label="Contact Person"
+                    placeholder="e.g. Dinesh Kumar"
+                    value={formData.contactPerson}
+                    onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+                  />
+
+                  <Select
+                    label="Status"
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    options={STATUS_OPTIONS}
+                  />
+                </div>
+              </div>
+
+              {/* 2. Contact & Workshop Address */}
+              <div className="space-y-4 pt-4 border-t border-border">
+                <div className="border-b border-border/70 pb-2">
+                  <h3 className="text-sm font-bold text-foreground">Contact Numbers & Workshop Location</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Phone numbers, email, and workshop location</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Input
+                    label="Phone Number (10 digits)"
+                    required
+                    type="tel"
+                    maxLength={10}
+                    placeholder="9845012345"
+                    value={formData.phone}
+                    onChange={(e) => {
+                      const clean = sanitizePhone(e.target.value);
+                      setFormData({ ...formData, phone: clean });
+                      if (formErrors.phone) {
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          phone: validatePhone(clean, { required: true, fieldLabel: 'Phone number' }),
+                        }));
+                      }
+                    }}
+                    error={formErrors.phone}
+                  />
+
+                  <Input
+                    label="Alternate / WhatsApp No."
+                    type="tel"
+                    maxLength={10}
+                    placeholder="9845012346"
+                    value={formData.alternatePhone}
+                    onChange={(e) => {
+                      const clean = sanitizePhone(e.target.value);
+                      setFormData({ ...formData, alternatePhone: clean });
+                      if (formErrors.alternatePhone) {
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          alternatePhone: validatePhone(clean, {
+                            required: false,
+                            fieldLabel: 'Alternate phone',
+                          }),
+                        }));
+                      }
+                    }}
+                    error={formErrors.alternatePhone}
+                  />
+
+                  <Input
+                    label="Email Address"
+                    type="email"
+                    placeholder="contact@agency.com"
+                    value={formData.email}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData({ ...formData, email: val });
+                      if (formErrors.email) {
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          email: validateEmail(val, { required: false, fieldLabel: 'Email address' }),
+                        }));
+                      }
+                    }}
+                    error={formErrors.email}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2">
+                    <Textarea
+                      label="Street Address / Workshop Location"
+                      placeholder="Enter full workshop or warehouse address..."
+                      rows={3}
+                      className="resize-y"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="City"
+                      placeholder="e.g. Mumbai, Bangalore"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    />
+                    <Input
+                      label="Pincode"
+                      maxLength={6}
+                      placeholder="560068"
+                      value={formData.pincode}
+                      onChange={(e) => {
+                        const clean = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setFormData({ ...formData, pincode: clean });
+                      }}
+                      error={formErrors.pincode}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Worker Skills */}
+              <div className="space-y-3 pt-4 border-t border-border">
+                <div className="border-b border-border/70 pb-2">
+                  <h3 className="text-sm font-bold text-foreground">Worker Skills</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Add artisan specializations and craft capabilities</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Type artisan skill (e.g. Gypsum Board, CNC Cutting, PU Polishing) and press Enter..."
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddSkill();
+                      }
+                    }}
+                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => handleAddSkill()}>
+                    <PlusIcon className="size-3.5 mr-1" />
+                    Add Skill
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2.5 rounded-lg bg-card border border-border/70">
+                  {formData.skills.length > 0 ? (
+                    formData.skills.map((skill, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium bg-muted text-foreground border border-border shadow-2xs"
+                      >
+                        <span>{skill}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSkill(skill)}
+                          className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors cursor-pointer"
+                          title="Remove skill"
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </span>
+                    ))
+                  ) : null}
+                </div>
+              </div>
+
+              {/* 4. Team Size & Payment Terms */}
+              <div className="space-y-3 pt-4 border-t border-border">
+                <div className="border-b border-border/70 pb-2">
+                  <h3 className="text-sm font-bold text-foreground">Team Size & Payment Terms</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Workforce capacity, billing basis, rate, and milestone terms</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <Input
+                    label="Number of Workers"
+                    type="number"
+                    min={1}
+                    max={200}
+                    placeholder="e.g. 12"
+                    value={formData.teamSize}
+                    onChange={(e) => setFormData({ ...formData, teamSize: e.target.value })}
+                  />
+
+                  <Select
+                    label="Billing Basis"
+                    value={formData.rateUnit}
+                    onChange={(e) => setFormData({ ...formData, rateUnit: e.target.value })}
+                    options={RATE_UNIT_OPTIONS}
+                  />
+
+                  <Input
+                    label="Standard Rate (₹)"
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 45"
+                    value={formData.baseRate}
+                    onChange={(e) => setFormData({ ...formData, baseRate: e.target.value })}
+                  />
+
+                  <Select
+                    label="Payment Terms"
+                    value={formData.paymentTerms}
+                    onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
+                    options={PAYMENT_TERMS_OPTIONS}
+                  />
+                </div>
+              </div>
+
+              {/* 5. Tax & Bank Details */}
+              <div className="space-y-4 pt-4 border-t border-border">
+                <div className="border-b border-border/70 pb-2">
+                  <h3 className="text-sm font-bold text-foreground">Tax & Bank Details</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Tax registration numbers and bank transfer coordinates</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Input
+                    label="GSTIN Number (Optional)"
+                    maxLength={15}
+                    placeholder="e.g. 29AAACA1234F1Z5"
+                    value={formData.gstin}
+                    onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                  />
+
+                  <Input
+                    label="PAN Card Number"
+                    maxLength={10}
+                    placeholder="e.g. AAACA1234F"
+                    value={formData.pan}
+                    onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
+                  />
+
+                  <Input
+                    label="Bank Account or UPI ID"
+                    placeholder="e.g. agency@okaxis or Bank Account / IFSC"
+                    value={formData.bankDetails}
+                    onChange={(e) => setFormData({ ...formData, bankDetails: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1.5 select-none">
+                    Internal Remarks & Notes
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Enter internal supervisor remarks, reliability notes, or equipment specifications..."
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Bottom Actions Bar */}
+          <div className="flex items-center justify-end gap-3 pt-6 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsFullFormOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+            >
+              {editingAgency ? 'Save Changes' : 'Register Agency'}
+            </Button>
+          </div>
+        </form>
+
+        {/* Add New Trade Category Modal (in form view) */}
+        <Modal
+          isOpen={isAddTradeModalOpen}
+          onClose={() => setIsAddTradeModalOpen(false)}
+          title="Add New Trade Category"
+          size="sm"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddTradeModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleAddNewTrade}
+              >
+                Add Trade
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 py-1">
+            <Input
+              label="Trade Name"
+              required
+              placeholder="e.g. HVAC, Acoustics, Automation"
+              value={newTradeName}
+              onChange={(e) => setNewTradeName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddNewTrade();
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              This will add a new craftsmanship trade category that can be assigned to agencies.
+            </p>
+          </div>
+        </Modal>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-12">
       {/* Page Header */}
       <PageHeader
         title="Subcontractor & Trade Agencies"
-        subtitle="SRS Module 3.4 & 3.5: Master directory of specialist trade contractors, 12 sequential fit-out stages, supplied products, and site allocations"
+        subtitle="Master directory of specialist trade contractors, 12 sequential fit-out stages, supplied products, and site allocations"
         actions={
           <PermissionGate permission="agencies.manage">
             <Button
               variant="primary"
               size="sm"
+              className="text-xs px-3 py-1.5 h-8 font-semibold shadow-2xs"
               leadingIcon="plus"
               onClick={handleOpenAdd}
             >
@@ -670,63 +1170,63 @@ export function AgenciesPage() {
         }
       />
 
-      {/* Sleek Compact KPI Summary Cards - Consistent Size across screens */}
-      <div className="flex flex-wrap items-center gap-2.5">
+      {/* Sleek KPI Summary Cards - Prominently highlighted */}
+      <div className="flex flex-wrap items-center gap-3">
         {/* Total Agencies */}
-        <div className="w-48 sm:w-52 rounded-xl border border-border bg-card px-3 py-2 shadow-2xs hover:border-border/80 transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               Registered Agencies
             </span>
-            <div className="size-5 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <BriefcaseIcon className="size-3" />
+            <div className="size-6 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
+              <BriefcaseIcon className="size-3.5" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-lg font-bold font-mono tracking-tight text-foreground tabular-nums">
+            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {stats.totalAgencies}
             </span>
-            <span className="text-[10px] font-medium text-muted-foreground truncate">
+            <span className="text-xs font-medium text-muted-foreground truncate">
               12 fit-out stages
             </span>
           </div>
         </div>
 
         {/* Total Workforce */}
-        <div className="w-48 sm:w-52 rounded-xl border border-border bg-card px-3 py-2 shadow-2xs hover:border-border/80 transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               Total Workers
             </span>
-            <div className="size-5 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-              <UsersIcon className="size-3" />
+            <div className="size-6 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+              <UsersIcon className="size-3.5" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-lg font-bold font-mono tracking-tight text-foreground tabular-nums">
+            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {stats.totalArtisans}
             </span>
-            <span className="text-[10px] font-medium text-muted-foreground truncate">
+            <span className="text-xs font-medium text-muted-foreground truncate">
               Active workers
             </span>
           </div>
         </div>
 
         {/* Active Sites Under Execution */}
-        <div className="w-48 sm:w-52 rounded-xl border border-border bg-card px-3 py-2 shadow-2xs hover:border-border/80 transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               Active Site Stages
             </span>
-            <div className="size-5 rounded-md bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-              <BuildingIcon className="size-3" />
+            <div className="size-6 rounded-md bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+              <BuildingIcon className="size-3.5" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-lg font-bold font-mono tracking-tight text-foreground tabular-nums">
+            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {stats.activeSites}
             </span>
-            <span className="text-[10px] font-medium text-muted-foreground truncate">
+            <span className="text-xs font-medium text-muted-foreground truncate">
               Live projects
             </span>
           </div>
@@ -1115,548 +1615,93 @@ export function AgenciesPage() {
         </Modal>
       )}
 
-      {/* Add / Edit Agency Form Modal */}
+      {/* Stages Detail Modal for Table row "+N more" click */}
+      {stagesModalAgency && (
+        <Modal
+          isOpen={Boolean(stagesModalAgency)}
+          onClose={() => setStagesModalAgency(null)}
+          title={`Work Stages: ${stagesModalAgency.name}`}
+          subtitle={`${stagesModalAgency.trade} Trade • ${stagesModalAgency.stages?.length || 0} stages assigned`}
+          size="sm"
+          footer={
+            <Button variant="outline" size="sm" onClick={() => setStagesModalAgency(null)}>
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-2 py-1 max-h-[60vh] overflow-y-auto">
+            {stagesModalAgency.stages && stagesModalAgency.stages.length > 0 ? (
+              stagesModalAgency.stages.map((st) => (
+                <div key={st.stageOrder} className="p-2.5 rounded-lg border border-border bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <span className="size-5 rounded-full bg-primary text-primary-foreground font-bold text-[10px] flex items-center justify-center shrink-0">
+                      {st.stageOrder}
+                    </span>
+                    <span className="text-xs font-bold text-foreground">
+                      Stage {st.stageOrder}: {st.stageName}
+                    </span>
+                  </div>
+                  {st.products && st.products.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2 pl-7">
+                      {st.products.map((p, idx) => (
+                        <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-card border border-border/70 text-muted-foreground">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">No specific stages mapped.</p>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Add New Trade Category Modal (Directory view) */}
       <Modal
-        isOpen={isFormModalOpen}
-        onClose={() => setIsFormModalOpen(false)}
-        title={editingAgency ? `Edit Agency: ${editingAgency.name}` : 'Register New Subcontractor Agency'}
-        subtitle="Configure agency coordinates, 12 fit-out stages, supplied products, and commercials"
-        size="lg"
+        isOpen={isAddTradeModalOpen}
+        onClose={() => setIsAddTradeModalOpen(false)}
+        title="Add New Trade Category"
+        size="sm"
         footer={
-          <div className="flex items-center justify-between w-full">
-            <span className="text-xs text-muted-foreground">* Indicates mandatory field</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setIsFormModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" size="sm" onClick={handleSubmit}>
-                {editingAgency ? 'Save Changes' : 'Register Agency'}
-              </Button>
-            </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAddTradeModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleAddNewTrade}
+            >
+              Add Trade
+            </Button>
           </div>
         }
       >
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* SECTION 1: Business Identity & Owner */}
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              1. Agency Business & Owner Identity
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                label="Agency Business Name"
-                required
-                placeholder="e.g. Royal Touch Tiles & Masonry"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                error={formErrors.name}
-              />
-
-              <Input
-                label="Owner / Contractor Name"
-                required
-                placeholder="e.g. Sunil Sharma"
-                value={formData.ownerName}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    ownerName: e.target.value,
-                    contactPerson: formData.contactPerson || e.target.value,
-                  })
-                }
-                error={formErrors.ownerName}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Select
-                label="Primary Trade Scope"
-                required
-                value={formData.trade}
-                onChange={(e) => handleTradeChange(e.target.value)}
-                options={TRADE_OPTIONS}
-              />
-
-              <Input
-                label="Site Supervisor / POC"
-                placeholder="e.g. Dinesh Kumar"
-                value={formData.contactPerson}
-                onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                helperText="Primary contact on site"
-              />
-
-              <Select
-                label="Operational Status"
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                options={STATUS_OPTIONS}
-              />
-            </div>
-          </div>
-
-          {/* SECTION 2: 12 Sequential Fit-Out Stages & Provided Products */}
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-1 flex items-center justify-between">
-              <span>2. 12 Sequential Fit-Out Stages & Provided Products</span>
-              <span className="text-[11px] font-normal text-primary">
-                Select stages to map supplied products
-              </span>
-            </div>
-
-            {/* Stage Selector Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-              {FITOUT_12_STAGES.map((stageObj) => {
-                const isSelected = formData.stages?.some((st) => st.stageOrder === stageObj.order);
-                return (
-                  <button
-                    key={stageObj.order}
-                    type="button"
-                    onClick={() => handleToggleStage(stageObj)}
-                    className={`flex items-start gap-2 p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-primary/10 border-primary text-foreground ring-1 ring-primary/30 shadow-2xs'
-                        : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span
-                      className={`size-4 rounded-full text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5 ${
-                        isSelected
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted-foreground/30 text-foreground'
-                      }`}
-                    >
-                      {stageObj.order}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold truncate leading-tight">
-                        {stageObj.name}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground/80 truncate">
-                        {stageObj.trade}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Products Configurator for Selected Stages */}
-            {formData.stages && formData.stages.length > 0 ? (
-              <div className="space-y-3 pt-2">
-                <span className="text-[11px] font-semibold text-foreground block">
-                  Configured Products & Supplies for Selected Stages:
-                </span>
-
-                {formData.stages.map((st) => {
-                  const masterStage = FITOUT_12_STAGES.find((s) => s.order === st.stageOrder);
-                  const recommended = masterStage?.defaultProducts || [];
-
-                  return (
-                    <div
-                      key={st.stageOrder}
-                      className="p-3 rounded-lg border border-border bg-muted/20 space-y-2.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="size-5 rounded-full bg-primary text-primary-foreground font-bold text-[10px] flex items-center justify-center">
-                            {st.stageOrder}
-                          </span>
-                          <span className="text-xs font-bold text-foreground">
-                            Stage {st.stageOrder}: {st.stageName} Products
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStage({ order: st.stageOrder, name: st.stageName })}
-                          className="text-[11px] text-destructive hover:underline cursor-pointer"
-                        >
-                          Remove Stage
-                        </button>
-                      </div>
-
-                      {/* Quick Add Recommended Products */}
-                      {recommended.length > 0 && (
-                        <div className="space-y-1">
-                          <span className="text-[10px] text-muted-foreground">
-                            Recommended Products for {st.stageName}:
-                          </span>
-                          <div className="flex flex-wrap gap-1">
-                            {recommended.map((rp, rIdx) => {
-                              const alreadyAdded = st.products?.includes(rp);
-                              return (
-                                <button
-                                  key={rIdx}
-                                  type="button"
-                                  disabled={alreadyAdded}
-                                  onClick={() => handleAddProductToStage(st.stageOrder, rp)}
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors ${
-                                    alreadyAdded
-                                      ? 'bg-muted text-muted-foreground/50 border-border/50 cursor-default'
-                                      : 'bg-card text-foreground hover:bg-primary/10 hover:border-primary/40 border-border cursor-pointer'
-                                  }`}
-                                >
-                                  {alreadyAdded ? (
-                                    <CheckIcon className="size-2.5 text-emerald-500" />
-                                  ) : (
-                                    <PlusIcon className="size-2.5 text-primary" />
-                                  )}
-                                  <span>{rp}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Custom Product Input for this stage */}
-                      <div className="flex items-center gap-2 pt-1">
-                        <input
-                          type="text"
-                          placeholder={`Add product/material for Stage ${st.stageOrder}...`}
-                          value={stageProductInputs[st.stageOrder] || ''}
-                          onChange={(e) =>
-                            setStageProductInputs({
-                              ...stageProductInputs,
-                              [st.stageOrder]: e.target.value,
-                            })
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddProductToStage(st.stageOrder);
-                            }
-                          }}
-                          className="flex-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAddProductToStage(st.stageOrder)}
-                        >
-                          Add
-                        </Button>
-                      </div>
-
-                      {/* Active Products List for this stage */}
-                      <div className="flex flex-wrap gap-1.5 min-h-[28px] p-2 rounded bg-card border border-border/70">
-                        {st.products && st.products.length > 0 ? (
-                          st.products.map((p, pIdx) => (
-                            <span
-                              key={pIdx}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground border border-border"
-                            >
-                              <span>{p}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveProductFromStage(st.stageOrder, p)}
-                                className="text-muted-foreground hover:text-destructive p-0.5 transition-colors cursor-pointer"
-                                title="Remove product"
-                              >
-                                <XIcon className="size-3" />
-                              </button>
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground italic">
-                            No products configured yet. Click recommendations above or type custom products.
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="p-3 rounded-lg border border-dashed border-border text-center text-xs text-muted-foreground">
-                Select one or more stages above to specify products provided by this agency.
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 3: Contact Numbers & Address */}
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              3. Contact Numbers & Workshop Address
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Input
-                label="Phone Number (10 digits)"
-                required
-                type="tel"
-                maxLength={10}
-                placeholder="9845012345"
-                value={formData.phone}
-                onChange={(e) => {
-                  const clean = sanitizePhone(e.target.value);
-                  setFormData({ ...formData, phone: clean });
-                  if (formErrors.phone) {
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      phone: validatePhone(clean, { required: true, fieldLabel: 'Phone number' }),
-                    }));
-                  }
-                }}
-                error={formErrors.phone}
-                helperText="Only 10 digits allowed"
-              />
-
-              <Input
-                label="Alternate / WhatsApp No."
-                type="tel"
-                maxLength={10}
-                placeholder="9845012346"
-                value={formData.alternatePhone}
-                onChange={(e) => {
-                  const clean = sanitizePhone(e.target.value);
-                  setFormData({ ...formData, alternatePhone: clean });
-                  if (formErrors.alternatePhone) {
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      alternatePhone: validatePhone(clean, {
-                        required: false,
-                        fieldLabel: 'Alternate phone',
-                      }),
-                    }));
-                  }
-                }}
-                error={formErrors.alternatePhone}
-                helperText="For site dispatch updates"
-              />
-
-              <Input
-                label="Email Address"
-                type="email"
-                placeholder="contact@agency.com"
-                value={formData.email}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFormData({ ...formData, email: val });
-                  if (formErrors.email) {
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      email: validateEmail(val, { required: false, fieldLabel: 'Email address' }),
-                    }));
-                  }
-                }}
-                error={formErrors.email}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <Input
-                  label="Street Address / Workshop Location"
-                  placeholder="e.g. Plot 42, Bommanahalli Industrial Area"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  label="City"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                />
-                <Input
-                  label="Pincode"
-                  maxLength={6}
-                  placeholder="560068"
-                  value={formData.pincode}
-                  onChange={(e) => {
-                    const clean = e.target.value.replace(/\D/g, '').slice(0, 6);
-                    setFormData({ ...formData, pincode: clean });
-                  }}
-                  error={formErrors.pincode}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 4: Trade Skills & Specializations */}
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-1 flex items-center justify-between">
-              <span>4. Trade Skills & Specializations</span>
-              <span className="text-[11px] font-normal text-muted-foreground">Click chips to add</span>
-            </div>
-
-            {/* Quick Suggestions for Selected Trade */}
-            {suggestedSkillsForTrade.length > 0 && (
-              <div className="space-y-1">
-                <span className="text-[11px] text-muted-foreground block font-medium">
-                  Recommended for {formData.trade}:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestedSkillsForTrade.map((skill, idx) => {
-                    const isSelected = formData.skills.includes(skill);
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            handleRemoveSkill(skill);
-                          } else {
-                            handleAddSkill(skill);
-                          }
-                        }}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium transition-colors cursor-pointer border ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground border-primary'
-                            : 'bg-muted/70 hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
-                        }`}
-                      >
-                        {isSelected ? <CheckIcon className="size-3" /> : <PlusIcon className="size-3" />}
-                        <span>{skill}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Custom Skill Input */}
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="text"
-                placeholder="Type custom skill and press Enter..."
-                value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddSkill();
-                  }
-                }}
-                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <Button type="button" variant="outline" size="sm" onClick={() => handleAddSkill()}>
-                Add Skill
-              </Button>
-            </div>
-
-            {/* Current Active Skills */}
-            <div className="flex flex-wrap gap-1.5 pt-1 min-h-[32px] p-2 rounded-lg bg-muted/20 border border-border/60">
-              {formData.skills.length > 0 ? (
-                formData.skills.map((skill, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium bg-card text-foreground border border-border shadow-2xs"
-                  >
-                    <span>{skill}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSkill(skill)}
-                      className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors cursor-pointer"
-                      title="Remove skill"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-muted-foreground italic">
-                  No specialized skills tagged yet. Click suggestions above or type custom skill.
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* SECTION 5: Workforce Capacity & Commercials */}
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              5. Workforce Capacity & Commercial Terms (SRS FR-LAB)
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <Input
-                label="Number of Workers"
-                type="number"
-                min={1}
-                max={200}
-                placeholder="e.g. 12"
-                value={formData.teamSize}
-                onChange={(e) => setFormData({ ...formData, teamSize: e.target.value })}
-                helperText="Active workers available on roll"
-              />
-
-              <Select
-                label="Billing Basis"
-                value={formData.rateUnit}
-                onChange={(e) => setFormData({ ...formData, rateUnit: e.target.value })}
-                options={RATE_UNIT_OPTIONS}
-              />
-
-              <Input
-                label="Standard Rate (₹)"
-                type="number"
-                min={0}
-                placeholder="e.g. 45"
-                value={formData.baseRate}
-                onChange={(e) => setFormData({ ...formData, baseRate: e.target.value })}
-                helperText={`Amount in ₹ per ${formData.rateUnit}`}
-              />
-
-              <Select
-                label="Payment Terms"
-                value={formData.paymentTerms}
-                onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
-                options={PAYMENT_TERMS_OPTIONS}
-              />
-            </div>
-          </div>
-
-          {/* SECTION 6: Compliance, Bank Coordinates & Remarks */}
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
-              6. Compliance, Statutory & Payout Coordinates
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Input
-                label="GSTIN Number (Optional)"
-                maxLength={15}
-                placeholder="e.g. 29AAACA1234F1Z5"
-                value={formData.gstin}
-                onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                helperText="15-character GST identification"
-              />
-
-              <Input
-                label="PAN Card Number"
-                maxLength={10}
-                placeholder="e.g. AAACA1234F"
-                value={formData.pan}
-                onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
-                helperText="10-character business PAN"
-              />
-
-              <Input
-                label="UPI ID / Bank Payout Coordinate"
-                placeholder="e.g. agency@okaxis"
-                value={formData.bankDetails}
-                onChange={(e) => setFormData({ ...formData, bankDetails: e.target.value })}
-                helperText="For direct vendor payouts"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">
-                Internal Remarks & Workmanship History
-              </label>
-              <textarea
-                rows={2}
-                placeholder="Enter internal supervisor remarks, reliability notes, or equipment specifications..."
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full rounded-md border border-input bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          </div>
-        </form>
+        <div className="space-y-3 py-1">
+          <Input
+            label="Trade Name"
+            required
+            placeholder="e.g. HVAC, Acoustics, Automation"
+            value={newTradeName}
+            onChange={(e) => setNewTradeName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddNewTrade();
+              }
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            This will add a new craftsmanship trade category that can be assigned to agencies across projects.
+          </p>
+        </div>
       </Modal>
 
       {/* Delete Confirmation Dialog */}

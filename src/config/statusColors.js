@@ -58,7 +58,7 @@ export const STATUS_CLASSES = {
   [STATUS_TYPES.WARNING]: 'bg-warning-light text-warning border-warning/30',
   [STATUS_TYPES.DANGER]: 'bg-danger-light text-danger border-danger/30',
   [STATUS_TYPES.INFO]: 'bg-info-light text-info border-info/30',
-  [STATUS_TYPES.NEUTRAL]: 'bg-brand-50 text-brand-600 border-border',
+  [STATUS_TYPES.NEUTRAL]: 'bg-muted text-muted-foreground border-border',
 };
 
 /**

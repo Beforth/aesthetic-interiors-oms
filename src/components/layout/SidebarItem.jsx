@@ -18,8 +18,8 @@ export function SidebarItem({ item, onNavigate }) {
         group flex items-center justify-between px-3 py-2.5 rounded text-sm font-medium transition-colors select-none min-h-[44px]
         ${
           isActive
-            ? 'bg-brand-100 text-brand-700 font-semibold border-r-2 border-brand-500'
-            : 'text-text-muted hover:text-text-main hover:bg-brand-50'
+            ? 'bg-primary/10 text-primary font-semibold border-r-2 border-primary'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
         }
       `}
     >
@@ -30,14 +30,14 @@ export function SidebarItem({ item, onNavigate }) {
               name={item.icon}
               size={18}
               className={`shrink-0 transition-colors ${
-                isActive ? 'text-brand-500' : 'text-text-muted group-hover:text-text-main'
+                isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
               }`}
             />
             <span className="truncate">{item.label}</span>
           </div>
 
           {item.badge && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-500 text-surface">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">
               {item.badge}
             </span>
           )}

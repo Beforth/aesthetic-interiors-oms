@@ -70,7 +70,6 @@ const PERIODS = [
   { value: 'yesterday', label: 'Yesterday' },
   { value: '7d', label: '7 Days' },
   { value: '30d', label: '30 Days' },
-  { value: 'all', label: 'All Time' },
 ];
 
 const DEFAULT_FILTERS = {
@@ -125,6 +124,16 @@ function rangeFor({ period, from, to }) {
   if (period === '7d') return { start: dateDaysAgo(6), end: today };
   if (period === '30d') return { start: dateDaysAgo(29), end: today };
   return { start: '', end: '' };
+}
+
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
 }
 
 function longDayLabel(dateStr) {
@@ -353,6 +362,10 @@ export function DailyReportsPage() {
   const completedCount = filtered.filter((e) => e.status === 'completed').length;
   const inProgressCount = filtered.filter((e) => e.status === 'in progress').length;
   const blockedCount = filtered.filter((e) => e.status === 'blocked').length;
+  const activeSitesCount = useMemo(
+    () => new Set(filtered.map((e) => e.project).filter((p) => p && p !== NO_PROJECT)).size,
+    [filtered]
+  );
 
   let whose = `${selectedPeople[0]}'s`;
   if (viewingSelf) whose = 'Your';
@@ -557,67 +570,87 @@ export function DailyReportsPage() {
         title="Daily Status Report"
         subtitle={`${whose} operational site execution, photos, and daily task records`}
         actions={
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon="download"
               onClick={exportCsv}
-              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-surface hover:bg-slate-50 text-text-main border border-border transition-colors shadow-2xs cursor-pointer"
             >
-              <DownloadIcon className="size-4 text-text-muted" />
-              <span>Export CSV</span>
-            </button>
+              Export CSV
+            </Button>
             <PermissionGate permission="dsr.submit">
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
+                leadingIcon="plus"
                 onClick={openAdd}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground transition-colors shadow-sm cursor-pointer"
               >
-                <PlusIcon className="size-4" />
-                <span>Add Work</span>
-              </button>
+                Add Work
+              </Button>
             </PermissionGate>
           </div>
         }
       />
 
-      {/* Sleek Compact KPI Summary Cards */}
-      <div className="flex flex-wrap items-center gap-2.5">
+      {/* Sleek KPI Summary Cards */}
+      <div className="flex flex-wrap items-center gap-3">
         {/* Tasks Completed Card */}
-        <div className="w-48 sm:w-52 rounded-xl border border-border bg-card px-3 py-2 shadow-2xs hover:border-border/80 transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               Tasks Completed
             </span>
-            <div className="size-5 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-              <CheckIcon className="size-3 stroke-[2.5]" />
+            <div className="size-6 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+              <CheckIcon className="size-3.5 stroke-[2.5]" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-lg font-bold font-mono tracking-tight text-foreground tabular-nums">
+            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {completedCount}
             </span>
-            <span className="text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 truncate">
               {filtered.length > 0 ? `${Math.round((completedCount / filtered.length) * 100)}% done` : '0%'}
             </span>
           </div>
         </div>
 
         {/* In Progress Card */}
-        <div className="w-48 sm:w-52 rounded-xl border border-border bg-card px-3 py-2 shadow-2xs hover:border-border/80 transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               In Progress
             </span>
-            <div className="size-5 rounded-md bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400 shrink-0">
-              <SparkleIcon className="size-3" />
+            <div className="size-6 rounded-md bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400 shrink-0">
+              <SparkleIcon className="size-3.5" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-lg font-bold font-mono tracking-tight text-foreground tabular-nums">
+            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {inProgressCount}
             </span>
-            <span className="text-[10px] text-muted-foreground truncate font-medium">
+            <span className="text-xs font-medium text-muted-foreground truncate">
               Active ongoing
+            </span>
+          </div>
+        </div>
+
+        {/* Active Sites Card */}
+        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
+              Active Sites
+            </span>
+            <div className="size-6 rounded-md bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+              <BuildingIcon className="size-3.5" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
+              {activeSitesCount}
+            </span>
+            <span className="text-xs font-medium text-muted-foreground truncate">
+              Live projects
             </span>
           </div>
         </div>
@@ -671,7 +704,7 @@ export function DailyReportsPage() {
 
             <Button
               variant="outline"
-              size="md"
+              size="sm"
               leadingIcon="filter"
               onClick={() => setShowMore((v) => !v)}
               aria-expanded={showMore}
@@ -682,7 +715,7 @@ export function DailyReportsPage() {
             {hasActiveFilters && (
               <Button
                 variant="ghost"
-                size="md"
+                size="sm"
                 leadingIcon="close"
                 onClick={clearFilters}
               >
@@ -767,213 +800,207 @@ export function DailyReportsPage() {
         />
       ) : (
         <div className="space-y-4">
-          {groups.map((group) => {
-            const isToday = group.date === todayStr;
-            const isYesterday = group.date === yesterdayStr;
-
-            return (
-              <div
-                key={group.date}
-                className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden"
-              >
-                {/* Clean, Flat Day Header */}
-                <div className="px-4 py-2.5 bg-muted/40 border-b border-border flex items-center justify-between gap-2.5">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {isToday
+          {/* Unified Structured Table with Date in Left Column */}
+          <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted/40 border-b border-border text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <th className="h-9 px-4 w-36 sm:w-44 text-center border-r border-border">
+                      Date
+                    </th>
+                    {multiple && (
+                      <th className="h-9 px-4 w-36 border-r border-border/60">
+                        Member
+                      </th>
+                    )}
+                    <th className="h-9 px-4 min-w-[200px]">
+                      Task
+                    </th>
+                    <th className="h-9 px-4 w-28 whitespace-nowrap">
+                      Site Photo
+                    </th>
+                    <th className="h-9 px-4 min-w-[160px]">
+                      Project
+                    </th>
+                    <th className="h-9 px-4 w-32 whitespace-nowrap">
+                      Category
+                    </th>
+                    <th className="h-9 px-4 w-20 text-center whitespace-nowrap">
+                      Time
+                    </th>
+                    <th className="h-9 px-4 w-28 text-center whitespace-nowrap">
+                      Status
+                    </th>
+                    <th className="h-9 px-4 w-20 text-center whitespace-nowrap">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((group, groupIdx) => {
+                    const isToday = group.date === todayStr;
+                    const isYesterday = group.date === yesterdayStr;
+                    const dateTitle = isToday
                       ? 'Current Day Operations'
                       : isYesterday
                       ? 'Yesterday'
-                      : longDayLabel(group.date)}
-                  </h3>
+                      : formatShortDate(group.date);
 
-                  {/* Summary Metric Chips */}
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xs text-muted-foreground font-medium">
-                      {plural(group.rows.length, 'task submitted', 'tasks submitted')}
-                    </span>
-                    <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-muted text-foreground border border-border/70 tabular-nums">
-                      {formatDuration(group.minutes)} logged
-                    </span>
-                  </div>
-                </div>
+                    return group.rows.map((e, rowIdx) => {
+                      const isFirstRow = rowIdx === 0;
+                      const isLastRowInGroup = rowIdx === group.rows.length - 1;
+                      const isLastGroup = groupIdx === groups.length - 1;
 
-                {/* Structured Table for this Day */}
-                <div className="overflow-x-auto">
-                  <table className="w-full table-fixed text-left text-xs border-collapse">
-                    <colgroup>
-                      {multiple && <col className="w-36" />}
-                      <col className="w-[32%]" />
-                      <col className="w-32" />
-                      <col className="w-[24%]" />
-                      <col className="w-32" />
-                      <col className="w-20" />
-                      <col className="w-28" />
-                      <col className="w-24" />
-                    </colgroup>
-                    <thead>
-                      <tr className="bg-muted/30 border-b border-border/70 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {multiple && (
-                          <th className="h-8 px-4 w-36">
-                            Member
-                          </th>
-                        )}
-                        <th className="h-8 px-4">
-                          Task Description
-                        </th>
-                        <th className="h-8 px-4 w-32">
-                          Site Photo
-                        </th>
-                        <th className="h-8 px-4">
-                          Project
-                        </th>
-                        <th className="h-8 px-4 w-32">
-                          Category
-                        </th>
-                        <th className="h-8 px-4 w-20 text-center">
-                          Time
-                        </th>
-                        <th className="h-8 px-4 w-28 text-center">
-                          Status
-                        </th>
-                        <th className="h-8 px-4 w-24 text-center">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {group.rows.map((e) => {
-                        const attachments = e.attachments || [];
-                        const photoAttachments = attachments.filter(
-                          (a) => a.type?.startsWith('image/') || a.isImage
-                        );
-                        const fileAttachments = attachments.filter(
-                          (a) => !a.type?.startsWith('image/') && !a.isImage
-                        );
-                        const primaryPhoto = photoAttachments[0] || (attachments.length > 0 ? attachments[0] : null);
+                      const attachments = e.attachments || [];
+                      const photoAttachments = attachments.filter(
+                        (a) => a.type?.startsWith('image/') || a.isImage
+                      );
+                      const primaryPhoto = photoAttachments[0] || (attachments.length > 0 ? attachments[0] : null);
 
-                        return (
-                          <tr
-                            key={e.id}
-                            className="group hover:bg-muted/35 transition-colors"
-                          >
-                            {/* Member Column (shown when multiple members selected) */}
-                            {multiple && (
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="flex items-center gap-2.5">
-                                  <Avatar name={e.authorName} size="xs" />
-                                  <div className="min-w-0">
-                                    <div className="text-xs font-semibold text-foreground truncate flex items-center gap-1.5">
-                                      <span>{e.authorName}</span>
-                                      {e.authorName === me && (
-                                        <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1 rounded">
-                                          You
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-[10px] text-muted-foreground">
-                                      {e.authorRole || timeLabel(e.createdAt)}
-                                    </div>
+                      return (
+                        <tr
+                          key={e.id}
+                          className={`group hover:bg-muted/30 transition-colors ${
+                            isLastRowInGroup && !isLastGroup
+                              ? 'border-b-2 border-border'
+                              : 'border-b border-border/60'
+                          }`}
+                        >
+                          {/* DATE Column - Spanning all rows in this date group */}
+                          {isFirstRow && (
+                            <td
+                              rowSpan={group.rows.length}
+                              className="px-4 py-3 align-middle text-center border-r border-border bg-muted/10 select-none"
+                            >
+                              <div className="flex flex-col items-center justify-center text-center">
+                                <span className="text-xs sm:text-sm font-bold text-foreground leading-tight">
+                                  {dateTitle}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground mt-1 tabular-nums whitespace-nowrap">
+                                  {formatDuration(group.minutes)} · {plural(group.rows.length, 'entry', 'entries')}
+                                </span>
+                              </div>
+                            </td>
+                          )}
+
+                          {/* Member Column (shown when multiple members selected) */}
+                          {multiple && (
+                            <td className="px-4 py-3 whitespace-nowrap border-r border-border/40">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar name={e.authorName} size="xs" />
+                                <div className="min-w-0">
+                                  <div className="text-xs font-semibold text-foreground truncate flex items-center gap-1.5">
+                                    <span>{e.authorName}</span>
+                                    {e.authorName === me && (
+                                      <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1 rounded">
+                                        You
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {e.authorRole || timeLabel(e.createdAt)}
                                   </div>
                                 </div>
-                              </td>
-                            )}
-
-                            {/* Task Description */}
-                            <td className="px-4 py-3 min-w-0">
-                              <div className="flex items-start gap-2">
-                                <span className="text-xs font-medium text-foreground leading-snug line-clamp-2">
-                                  {e.task}
-                                </span>
-                                {e.auto && (
-                                  <Badge variant="info" size="sm" className="shrink-0 text-[9px] px-1.5 py-0">
-                                    Auto
-                                  </Badge>
-                                )}
                               </div>
-                              {e.note && (
-                                <div className="mt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
-                                  <span className="text-muted-foreground/50 select-none">•</span>
-                                  <span className="italic line-clamp-1">{e.note}</span>
-                                </div>
+                            </td>
+                          )}
+
+                          {/* Task Description */}
+                          <td className="px-4 py-3 min-w-0">
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-medium text-foreground leading-snug line-clamp-2">
+                                {e.task}
+                              </span>
+                              {e.auto && (
+                                <Badge variant="info" size="sm" className="shrink-0 text-[9px] px-1.5 py-0">
+                                  Auto
+                                </Badge>
                               )}
-                            </td>
-
-                            {/* Site Photo with 3-Dots Action Menu (Small Uploaded Img + Three Dots) */}
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <DsrPhotoActionMenu
-                                entry={e}
-                                photo={primaryPhoto}
-                                allPhotos={photoAttachments.length > 0 ? photoAttachments : attachments}
-                                canManage={isAdmin || canChange(e)}
-                                onViewPhoto={(entry, idx) => openLightbox(entry, idx)}
-                                onUploadPhoto={() => {
-                                  setSelectedUploadTarget(e);
-                                  tableUploadInputRef.current?.click();
-                                }}
-                              />
-                            </td>
-
-                            {/* Project */}
-                            <td className="px-4 py-3 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1.5 min-w-0" title={e.project === NO_PROJECT ? 'No Project' : e.project}>
-                                <BuildingIcon className="size-3.5 text-muted-foreground shrink-0" />
-                                <span className="truncate font-medium text-foreground">
-                                  {e.project === NO_PROJECT ? (
-                                    <span className="text-muted-foreground italic">No Project</span>
-                                  ) : (
-                                    e.project
-                                  )}
-                                </span>
+                            </div>
+                            {e.note && (
+                              <div className="mt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                                <span className="text-muted-foreground/50 select-none">•</span>
+                                <span className="italic line-clamp-1">{e.note}</span>
                               </div>
-                            </td>
+                            )}
+                          </td>
 
-                            {/* Category */}
-                            <td className="px-4 py-3 text-xs whitespace-nowrap">
-                              <span className="px-2 py-0.5 rounded-md bg-muted/80 text-[11px] font-medium text-muted-foreground border border-border/70 truncate inline-block max-w-full">
-                                {e.category}
-                              </span>
-                            </td>
+                          {/* Site Photo with 3-Dots Action Menu */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <DsrPhotoActionMenu
+                              entry={e}
+                              photo={primaryPhoto}
+                              allPhotos={photoAttachments.length > 0 ? photoAttachments : attachments}
+                              canManage={isAdmin || canChange(e)}
+                              onViewPhoto={(entry, idx) => openLightbox(entry, idx)}
+                              onUploadPhoto={() => {
+                                setSelectedUploadTarget(e);
+                                tableUploadInputRef.current?.click();
+                              }}
+                            />
+                          </td>
 
-                            {/* Time Logged */}
-                            <td className="px-4 py-3 text-xs text-center whitespace-nowrap">
-                              <span className="inline-flex items-center justify-center font-mono text-xs font-bold text-foreground bg-muted/90 px-2.5 py-0.5 rounded-md border border-border/80 tabular-nums">
-                                {formatDuration(e.minutes)}
-                              </span>
-                            </td>
-
-                            {/* Status */}
-                            <td className="px-4 py-3 text-center whitespace-nowrap">
-                              <StatusPill status={e.status} />
-                            </td>
-
-                            {/* Actions */}
-                            <td className="px-4 py-3 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
-                                <IconButton
-                                  icon="eye"
-                                  ariaLabel="View details"
-                                  size="sm"
-                                  onClick={() => setViewing(e)}
-                                />
-                                {canChange(e) && (
-                                  <IconButton
-                                    icon="trash"
-                                    ariaLabel="Delete entry"
-                                    size="sm"
-                                    onClick={() => setDeleting(e)}
-                                  />
+                          {/* Project */}
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            <div className="flex items-center min-w-0" title={e.project === NO_PROJECT ? 'No Project' : e.project}>
+                              <span className="truncate font-medium text-foreground">
+                                {e.project === NO_PROJECT ? (
+                                  <span className="text-muted-foreground italic">No Project</span>
+                                ) : (
+                                  e.project
                                 )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Category */}
+                          <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-md bg-muted/80 text-[11px] font-medium text-muted-foreground border border-border/70 truncate inline-block max-w-full">
+                              {e.category}
+                            </span>
+                          </td>
+
+                          {/* Time Logged */}
+                          <td className="px-4 py-3 text-xs text-center whitespace-nowrap">
+                            <span className="inline-flex items-center justify-center font-mono text-xs font-bold text-foreground bg-muted/90 px-2.5 py-0.5 rounded-md border border-border/80 tabular-nums">
+                              {formatDuration(e.minutes)}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            <StatusPill status={e.status} />
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                              <IconButton
+                                icon="eye"
+                                ariaLabel="View details"
+                                size="sm"
+                                onClick={() => setViewing(e)}
+                              />
+                              {canChange(e) && (
+                                <IconButton
+                                  icon="trash"
+                                  ariaLabel="Delete entry"
+                                  size="sm"
+                                  onClick={() => setDeleting(e)}
+                                />
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
 
           {/* Clean Pagination Footer */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border border-border rounded-xl px-4 py-3 text-xs text-muted-foreground bg-card shadow-2xs">
@@ -1059,7 +1086,7 @@ export function DailyReportsPage() {
         subtitle={
           editing
             ? 'Update what was logged for this entry and attach site photos.'
-            : 'Record what you worked on today and upload site photos.'
+            : undefined
         }
         size="lg"
         footer={
@@ -1083,6 +1110,7 @@ export function DailyReportsPage() {
           <Input
             label="What did you work on?"
             required
+            asteriskOnly
             autoFocus
             value={form.task}
             onChange={(e) => setForm({ ...form, task: e.target.value })}

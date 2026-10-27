@@ -27,12 +27,20 @@ export function Tabs({
               ${
                 isActive
                   ? 'border-primary text-primary font-semibold'
-                  : 'border-transparent text-muted-foreground hover:text-text-main hover:border-border'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
               }
               ${tab.disabled ? 'opacity-40 cursor-not-allowed' : ''}
             `}
           >
-            {tab.icon && <Icon name={tab.icon} size={15} />}
+            {tab.icon && (
+              typeof tab.icon === 'string' ? (
+                <Icon name={tab.icon} size={15} />
+              ) : React.isValidElement(tab.icon) ? (
+                tab.icon
+              ) : typeof tab.icon === 'function' ? (
+                <tab.icon className="size-4" />
+              ) : null
+            )}
             <span>{tab.label}</span>
             {tab.count !== undefined && (
               <span

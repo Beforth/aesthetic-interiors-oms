@@ -21,12 +21,13 @@ export function Tag({
   className = '',
 }) {
   const variantClasses = {
-    brand: 'bg-brand-100 text-brand-700 border-brand-500/20',
-    neutral: 'bg-brand-50 text-text-muted border-border',
-    success: 'bg-success-light text-success border-success/30',
-    warning: 'bg-warning-light text-warning border-warning/30',
-    danger: 'bg-danger-light text-danger border-danger/30',
-    info: 'bg-info-light text-info border-info/30',
+    brand: 'bg-primary/10 text-primary border-primary/20',
+    primary: 'bg-primary/10 text-primary border-primary/20',
+    neutral: 'bg-secondary text-muted-foreground border-border',
+    success: 'bg-success/15 text-success border-success/30',
+    warning: 'bg-warning/15 text-warning border-warning/30',
+    danger: 'bg-destructive/15 text-destructive border-destructive/30',
+    info: 'bg-info/15 text-info border-info/30',
   };
 
   const sizeClasses = {
@@ -36,9 +37,9 @@ export function Tag({
 
   return (
     <span
-      className={`inline-flex items-center font-medium rounded border tracking-tight ${
+      className={`inline-flex items-center font-medium rounded-md border tracking-tight ${
         sizeClasses[size] || sizeClasses.md
-      } ${variantClasses[variant] || variantClasses.brand} ${className}`}
+      } ${variantClasses[variant] || variantClasses.primary} ${className}`}
     >
       {icon && <Icon name={icon} size={size === 'sm' ? 12 : 14} />}
       <span>{label}</span>

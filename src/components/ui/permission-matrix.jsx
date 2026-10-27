@@ -132,38 +132,38 @@ export function PermissionMatrix({
     <div className={`space-y-3 font-sans ${className}`}>
       {/* Search & Stats Bar */}
       {searchable && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-brand-50/60 p-3 rounded-xl border border-border">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/60 p-3 rounded-xl border border-border">
           <div className="relative w-full sm:w-80">
             <Icon
               name="search"
               size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search permissions or codenames..."
-              className="w-full pl-9 pr-8 py-1.5 text-xs bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-text-main"
+              className="w-full pl-9 pr-8 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 text-foreground"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 <Icon name="x" size={14} />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-text-muted w-full sm:w-auto justify-between sm:justify-end">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground w-full sm:w-auto justify-between sm:justify-end">
             <span>
-              Showing <strong className="text-text-main">{allFilteredCount}</strong> of{' '}
+              Showing <strong className="text-foreground">{allFilteredCount}</strong> of{' '}
               {permissions.length} permissions
             </span>
             {locked.length > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-warning/15 text-warning border border-warning/30">
                 <Icon name="lock" size={12} />
                 {locked.join(', ')} locked (full access)
               </span>
@@ -173,16 +173,16 @@ export function PermissionMatrix({
       )}
 
       {/* Permission Grid Container */}
-      <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
         <table className="w-full text-left text-xs border-collapse">
           {/* Table Header: Roles columns */}
           <thead>
-            <tr className="border-b border-border bg-brand-50/70">
-              <th className="p-3.5 min-w-[280px] max-w-sm sticky left-0 z-20 bg-brand-50/90 backdrop-blur">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            <tr className="border-b border-border bg-muted/70">
+              <th className="p-3.5 min-w-[280px] max-w-sm sticky left-0 z-20 bg-muted/90 backdrop-blur">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Module / Permission Name
                 </div>
-                <div className="text-[11px] text-text-muted/80 font-normal">
+                <div className="text-[11px] text-muted-foreground/80 font-normal">
                   Grant or revoke granular access
                 </div>
               </th>
@@ -200,12 +200,12 @@ export function PermissionMatrix({
                     className="p-3 min-w-[150px] text-center align-top border-l border-border/70 group"
                   >
                     <div className="flex flex-col items-center gap-1">
-                      <div className="flex items-center gap-1.5 font-bold text-text-main text-sm">
+                      <div className="flex items-center gap-1.5 font-bold text-foreground text-sm">
                         <span>{role.label}</span>
                         {lockedRole && (
                           <span
                             title="Always full super-admin access"
-                            className="text-amber-600 inline-flex items-center"
+                            className="text-warning inline-flex items-center"
                           >
                             <Icon name="lock" size={13} />
                           </span>
@@ -213,7 +213,7 @@ export function PermissionMatrix({
                       </div>
 
                       {role.hint && (
-                        <div className="text-[10px] text-text-muted leading-tight font-normal line-clamp-2 max-w-[140px]">
+                        <div className="text-[10px] text-muted-foreground leading-tight font-normal line-clamp-2 max-w-[140px]">
                           {role.hint}
                         </div>
                       )}
@@ -222,10 +222,10 @@ export function PermissionMatrix({
                         <span
                           className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-mono font-medium ${
                             isAllGranted
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-success/15 text-success'
                               : roleGrantsCount > 0
-                              ? 'bg-brand-100 text-brand-800'
-                              : 'bg-zinc-100 text-zinc-500'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground'
                           }`}
                         >
                           {roleGrantsCount}/{permissions.length}
@@ -235,7 +235,7 @@ export function PermissionMatrix({
                           <button
                             type="button"
                             onClick={() => handleToggleAllForRole(role.id)}
-                            className="text-[10px] text-brand-700 hover:text-brand-900 font-medium underline underline-offset-2 opacity-75 hover:opacity-100 transition-opacity"
+                            className="text-[10px] text-primary hover:text-primary/80 font-medium underline underline-offset-2 opacity-75 hover:opacity-100 transition-opacity"
                             title={isAllGranted ? 'Revoke all' : 'Grant all'}
                           >
                             {isAllGranted ? 'Clear' : 'All'}
@@ -255,14 +255,14 @@ export function PermissionMatrix({
               <tr>
                 <td
                   colSpan={roles.length + 1}
-                  className="p-8 text-center text-text-muted"
+                  className="p-8 text-center text-muted-foreground"
                 >
                   <Icon name="search" size={24} className="mx-auto mb-2 opacity-40" />
                   <p className="font-medium">No permissions match your search.</p>
                   <button
                     type="button"
                     onClick={() => setSearch('')}
-                    className="mt-2 text-brand-700 font-semibold underline text-xs"
+                    className="mt-2 text-primary font-semibold underline text-xs"
                   >
                     Clear search filter
                   </button>
@@ -275,19 +275,19 @@ export function PermissionMatrix({
                 return (
                   <React.Fragment key={groupName}>
                     {/* Category Group Header Row */}
-                    <tr className="bg-brand-50/40 border-t-2 border-border/80">
+                    <tr className="bg-muted/40 border-t-2 border-border/80">
                       <td
-                        className="p-2.5 pl-3 font-semibold text-text-main text-xs sticky left-0 z-10 bg-brand-50/90 backdrop-blur cursor-pointer select-none"
+                        className="p-2.5 pl-3 font-semibold text-foreground text-xs sticky left-0 z-10 bg-muted/90 backdrop-blur cursor-pointer select-none"
                         onClick={() => toggleGroupCollapse(groupName)}
                       >
                         <div className="flex items-center gap-2">
                           <Icon
                             name={isCollapsed ? 'chevron-right' : 'chevron-down'}
                             size={14}
-                            className="text-text-muted transition-transform"
+                            className="text-muted-foreground transition-transform"
                           />
-                          <span className="tracking-wide text-brand-900">{groupName}</span>
-                          <span className="text-[11px] font-mono text-text-muted font-normal">
+                          <span className="tracking-wide text-foreground">{groupName}</span>
+                          <span className="text-[11px] font-mono text-muted-foreground font-normal">
                             ({groupPerms.length})
                           </span>
                         </div>
@@ -306,7 +306,7 @@ export function PermissionMatrix({
                         return (
                           <td
                             key={role.id}
-                            className="p-2 text-center border-l border-border/70 text-[10px] text-text-muted"
+                            className="p-2 text-center border-l border-border/70 text-[10px] text-muted-foreground"
                           >
                             {!lockedRole && onChange ? (
                               <button
@@ -314,17 +314,17 @@ export function PermissionMatrix({
                                 onClick={() => handleToggleGroupForRole(role.id, groupPerms)}
                                 className={`px-1.5 py-0.5 rounded text-[10px] transition font-medium ${
                                   allGroupGranted
-                                    ? 'bg-brand-200 text-brand-900 hover:bg-brand-300'
+                                    ? 'bg-primary/20 text-primary hover:bg-primary/30'
                                     : grantedInGroup > 0
-                                    ? 'bg-brand-50 text-brand-700 hover:bg-brand-100'
-                                    : 'text-text-muted hover:bg-surface'
+                                    ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                                    : 'text-muted-foreground hover:bg-card'
                                 }`}
                                 title={`Toggle all ${groupName} for ${role.label}`}
                               >
                                 {grantedInGroup}/{groupPermIds.length}
                               </button>
                             ) : (
-                              <span className="font-mono text-amber-700 font-medium">All</span>
+                              <span className="font-mono text-warning font-medium">All</span>
                             )}
                           </td>
                         );
@@ -337,19 +337,19 @@ export function PermissionMatrix({
                         return (
                           <tr
                             key={perm.id}
-                            className="hover:bg-brand-50/20 transition-colors"
+                            className="hover:bg-muted/50 transition-colors"
                           >
                             {/* Sticky Left: Permission Label & Codename */}
-                            <td className="p-3 pl-4 sticky left-0 z-10 bg-surface border-r border-border/60">
-                              <div className="font-semibold text-text-main text-xs">
+                            <td className="p-3 pl-4 sticky left-0 z-10 bg-card border-r border-border/60">
+                              <div className="font-semibold text-foreground text-xs">
                                 {perm.label}
                               </div>
                               <div className="flex items-center gap-2 mt-0.5">
-                                <span className="font-mono text-[10px] text-text-muted/90 bg-brand-50/60 px-1 py-0.2 rounded border border-border/60">
+                                <span className="font-mono text-[10px] text-muted-foreground/90 bg-muted/60 px-1 py-0.2 rounded border border-border/60">
                                   {perm.id}
                                 </span>
                                 {perm.hint && (
-                                  <span className="text-[11px] text-text-muted truncate max-w-[220px]">
+                                  <span className="text-[11px] text-muted-foreground truncate max-w-[220px]">
                                     {perm.hint}
                                   </span>
                                 )}
@@ -371,7 +371,7 @@ export function PermissionMatrix({
                                       className={`relative inline-flex items-center justify-center cursor-pointer select-none p-1 rounded-md transition-all ${
                                         lockedRole
                                           ? 'cursor-not-allowed opacity-90'
-                                          : 'hover:bg-brand-50'
+                                          : 'hover:bg-muted'
                                       }`}
                                       onClick={(e) => {
                                         if (lockedRole) {
@@ -390,9 +390,9 @@ export function PermissionMatrix({
                                         className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
                                           checked
                                             ? lockedRole
-                                              ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
-                                              : 'bg-brand-600 border-brand-600 text-white shadow-xs hover:bg-brand-700 hover:border-brand-700'
-                                            : 'bg-surface border-border hover:border-brand-400'
+                                              ? 'bg-warning border-warning text-white shadow-xs'
+                                              : 'bg-primary border-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:border-primary/90'
+                                            : 'bg-card border-border hover:border-primary/50'
                                         }`}
                                       >
                                         {checked && (

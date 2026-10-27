@@ -1,23 +1,54 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { attendanceService, calculateDistanceMeters } from '../services/attendanceService';
-import { userService } from '../services/userService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { mockUsers } from '../data/users';
 import { validateRequired, validateGpsCoordinates, validatePositiveNumber } from '../utils/validators';
 
+import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
+import Tabs from '../components/ui/Tabs';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
 import IconButton from '../components/ui/IconButton';
 import StatusBadge from '../components/ui/StatusBadge';
 import Avatar from '../components/ui/Avatar';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
-import Icon from '../components/ui/Icon';
 import Alert from '../components/ui/Alert';
+import { cn } from '../lib/utils';
+import {
+  FileSpreadsheetIcon,
+  DownloadIcon,
+  RefreshIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  CalendarIcon,
+  BarChartIcon,
+  ClockIcon,
+  CheckIcon,
+  AlertIcon,
+  UmbrellaIcon,
+  LogInIcon,
+  LogOutIcon,
+  InfoIcon,
+  SearchIcon,
+  MapPinIcon,
+  EyeIcon,
+  EditIcon,
+  TrashIcon,
+  PlusIcon,
+  MailIcon,
+  NavigationIcon,
+  ShieldIcon,
+  UserCheckIcon,
+  XIcon,
+  FilterIcon,
+} from '../components/ui/icons';
 
 export function calculateWorkingHours(checkInStr, checkOutStr) {
   if (!checkInStr) return '—';
@@ -29,45 +60,49 @@ export function calculateWorkingHours(checkInStr, checkOutStr) {
     const isAM = clean.includes('am');
     const timePart = clean.replace(/[a-z]/g, '').trim();
     const parts = timePart.split(':');
-    let hours = parseInt(parts[0], 10);
-    const minutes = parseInt(parts[1] || '0', 10);
-
-    if (isPM && hours !== 12) hours += 12;
-    if (isAM && hours === 12) hours = 0;
-    return hours * 60 + minutes;
+    let h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1] || '0', 10);
+    if (isPM && h < 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    return h * 60 + m;
   };
 
-  const inMins = parseTimeToMinutes(checkInStr);
-  if (inMins === null) return '—';
+  const inMin = parseTimeToMinutes(checkInStr);
+  if (inMin === null) return '—';
 
-  let outMins;
-  if (checkOutStr) {
-    outMins = parseTimeToMinutes(checkOutStr);
-  } else {
+  let outMin = parseTimeToMinutes(checkOutStr);
+  let isActive = false;
+
+  if (outMin === null) {
     const now = new Date();
-    outMins = now.getHours() * 60 + now.getMinutes();
+    outMin = now.getHours() * 60 + now.getMinutes();
+    isActive = true;
   }
 
-  if (outMins === null || outMins < inMins) {
-    return 'Active';
-  }
+  let diff = outMin - inMin;
+  if (diff < 0) diff += 24 * 60;
 
-  const diffMins = Math.max(0, outMins - inMins);
-  const h = Math.floor(diffMins / 60);
-  const m = diffMins % 60;
-  return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+  const hrs = Math.floor(diff / 60);
+  const mins = diff % 60;
+
+  return `${hrs.toString().padStart(2, '0')}h ${mins.toString().padStart(2, '0')}m${isActive ? ' (Active)' : ''}`;
 }
 
 export function AttendancePage() {
-  const { currentUser, role } = useAuth();
   const toast = useToast();
-  const isAdminOrManager = role === ROLES.OWNER || role === ROLES.ADMIN || role === ROLES.PROJECT_MANAGER;
+  const { currentUser, role, hasPermission } = useAuth();
+  const isAdminOrManager =
+    currentUser?.role === ROLES.ADMIN ||
+    currentUser?.role === 'owner' ||
+    currentUser?.role === ROLES.MANAGER ||
+    currentUser?.role === 'admin';
+  const canCorrectAttendance = hasPermission ? hasPermission('attendance.correct') : isAdminOrManager;
 
-  const [activeTab, setActiveTab] = useState('records'); // 'records' | 'requests'
+  // Navigation tab: 'records' | 'requests' | 'leave-types' | 'stats'
+  const [activeTab, setActiveTab] = useState('records');
 
   // Core Attendance State
   const [attendanceList, setAttendanceList] = useState([]);
-  const [usersList, setUsersList] = useState([]);
   const [officeLocation, setOfficeLocation] = useState({
     name: 'Neomed Head Office',
     lat: 19.967048,
@@ -75,17 +110,9 @@ export function AttendancePage() {
     radiusMeters: 500,
     geofenceMode: 'office',
   });
+  const [leaveTypes, setLeaveTypes] = useState([]);
   const [requestsList, setRequestsList] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Overview stats matching photo
-  const [overviewStats, setOverviewStats] = useState({
-    totalEmployees: 5000,
-    checkedIn: 4500,
-    notCheckedIn: 500,
-    onLeave: 456,
-    checkedOut: 250,
-  });
 
   // PWA Real-time Geolocation State
   const [userLocation, setUserLocation] = useState(null);
@@ -94,19 +121,28 @@ export function AttendancePage() {
   const [distanceToOffice, setDistanceToOffice] = useState(null);
   const watchIdRef = useRef(null);
 
-  // Live Digital Clock (Formatted strictly as HH:MM, e.g. 11:46)
-  const [clockTimeHM, setClockTimeHM] = useState('12:00');
-  const [currentDayName, setCurrentDayName] = useState('Friday');
-  const [currentDateShort, setCurrentDateShort] = useState('23 Oct 2026');
+  // Live Digital Clock & Calendar Date
+  const [clockData, setClockData] = useState(() => {
+    const d = new Date();
+    return {
+      day: d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
+      time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+      date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    };
+  });
+  const [currentTimeStr, setCurrentTimeStr] = useState('');
 
   useEffect(() => {
     const updateClock = () => {
       const now = new Date();
-      setClockTimeHM(
-        now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      setClockData({
+        day: now.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
+        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+        date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      });
+      setCurrentTimeStr(
+        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       );
-      setCurrentDayName(now.toLocaleDateString('en-US', { weekday: 'long' }));
-      setCurrentDateShort(now.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }));
     };
     updateClock();
     const interval = setInterval(updateClock, 1000);
@@ -125,21 +161,40 @@ export function AttendancePage() {
   const [isMarkStaffModalOpen, setIsMarkStaffModalOpen] = useState(false);
   const [staffMarkForm, setStaffMarkForm] = useState({
     userId: 'u1',
-    status: 'present',
-    checkInTime: '09:00 AM',
-    checkOutTime: '06:00 PM',
+    punchType: 'in',
+    date: new Date().toISOString().split('T')[0],
+    punchTime: '09:00',
     notes: '',
   });
-  const [staffSearchQuery, setStaffSearchQuery] = useState('');
-  const [isStaffDropdownOpen, setIsStaffDropdownOpen] = useState(false);
-  const [staffPunchType, setStaffPunchType] = useState('check-in'); // 'check-in' | 'check-out'
+
+  const [isAddLeaveTypeOpen, setIsAddLeaveTypeOpen] = useState(false);
+  const [leaveTypeForm, setLeaveTypeForm] = useState({
+    name: '',
+    daysPerYear: 12,
+    carryForward: 'No',
+    description: '—',
+    status: 'Active',
+  });
 
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [requestForm, setRequestForm] = useState({
+    userId: 'u1',
     date: new Date().toISOString().split('T')[0],
     type: 'Punch Regularization',
     reason: '',
+    requestedCheckIn: '09:00 AM',
+    requestedCheckOut: '06:00 PM',
   });
+  const [requestSearch, setRequestSearch] = useState('');
+  const [requestStatusFilter, setRequestStatusFilter] = useState('ALL'); // 'ALL' | 'pending' | 'approved' | 'rejected'
+  const [requestFromDate, setRequestFromDate] = useState('');
+  const [requestToDate, setRequestToDate] = useState('');
+  const [requestSortOrder, setRequestSortOrder] = useState('desc'); // 'desc' (newest first) | 'asc'
+  const [selectedViewRequest, setSelectedViewRequest] = useState(null);
+  const [requestTypeFilter, setRequestTypeFilter] = useState('ALL');
+
+  const [recordPendingDelete, setRecordPendingDelete] = useState(null);
+  const [deleteRecordLoading, setDeleteRecordLoading] = useState(false);
 
   const [correctionTarget, setCorrectionTarget] = useState(null);
   const [correctionData, setCorrectionData] = useState({
@@ -149,30 +204,547 @@ export function AttendancePage() {
     reason: '',
   });
 
-  // Filter & Sort states for Attendance Records
+  // Filter states for Leave Types and Records
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('ALL');
   const [recordSearch, setRecordSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
-  const [startDateFilter, setStartDateFilter] = useState('');
-  const [endDateFilter, setEndDateFilter] = useState('');
-  const [statusOverviewFilter, setStatusOverviewFilter] = useState('ALL'); // 'ALL' | 'checkedIn' | 'notCheckedIn' | 'onLeave' | 'checkedOut'
-  const [sortField, setSortField] = useState('userName');
-  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' | 'desc'
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 10;
+  const [selectedDateFilter, setSelectedDateFilter] = useState('');
+  const [cardFilter, setCardFilter] = useState(null); // 'checked-in' | 'not-checked-in' | 'on-leave' | 'checked-out' | null
+
+  const handleCardFilterToggle = (filterKey) => {
+    setCardFilter((prev) => (prev === filterKey ? null : filterKey));
+    if (activeTab !== 'records' && activeTab !== 'daily') {
+      setActiveTab('records');
+    }
+  };
 
   const [viewTargetRecord, setViewTargetRecord] = useState(null);
   const [punchLoading, setPunchLoading] = useState(false);
+  const [overviewStats, setOverviewStats] = useState({
+    totalEmployees: 5000,
+    checkedIn: 4500,
+    notCheckedIn: 500,
+    onLeave: 456,
+    checkedOut: 250,
+  });
+
+  // Daily Attendance View State & Mock Data (matches screenshots)
+  const [dailyDateDisplay, setDailyDateDisplay] = useState('26-10-2026');
+  const [dailyDeptFilter, setDailyDeptFilter] = useState('All');
+  const [dailyRecords, setDailyRecords] = useState([
+    {
+      id: 'd1',
+      srNo: 1,
+      employeeCode: 'E101',
+      name: 'Rohit Kumar',
+      department: 'Executive',
+      designation: 'Managing Director & Admin',
+      status: 'Present',
+      shift: '09:30-18:30',
+      checkIn: '09:20',
+      checkOut: '18:45',
+      hoursWorked: 9,
+      overtimeHrs: 0,
+    },
+    {
+      id: 'd2',
+      srNo: 2,
+      employeeCode: 'E102',
+      name: 'Neha Kulkarni',
+      department: 'Operations',
+      designation: 'Operations Manager',
+      status: 'Present',
+      shift: '10:00-19:00',
+      checkIn: '09:55',
+      checkOut: '19:10',
+      hoursWorked: 9,
+      overtimeHrs: 1,
+    },
+    {
+      id: 'd3',
+      srNo: 3,
+      employeeCode: 'E103',
+      name: 'Vikram Jadhav',
+      department: 'Site Operations',
+      designation: 'Site Supervisor',
+      status: 'Present',
+      shift: '09:00-18:00',
+      checkIn: '08:50',
+      checkOut: '18:30',
+      hoursWorked: 9,
+      overtimeHrs: 1,
+    },
+    {
+      id: 'd4',
+      srNo: 4,
+      employeeCode: 'E104',
+      name: 'Suresh Gaikwad',
+      department: 'Site Operations',
+      designation: 'Lead Artisan',
+      status: 'Present',
+      shift: '09:00-18:00',
+      checkIn: '09:00',
+      checkOut: '18:00',
+      hoursWorked: 9,
+      overtimeHrs: 0,
+    },
+    {
+      id: 'd5',
+      srNo: 5,
+      employeeCode: 'E105',
+      name: 'Amit Sharma',
+      department: 'Site Operations',
+      designation: 'Senior Supervisor',
+      status: 'Absent',
+      shift: '09:00-18:00',
+      checkIn: '—',
+      checkOut: '—',
+      hoursWorked: 0,
+      overtimeHrs: 0,
+    },
+    {
+      id: 'd6',
+      srNo: 6,
+      employeeCode: 'E106',
+      name: 'Priya Deshmukh',
+      department: 'Design & Finishes',
+      designation: 'Artisan Specialist',
+      status: 'Leave',
+      shift: '09:30-18:30',
+      checkIn: '—',
+      checkOut: '—',
+      hoursWorked: 0,
+      overtimeHrs: 0,
+    },
+    {
+      id: 'd7',
+      srNo: 7,
+      employeeCode: 'E107',
+      name: 'Rajesh Kulkarni',
+      department: 'Site Operations',
+      designation: 'Craftsman',
+      status: 'Not marked',
+      shift: '09:00-18:00',
+      checkIn: '—',
+      checkOut: '—',
+      hoursWorked: 0,
+      overtimeHrs: 0,
+    },
+  ]);
+
+  // Attendance Summary View State & Mock Data
+  const [summaryMonth, setSummaryMonth] = useState('October, 2026');
+  const [summaryDeptFilter, setSummaryDeptFilter] = useState('All');
+  const [summaryRecords, setSummaryRecords] = useState([
+    {
+      id: 's1',
+      srNo: 1,
+      employeeCode: 'E101',
+      name: 'Rohit Kumar',
+      department: 'Executive',
+      present: 22,
+      late: 1,
+      halfDay: 0,
+      overtime: 2,
+      absent: 0,
+      unmarked: 2,
+      latePenalty: 0,
+      overtimeAmount: 500,
+    },
+    {
+      id: 's2',
+      srNo: 2,
+      employeeCode: 'E102',
+      name: 'Neha Kulkarni',
+      department: 'Operations',
+      present: 20,
+      late: 2,
+      halfDay: 1,
+      overtime: 4,
+      absent: 0,
+      unmarked: 0,
+      latePenalty: 0,
+      overtimeAmount: 800,
+    },
+    {
+      id: 's3',
+      srNo: 3,
+      employeeCode: 'E103',
+      name: 'Vikram Jadhav',
+      department: 'Site Operations',
+      present: 21,
+      late: 3,
+      halfDay: 0,
+      overtime: 5,
+      absent: 1,
+      unmarked: 0,
+      latePenalty: 0,
+      overtimeAmount: 1000,
+    },
+    {
+      id: 's4',
+      srNo: 4,
+      employeeCode: 'E104',
+      name: 'Suresh Gaikwad',
+      department: 'Site Operations',
+      present: 23,
+      late: 0,
+      halfDay: 0,
+      overtime: 3,
+      absent: 1,
+      unmarked: 0,
+      latePenalty: 0,
+      overtimeAmount: 600,
+    },
+    {
+      id: 's5',
+      srNo: 5,
+      employeeCode: 'E105',
+      name: 'Amit Sharma',
+      department: 'Site Operations',
+      present: 19,
+      late: 2,
+      halfDay: 1,
+      overtime: 1,
+      absent: 2,
+      unmarked: 1,
+      latePenalty: 0,
+      overtimeAmount: 300,
+    },
+    {
+      id: 's6',
+      srNo: 6,
+      employeeCode: 'E106',
+      name: 'Priya Deshmukh',
+      department: 'Design & Finishes',
+      present: 18,
+      late: 1,
+      halfDay: 2,
+      overtime: 0,
+      absent: 1,
+      unmarked: 3,
+      latePenalty: 0,
+      overtimeAmount: 0,
+    },
+    {
+      id: 's7',
+      srNo: 7,
+      employeeCode: 'E107',
+      name: 'Rajesh Kulkarni',
+      department: 'Site Operations',
+      present: 20,
+      late: 4,
+      halfDay: 0,
+      overtime: 2,
+      absent: 2,
+      unmarked: 1,
+      latePenalty: 0,
+      overtimeAmount: 400,
+    },
+  ]);
+
+  const [summaryBreakdownTarget, setSummaryBreakdownTarget] = useState(null);
+
+  const filteredDailyRecords = useMemo(() => {
+    return dailyRecords.filter((r) => {
+      if (cardFilter === 'checked-in') {
+        const hasPunchedIn = Boolean(r.checkIn && r.checkIn !== '—' && r.status !== 'Leave' && r.status !== 'On Leave');
+        if (!hasPunchedIn) return false;
+      } else if (cardFilter === 'not-checked-in') {
+        const isNotCheckedIn =
+          (!r.checkIn || r.checkIn === '—' || r.status === 'Not marked' || r.status === 'Absent') &&
+          r.status !== 'Leave' &&
+          r.status !== 'On Leave';
+        if (!isNotCheckedIn) return false;
+      } else if (cardFilter === 'on-leave') {
+        const isOnLeave = r.status === 'Leave' || r.status === 'On Leave';
+        if (!isOnLeave) return false;
+      } else if (cardFilter === 'checked-out') {
+        const isCheckedOut = Boolean(r.checkOut && r.checkOut !== '—');
+        if (!isCheckedOut) return false;
+      }
+
+      if (dailyDeptFilter !== 'All' && r.department !== dailyDeptFilter) return false;
+      return true;
+    });
+  }, [dailyRecords, cardFilter, dailyDeptFilter]);
+
+  const filteredSummaryRecords = useMemo(() => {
+    return summaryRecords.filter((r) => {
+      if (summaryDeptFilter !== 'All' && r.department !== summaryDeptFilter) return false;
+      return true;
+    });
+  }, [summaryRecords, summaryDeptFilter]);
+
+  const staffOptions = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+
+    // 1. Authorized project users
+    mockUsers.forEach((u) => {
+      if (u.role !== 'client' && u.role !== ROLES.CLIENT && !seen.has(u.name)) {
+        seen.add(u.name);
+        const isAdmin =
+          u.role?.toLowerCase() === 'admin' ||
+          u.role?.toLowerCase() === 'owner' ||
+          u.name.toLowerCase().includes('admin');
+        list.push({
+          id: u.id,
+          name: u.name,
+          isAdmin,
+        });
+      }
+    });
+
+    // 2. Additional daily records
+    dailyRecords.forEach((r) => {
+      if (r.name && !seen.has(r.name) && r.name !== '—') {
+        seen.add(r.name);
+        const isAdmin =
+          r.designation?.toLowerCase() === 'admin' ||
+          r.name.toLowerCase().includes('admin');
+        list.push({
+          id: r.id,
+          name: r.name,
+          isAdmin,
+        });
+      }
+    });
+
+    return list;
+  }, [dailyRecords]);
+
+  const openPunchModal = () => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const today = now.toISOString().split('T')[0];
+    setStaffMarkForm((prev) => ({
+      userId: prev.userId || staffOptions[0]?.id || 'u1',
+      punchType: 'in',
+      date: today,
+      punchTime: `${hh}:${mm}`,
+      notes: '',
+    }));
+    setIsMarkStaffModalOpen(true);
+  };
+
+  const requestMetrics = useMemo(() => {
+    const total = requestsList.length;
+    const pending = requestsList.filter((r) => (r.status || '').toLowerCase() === 'pending').length;
+    const approved = requestsList.filter((r) => (r.status || '').toLowerCase() === 'approved').length;
+    const rejected = requestsList.filter((r) => (r.status || '').toLowerCase() === 'rejected').length;
+    const withdrawn = requestsList.filter((r) => (r.status || '').toLowerCase() === 'withdrawn').length;
+    return { total, pending, approved, rejected, withdrawn };
+  }, [requestsList]);
+
+  const filteredRequests = useMemo(() => {
+    return requestsList.filter((req) => {
+      if (requestStatusFilter !== 'ALL') {
+        if ((req.status || '').toLowerCase() !== requestStatusFilter.toLowerCase()) return false;
+      }
+      if (requestFromDate) {
+        if (!req.date || req.date < requestFromDate) return false;
+      }
+      if (requestToDate) {
+        if (!req.date || req.date > requestToDate) return false;
+      }
+      if (requestTypeFilter !== 'ALL') {
+        if (!req.type?.toLowerCase().includes(requestTypeFilter.toLowerCase())) return false;
+      }
+      if (requestSearch.trim()) {
+        const q = requestSearch.trim().toLowerCase();
+        const matchName = req.employeeName?.toLowerCase().includes(q) || req.userName?.toLowerCase().includes(q);
+        const matchReason = req.reason?.toLowerCase().includes(q);
+        const matchType = req.type?.toLowerCase().includes(q);
+        const matchDate = req.date?.includes(q);
+        if (!matchName && !matchReason && !matchType && !matchDate) return false;
+      }
+      return true;
+    });
+  }, [requestsList, requestStatusFilter, requestFromDate, requestToDate, requestTypeFilter, requestSearch]);
+
+  const sortedRequests = useMemo(() => {
+    return [...filteredRequests].sort((a, b) => {
+      const timeA = new Date(`${a.date || '1970-01-01'} ${a.requestedAt || '00:00'}`).getTime() || 0;
+      const timeB = new Date(`${b.date || '1970-01-01'} ${b.requestedAt || '00:00'}`).getTime() || 0;
+      return requestSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+  }, [filteredRequests, requestSortOrder]);
+
+  const openRequestModal = () => {
+    const today = new Date().toISOString().split('T')[0];
+    setRequestForm({
+      userId: currentUser?.id || staffOptions[0]?.id || 'u1',
+      date: today,
+      type: 'Punch Regularization',
+      reason: '',
+      requestedCheckIn: '09:00 AM',
+      requestedCheckOut: '06:00 PM',
+    });
+    setIsRequestModalOpen(true);
+  };
+
+  const triggerExportDownload = (content, filename, mimeType) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportDailyCsv = () => {
+    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Designation', 'Status', 'Shift', 'Check In', 'Check Out', 'Hours Worked', 'Overtime (hrs)'];
+    const rows = filteredDailyRecords.map((r, idx) => [
+      idx + 1,
+      r.employeeCode,
+      r.name,
+      r.department,
+      r.designation,
+      r.status,
+      r.shift,
+      r.checkIn,
+      r.checkOut,
+      r.hoursWorked,
+      r.overtimeHrs,
+    ]);
+    const csv = [headers.join(','), ...rows.map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))].join('\r\n');
+    triggerExportDownload(csv, `Daily_Attendance_${dailyDateDisplay.replace(/[^a-zA-Z0-9]/g, '_')}.csv`, 'text/csv;charset=utf-8;');
+    toast.success('Daily attendance exported to CSV');
+  };
+
+  const exportDailyExcel = () => {
+    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Designation', 'Status', 'Shift', 'Check In', 'Check Out', 'Hours Worked', 'Overtime (hrs)'];
+    const rows = filteredDailyRecords.map((r, idx) => [
+      idx + 1,
+      r.employeeCode,
+      r.name,
+      r.department,
+      r.designation,
+      r.status,
+      r.shift,
+      r.checkIn,
+      r.checkOut,
+      r.hoursWorked,
+      r.overtimeHrs,
+    ]);
+    const tableHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Daily Attendance</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+      <body>
+        <table border="1">
+          <thead><tr style="background:#f1f5f9;font-weight:bold;">${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    triggerExportDownload(tableHtml, `Daily_Attendance_${dailyDateDisplay.replace(/[^a-zA-Z0-9]/g, '_')}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
+    toast.success('Daily attendance downloaded for Excel');
+  };
+
+  const exportSummaryCsv = () => {
+    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Present', 'Late', 'Half Day', 'Overtime', 'Absent', 'Unmarked Working Days', 'Late Penalty', 'Overtime Amount'];
+    const rows = filteredSummaryRecords.map((r, idx) => [
+      idx + 1,
+      r.employeeCode,
+      r.name,
+      r.department,
+      r.present,
+      r.late,
+      r.halfDay,
+      r.overtime,
+      r.absent,
+      r.unmarked,
+      r.latePenalty,
+      r.overtimeAmount,
+    ]);
+    const csv = [headers.join(','), ...rows.map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))].join('\r\n');
+    triggerExportDownload(csv, `Attendance_Summary_${summaryMonth.replace(/[^a-zA-Z0-9]/g, '_')}.csv`, 'text/csv;charset=utf-8;');
+    toast.success('Attendance summary exported to CSV');
+  };
+
+  const exportSummaryExcel = () => {
+    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Present', 'Late', 'Half Day', 'Overtime', 'Absent', 'Unmarked Working Days', 'Late Penalty', 'Overtime Amount'];
+    const rows = filteredSummaryRecords.map((r, idx) => [
+      idx + 1,
+      r.employeeCode,
+      r.name,
+      r.department,
+      r.present,
+      r.late,
+      r.halfDay,
+      r.overtime,
+      r.absent,
+      r.unmarked,
+      r.latePenalty,
+      r.overtimeAmount,
+    ]);
+    const tableHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Attendance Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+      <body>
+        <table border="1">
+          <thead><tr style="background:#f1f5f9;font-weight:bold;">${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    triggerExportDownload(tableHtml, `Attendance_Summary_${summaryMonth.replace(/[^a-zA-Z0-9]/g, '_')}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
+    toast.success('Attendance summary downloaded for Excel');
+  };
+
+  const handleOpenSummaryBreakdown = (record, category, count) => {
+    const generatedDays = [];
+    const totalEntries = Math.max(1, typeof count === 'number' ? count : 1);
+    for (let i = 1; i <= Math.min(totalEntries, 28); i++) {
+      const dayNum = String(i * 2 > 28 ? i : i * 2).padStart(2, '0');
+      generatedDays.push({
+        date: `${dayNum}-10-2026`,
+        status: category,
+        checkIn: category === 'Present' || category === 'Late' ? (category === 'Late' ? '10:45 AM' : '09:58 AM') : null,
+        checkOut: category === 'Present' || category === 'Late' ? '07:05 PM' : null,
+      });
+    }
+
+    setSummaryBreakdownTarget({
+      ...record,
+      category,
+      value: count,
+      days: generatedDays,
+    });
+  };
+
+  const handleUpdateBreakdownDayStatus = (dayIndex, newStatus) => {
+    if (!summaryBreakdownTarget) return;
+    const updatedDays = [...summaryBreakdownTarget.days];
+    updatedDays[dayIndex] = {
+      ...updatedDays[dayIndex],
+      status: newStatus,
+    };
+    setSummaryBreakdownTarget({
+      ...summaryBreakdownTarget,
+      days: updatedDays,
+    });
+    toast.success(`Updated day status to ${newStatus}`);
+  };
 
   // Fetch all initial data
   const loadData = async () => {
     setLoading(true);
     try {
-      const [records, office, reqs, stats, allUsers] = await Promise.all([
+      const [records, office, leaves, reqs, stats] = await Promise.all([
         attendanceService.getTodayAttendance(),
         attendanceService.getOfficeLocation(),
+        attendanceService.getLeaveTypes(),
         attendanceService.getRequests(),
         attendanceService.getOverviewStats(),
-        userService.getAllUsers(),
       ]);
       setAttendanceList(records);
       setOfficeLocation(office);
@@ -182,9 +754,9 @@ export function AttendancePage() {
         lng: office.lng,
         radiusMeters: office.radiusMeters,
       });
+      setLeaveTypes(leaves);
       setRequestsList(reqs);
       if (stats) setOverviewStats(stats);
-      if (allUsers && allUsers.length > 0) setUsersList(allUsers);
     } catch (err) {
       toast.error('Failed to load attendance data');
     } finally {
@@ -227,7 +799,8 @@ export function AttendancePage() {
       },
       (err) => {
         setLocating(false);
-        setGpsError(err.message || 'GPS location acquisition failed.');
+        // Fallback for desktop or blocked permissions
+        setGpsError('GPS permission not enabled or signal weak. PWA will verify upon punch.');
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
@@ -270,15 +843,13 @@ export function AttendancePage() {
 
   // Check if current user is clocked in
   const myTodayRecord = useMemo(() => {
-    if (!currentUser) return null;
+    const todayStr = new Date().toISOString().split('T')[0];
     return attendanceList.find(
-      (r) =>
-        r.userId === currentUser.id ||
-        (r.userName && r.userName.toLowerCase() === currentUser.name?.toLowerCase())
+      (r) => String(r.userId) === String(currentUser?.id || 'u1') && r.date === todayStr
     );
   }, [attendanceList, currentUser]);
 
-  const isCheckedIn = Boolean(myTodayRecord && myTodayRecord.checkInTime && !myTodayRecord.checkOutTime);
+  const isCheckedIn = myTodayRecord && myTodayRecord.status === 'present' && myTodayRecord.checkInTime && !myTodayRecord.checkOutTime;
 
   // Punch In / Out Action with PWA Geofencing
   const handlePunchAction = async () => {
@@ -304,7 +875,7 @@ export function AttendancePage() {
         } catch (e) {}
       }
 
-      // If still missing, use position within geofence for seamless desktop demo
+      // If still missing, use simulated position within geofence for seamless desktop demo
       if (!coords) {
         coords = { lat: officeLocation.lat, lng: officeLocation.lng, accuracy: 10 };
       }
@@ -330,7 +901,7 @@ export function AttendancePage() {
     }
   };
 
-  // Office Location Settings Modal Actions
+  // Office Location Settings Modal Actions (Screenshot 3)
   const handleUseCurrentLocationForOffice = () => {
     if (!navigator.geolocation) {
       toast.error('Geolocation is not supported by this device.');
@@ -351,66 +922,121 @@ export function AttendancePage() {
           });
           setOfficeLocation(updated);
           toast.success(`Office GPS pinned to ${lat}, ${lng} (saved immediately!)`);
-          startPwaLocationTracking();
         } catch (e) {
-          toast.error('Failed to save GPS pin');
+          toast.error('Failed to save office coordinates');
         }
       },
       (err) => {
-        toast.error(`GPS Error: ${err.message}. Please enable location permissions.`);
+        toast.error('Could not get GPS fix. Please ensure location permissions are granted.');
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
   const handleSaveOfficeSettings = async (e) => {
-    e.preventDefault();
-    const latErr = validateGpsCoordinates(officeForm.lat, 'Latitude', { min: -90, max: 90 });
-    if (latErr) {
-      toast.error(latErr);
+    if (e) e.preventDefault();
+    const nameErr = validateRequired(officeForm.name, 'Office name', 3);
+    if (nameErr) {
+      toast.error(nameErr);
       return;
     }
-    const lngErr = validateGpsCoordinates(officeForm.lng, 'Longitude', { min: -180, max: 180 });
-    if (lngErr) {
-      toast.error(lngErr);
+    const gpsErr = validateGpsCoordinates(officeForm.lat, officeForm.lng);
+    if (gpsErr) {
+      toast.error(gpsErr);
       return;
     }
-    const radErr = validatePositiveNumber(officeForm.radiusMeters, 'Geo-Fence Radius', { min: 1, max: 5000 });
-    if (radErr) {
-      toast.error(radErr);
+    const radiusErr = validatePositiveNumber(officeForm.radiusMeters, 'Geofence radius', { min: 10, max: 5000 });
+    if (radiusErr) {
+      toast.error(radiusErr);
       return;
     }
 
     try {
       const updated = await attendanceService.updateOfficeLocation(officeForm);
       setOfficeLocation(updated);
-      toast.success(`Office settings saved! Geofence radius: ${officeForm.radiusMeters}m`);
       setIsOfficeSettingsOpen(false);
-      startPwaLocationTracking();
+      toast.success(`Office settings for "${updated.name}" saved successfully`);
+      loadData();
     } catch (err) {
       toast.error('Failed to save office settings');
     }
   };
 
-  // Mark Attendance for Staff (Admin/Manager)
+  // Mark for Staff Modal Submit (Screenshot 2: Punch Attendance)
   const handleMarkForStaffSubmit = async (e) => {
     e.preventDefault();
-    const sourceUsers = usersList.length > 0 ? usersList : mockUsers;
-    const user = sourceUsers.find((u) => u.id === staffMarkForm.userId) || sourceUsers[0];
+    if (!staffMarkForm.userId) {
+      toast.error('Please select a staff member');
+      return;
+    }
+    const staffMember = staffOptions.find((s) => String(s.id) === String(staffMarkForm.userId));
+    const user = mockUsers.find((u) => String(u.id) === String(staffMarkForm.userId)) || {
+      id: staffMarkForm.userId,
+      name: staffMember?.name || 'Staff Member',
+      role: staffMember?.isAdmin ? 'Admin' : 'Staff',
+    };
+
+    if (!staffMarkForm.punchTime || !staffMarkForm.punchTime.trim()) {
+      toast.error('Punch time is required');
+      return;
+    }
 
     try {
       await attendanceService.markForStaff({
         user,
-        status: staffMarkForm.status,
-        checkInTime: staffMarkForm.status === 'present' ? staffMarkForm.checkInTime : null,
-        checkOutTime: staffMarkForm.status === 'present' ? staffMarkForm.checkOutTime : null,
+        date: staffMarkForm.date,
+        action: staffMarkForm.punchType,
+        punchTime: staffMarkForm.punchTime,
+        status: 'present',
         notes: staffMarkForm.notes,
       });
-      toast.success(`Attendance marked for ${user.name}`);
+      const punchActionLabel = staffMarkForm.punchType === 'out' ? 'Punch Out' : 'Punch In';
+      toast.success(`${punchActionLabel} recorded for ${user.name}`);
       setIsMarkStaffModalOpen(false);
       loadData();
     } catch (err) {
       toast.error('Failed to mark staff attendance');
+    }
+  };
+
+  // Leave Types Submit (Screenshot 2)
+  const handleAddLeaveType = async (e) => {
+    e.preventDefault();
+    const nameErr = validateRequired(leaveTypeForm.name, 'Leave type title', 2);
+    if (nameErr) {
+      toast.error(nameErr);
+      return;
+    }
+    const daysErr = validatePositiveNumber(leaveTypeForm.daysPerYear, 'Days per year', { min: 1, max: 365 });
+    if (daysErr) {
+      toast.error(daysErr);
+      return;
+    }
+    try {
+      await attendanceService.addLeaveType(leaveTypeForm);
+      toast.success(`Leave category "${leaveTypeForm.name}" created`);
+      setIsAddLeaveTypeOpen(false);
+      setLeaveTypeForm({
+        name: '',
+        daysPerYear: 12,
+        carryForward: 'No',
+        description: '—',
+        status: 'Active',
+      });
+      loadData();
+    } catch (err) {
+      toast.error('Failed to add leave category');
+    }
+  };
+
+  const handleDeleteLeaveType = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete leave type "${name}"?`)) return;
+    try {
+      await attendanceService.deleteLeaveType(id);
+      toast.success(`Leave type deleted`);
+      loadData();
+    } catch (err) {
+      toast.error('Failed to delete leave type');
     }
   };
 
@@ -427,20 +1053,59 @@ export function AttendancePage() {
       return;
     }
     try {
+      const selectedStaff = staffOptions.find((s) => String(s.id) === String(requestForm.userId));
+      const targetUserId = selectedStaff?.id || currentUser?.id || 'u1';
+      const targetEmployeeName = selectedStaff?.name || currentUser?.name || 'Rohit Kumar';
+
       await attendanceService.submitRequest({
         ...requestForm,
-        employeeName: currentUser?.name || 'Rohit Kumar',
+        userId: targetUserId,
+        employeeName: targetEmployeeName,
+        requestedCheckIn: requestForm.requestedCheckIn,
+        requestedCheckOut: requestForm.requestedCheckOut,
       });
       toast.success('Attendance regularization request submitted');
       setIsRequestModalOpen(false);
       setRequestForm({
+        userId: currentUser?.id || staffOptions[0]?.id || 'u1',
         date: new Date().toISOString().split('T')[0],
         type: 'Punch Regularization',
         reason: '',
+        requestedCheckIn: '09:00 AM',
+        requestedCheckOut: '06:00 PM',
       });
       loadData();
     } catch (err) {
       toast.error('Failed to submit request');
+    }
+  };
+
+  const handleDecideRequest = async (id, decision) => {
+    try {
+      const targetReq = requestsList.find((r) => r.id === id);
+      const personName = targetReq?.employeeName || targetReq?.userName || 'Staff member';
+      await attendanceService.decideRequest(id, decision);
+      if (decision === 'approve') {
+        toast.success(`Attendance request for ${personName} approved successfully`);
+      } else {
+        toast.success(`Attendance request for ${personName} rejected`);
+      }
+      loadData();
+      if (selectedViewRequest && selectedViewRequest.id === id) {
+        setSelectedViewRequest((prev) => (prev ? { ...prev, status: decision === 'approve' ? 'approved' : 'rejected' } : null));
+      }
+    } catch (err) {
+      toast.error(`Failed to ${decision} request`);
+    }
+  };
+
+  const handleWithdrawRequest = async (id) => {
+    try {
+      await attendanceService.withdrawRequest(id);
+      toast.success('Request withdrawn successfully');
+      loadData();
+    } catch (err) {
+      toast.error('Failed to withdraw request');
     }
   };
 
@@ -460,17 +1125,36 @@ export function AttendancePage() {
     }
   };
 
-  // Filtered staff list for the Mark Attendance modal search
-  const filteredStaffForMarking = useMemo(() => {
-    const list = usersList.length > 0 ? usersList : mockUsers;
-    if (!staffSearchQuery.trim()) return list;
-    const q = staffSearchQuery.toLowerCase();
-    return list.filter((u) => u.name && u.name.toLowerCase().includes(q));
-  }, [usersList, staffSearchQuery]);
+  // Filtered Leave Types
+  const filteredLeaveTypes = useMemo(() => {
+    return leaveTypes.filter((lt) => {
+      const matchSearch = lt.name.toLowerCase().includes(leaveSearch.trim().toLowerCase());
+      const matchStatus = leaveStatusFilter === 'ALL' || lt.status === leaveStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [leaveTypes, leaveSearch, leaveStatusFilter]);
 
   // Filtered Attendance Records
   const filteredRecords = useMemo(() => {
     return attendanceList.filter((r) => {
+      // 1. Overview Card Filter
+      if (cardFilter === 'checked-in') {
+        const hasPunchedIn = Boolean(r.checkInTime && r.checkInTime !== '—' && r.status !== 'leave');
+        if (!hasPunchedIn) return false;
+      } else if (cardFilter === 'not-checked-in') {
+        const isNotCheckedIn =
+          (!r.checkInTime || r.checkInTime === '—' || r.status === 'absent' || r.status === 'Not marked') &&
+          r.status !== 'leave';
+        if (!isNotCheckedIn) return false;
+      } else if (cardFilter === 'on-leave') {
+        const isOnLeave = r.status === 'leave' || r.status === 'On Leave';
+        if (!isOnLeave) return false;
+      } else if (cardFilter === 'checked-out') {
+        const isCheckedOut = Boolean(r.checkOutTime && r.checkOutTime !== '—' && !r.checkOutTime.includes('Active'));
+        if (!isCheckedOut) return false;
+      }
+
+      // 2. Search query filter
       const q = recordSearch.toLowerCase();
       const matchQuery =
         !recordSearch ||
@@ -478,167 +1162,88 @@ export function AttendancePage() {
         (r.role && r.role.toLowerCase().includes(q)) ||
         (r.site && r.site.toLowerCase().includes(q));
 
+      // 3. Role filter
       const matchRole =
-        roleFilter === 'ALL'
-          ? true
-          : roleFilter === 'NO_ROLE'
-          ? !r.role || r.role === '—' || r.role.toLowerCase() === 'none' || r.role.toLowerCase() === 'unassigned'
-          : (r.role && r.role.toLowerCase() === roleFilter.toLowerCase());
+        roleFilter === 'ALL' ||
+        (r.role && r.role.toLowerCase() === roleFilter.toLowerCase());
 
+      // 4. Date filter
       const matchDate =
-        (!startDateFilter || (r.date && r.date >= startDateFilter)) &&
-        (!endDateFilter || (r.date && r.date <= endDateFilter));
+        !selectedDateFilter ||
+        r.date === selectedDateFilter;
 
-      const matchStatusOverview =
-        statusOverviewFilter === 'ALL'
-          ? true
-          : statusOverviewFilter === 'checkedIn'
-          ? Boolean(r.checkInTime) && (!r.checkOutTime || r.status === 'present')
-          : statusOverviewFilter === 'notCheckedIn'
-          ? !r.checkInTime || r.status === 'absent'
-          : statusOverviewFilter === 'onLeave'
-          ? r.status === 'leave' || r.status === 'on-leave'
-          : statusOverviewFilter === 'checkedOut'
-          ? Boolean(r.checkOutTime) && r.checkOutTime !== '—'
-          : true;
-
-      return matchQuery && matchRole && matchDate && matchStatusOverview;
+      return matchQuery && matchRole && matchDate;
     });
-  }, [attendanceList, recordSearch, roleFilter, startDateFilter, endDateFilter, statusOverviewFilter]);
-
-  // Sorting Handler
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-    setCurrentPage(1);
-  };
-
-  // Sorted Records
-  const sortedRecords = useMemo(() => {
-    return [...filteredRecords].sort((a, b) => {
-      let aVal = a[sortField] || '';
-      let bVal = b[sortField] || '';
-
-      if (sortField === 'calculatedHours') {
-        aVal = calculateWorkingHours(a.checkInTime, a.checkOutTime);
-        bVal = calculateWorkingHours(b.checkInTime, b.checkOutTime);
-      }
-
-      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
-      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [filteredRecords, sortField, sortDirection]);
-
-  // Paginated Records
-  const totalPages = Math.ceil(sortedRecords.length / rowsPerPage) || 1;
-  const paginatedRecords = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage;
-    return sortedRecords.slice(start, start + rowsPerPage);
-  }, [sortedRecords, currentPage, rowsPerPage]);
-
-  const handleDeleteRecord = async (recordId) => {
-    if (!window.confirm('Are you sure you want to delete this attendance record?')) return;
-    try {
-      await attendanceService.deleteAttendanceRecord(recordId);
-      toast.success('Attendance record deleted');
-      loadData();
-    } catch (e) {
-      toast.error('Failed to delete attendance record');
-    }
-  };
+  }, [attendanceList, cardFilter, recordSearch, roleFilter, selectedDateFilter]);
 
   return (
     <div className="space-y-6">
-      {/* SECTION 1: Header + Actions (Check In placed BEFORE Office Settings) */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-text-main tracking-tight">Attendance</h1>
-          <p className="text-xs sm:text-sm text-text-muted mt-0.5">
-            Track staff attendance with geo-fenced punch in/out
-          </p>
-        </div>
-
-        {/* Action Buttons with Comfortably Increased Size */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* 1. Check In / Check Out Button (White color like other buttons, icon matches text-text-muted) */}
-          <button
-            type="button"
-            disabled={punchLoading}
-            onClick={handlePunchAction}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-surface hover:bg-slate-50 text-text-main border border-border transition-colors shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Icon
-              name={punchLoading ? 'refresh' : isCheckedIn ? 'logout' : 'clock'}
-              size={16}
-              className={punchLoading ? 'animate-spin text-text-muted' : 'text-text-muted'}
-            />
-            <span>
-              {punchLoading
-                ? 'Verifying PWA GPS...'
-                : isCheckedIn
-                ? 'Check Out'
-                : 'Check In'}
-            </span>
-          </button>
-
-          {/* 2. Office Settings Button (Increased Size) */}
-          <button
-            type="button"
-            onClick={() => setIsOfficeSettingsOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-surface hover:bg-slate-50 text-text-main border border-border transition-colors shadow-2xs cursor-pointer"
-          >
-            <Icon name="settings" size={16} className="text-text-muted" />
-            <span>Office Settings</span>
-          </button>
-
-          {/* 3. Export Excel Button (Increased Size) */}
-          <button
-            type="button"
-            onClick={() => attendanceService.exportToExcel(attendanceList)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-surface hover:bg-slate-50 text-text-main border border-border transition-colors shadow-2xs cursor-pointer"
-          >
-            <Icon name="download" size={16} className="text-text-muted" />
-            <span>Export Excel</span>
-          </button>
-
-          {/* 4. Mark for Staff Button (Increased Size, Primary Theme) */}
-          {isAdminOrManager && (
-            <button
-              type="button"
-              onClick={() => {
-                setStaffSearchQuery('');
-                setIsMarkStaffModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-primary hover:bg-[#4338ca] text-primary-foreground transition-colors shadow-sm cursor-pointer"
+      {/* SECTION 1: PageHeader */}
+      <PageHeader
+        title="Attendance"
+        subtitle="Track staff attendance with geo-fenced punch in/out"
+        breadcrumbs={[
+          { label: 'HRMS', path: '/dashboard' },
+          { label: 'Attendance' },
+        ]}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant={isCheckedIn ? 'destructive' : 'outline'}
+              size="sm"
+              leadingIcon={isCheckedIn ? 'logout' : 'clock'}
+              disabled={punchLoading}
+              onClick={handlePunchAction}
             >
-              <Icon name="plus" size={16} />
-              <span>Mark for Staff</span>
-            </button>
-          )}
-        </div>
-      </div>
+              {punchLoading ? 'Verifying GPS...' : isCheckedIn ? 'Check Out' : 'Check In'}
+            </Button>
 
-      {/* SECTION 2: Clock & Live Attendance Cards Banner */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-white border border-border shadow-xs space-y-4">
-        {/* Top Status Bar: PWA Geofence GPS State */}
-        <div className="flex items-center justify-between pb-1">
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon="settings"
+              onClick={() => setIsOfficeSettingsOpen(true)}
+            >
+              Office Settings
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon="download"
+              onClick={() => attendanceService.exportToExcel(attendanceList)}
+            >
+              Export Excel
+            </Button>
+
+            {isAdminOrManager && (
+              <Button
+                variant="primary"
+                size="sm"
+                leadingIcon="plus"
+                onClick={openPunchModal}
+              >
+                Mark for Staff
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      {/* SECTION 2: Live Geofence & 4 Overview Filter Cards */}
+      <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-card border border-border shadow-xs space-y-3">
+        {/* Top Header Row of Container Card */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* PWA GPS Geofence Real-time Badge */}
           <div className="flex items-center gap-2">
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
                 distanceToOffice !== null && distanceToOffice <= (officeLocation.radiusMeters || 500)
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
+              <span className="size-2 rounded-full bg-current animate-pulse" />
               <span>
                 {locating
                   ? 'PWA GPS Locating...'
@@ -654,75 +1259,77 @@ export function AttendancePage() {
               type="button"
               onClick={startPwaLocationTracking}
               title="Refresh GPS location via PWA"
-              className="p-1.5 rounded-lg border border-border bg-surface hover:bg-slate-50 text-text-muted hover:text-text-main transition-colors text-xs cursor-pointer"
+              className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs cursor-pointer"
             >
-              <Icon name="refresh" size={13} className={locating ? 'animate-spin' : ''} />
+              <RefreshIcon className={cn('size-3.5', locating && 'animate-spin')} />
             </button>
           </div>
 
+          {/* User Check-In Status Badge */}
           <span
-            className={`text-xs font-bold px-3 py-1 rounded-full ${
+            className={`text-xs font-bold px-3 py-1 rounded-full border ${
               isCheckedIn
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+                : 'bg-muted/80 text-muted-foreground border-border'
             }`}
           >
             {isCheckedIn ? 'Checked In' : 'Not Checked In'}
           </span>
         </div>
 
-        {/* Circular Clock + Attendance Overview Cards */}
-        <div className="flex flex-col xl:flex-row items-center justify-between gap-6 pt-1">
-          {/* Left: Clock Widget (Current Day, Date, Time formatted strictly as HH:MM) */}
-          <div className="relative w-32 h-32 shrink-0 flex items-center justify-center">
+        {/* Bottom Row: Circular Clock Widget + 4 Overview Metric Filter Cards */}
+        <div className="flex flex-col lg:flex-row items-center gap-3.5 sm:gap-4">
+          {/* 1. Left: Circular Clock Widget */}
+          <div className="relative w-28 h-28 sm:w-32 sm:h-32 shrink-0 flex items-center justify-center">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
               <path
-                className="text-slate-100"
+                stroke="#e2e8f0"
                 strokeWidth="3.2"
-                stroke="currentColor"
                 fill="none"
                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
               <path
-                className="text-blue-600"
-                strokeDasharray="65, 100"
+                stroke="#2563eb"
+                strokeDasharray="75, 100"
                 strokeWidth="3.2"
                 strokeLinecap="round"
-                stroke="currentColor"
                 fill="none"
                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
-                {currentDayName}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
+              <span className="text-[10px] sm:text-[11px] font-bold text-info uppercase tracking-widest leading-none">
+                {clockData.day}
               </span>
-              <span className="text-xl font-black font-mono text-text-main my-0.5">
-                {clockTimeHM}
+              <span className="text-xl sm:text-2xl font-black font-mono text-foreground tracking-tight leading-tight my-1">
+                {clockData.time}
               </span>
-              <span className="text-[10px] font-semibold text-text-muted">
-                {currentDateShort}
+              <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground leading-none">
+                {clockData.date}
               </span>
             </div>
           </div>
 
-          {/* Right: The 4 Attendance Overview Cards (Interactive Filters) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 flex-1 w-full min-w-0">
+          {/* 2. Right: 4 Functional Card Buttons with Live List Filtering */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 w-full min-w-0">
             {/* Card 1: Checked In */}
             <button
               type="button"
-              onClick={() => {
-                setStatusOverviewFilter((prev) => (prev === 'checkedIn' ? 'ALL' : 'checkedIn'));
-                setCurrentPage(1);
-              }}
-              title="Click to filter staff currently checked in"
-              className="py-2.5 px-2 sm:py-3 sm:px-3 rounded-xl border border-border bg-white transition-colors flex flex-col items-center justify-center text-center cursor-pointer shadow-2xs hover:border-slate-300"
+              onClick={() => handleCardFilterToggle('checked-in')}
+              className={cn(
+                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+                cardFilter === 'checked-in'
+                  ? 'border-blue-400 ring-2 ring-blue-400/20 bg-blue-50/70 shadow-xs'
+                  : 'border-border bg-card hover:border-blue-400/40 hover:bg-muted/30 shadow-2xs'
+              )}
             >
-              <div className="text-blue-600 flex items-center justify-center shrink-0 mb-1">
-                <Icon name="check" size={18} />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-info group-hover:scale-110 transition-transform">
+                <CheckIcon className="size-5 stroke-[2.5]" />
               </div>
-              <div className="text-xs font-semibold text-text-muted leading-tight">Checked In</div>
-              <div className="text-xl sm:text-2xl font-black text-blue-600 tracking-tight mt-0.5 tabular-nums leading-tight">
+              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+                Checked In
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold text-info tracking-tight mt-1 tabular-nums">
                 {overviewStats.checkedIn?.toLocaleString() || '4,500'}
               </div>
             </button>
@@ -730,18 +1337,21 @@ export function AttendancePage() {
             {/* Card 2: Not Checked In */}
             <button
               type="button"
-              onClick={() => {
-                setStatusOverviewFilter((prev) => (prev === 'notCheckedIn' ? 'ALL' : 'notCheckedIn'));
-                setCurrentPage(1);
-              }}
-              title="Click to filter staff not yet checked in"
-              className="py-2.5 px-2 sm:py-3 sm:px-3 rounded-xl border border-border bg-white transition-colors flex flex-col items-center justify-center text-center cursor-pointer shadow-2xs hover:border-slate-300"
+              onClick={() => handleCardFilterToggle('not-checked-in')}
+              className={cn(
+                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+                cardFilter === 'not-checked-in'
+                  ? 'border-rose-400 ring-2 ring-rose-400/20 bg-rose-50/70 shadow-xs'
+                  : 'border-border bg-card hover:border-rose-400/40 hover:bg-muted/30 shadow-2xs'
+              )}
             >
-              <div className="text-rose-600 flex items-center justify-center shrink-0 mb-1">
-                <Icon name="alert" size={18} />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 group-hover:scale-110 transition-transform">
+                <AlertIcon className="size-5" />
               </div>
-              <div className="text-xs font-semibold text-text-muted leading-tight">Not Checked In</div>
-              <div className="text-xl sm:text-2xl font-black text-rose-600 tracking-tight mt-0.5 tabular-nums leading-tight">
+              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+                Not Checked In
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight mt-1 tabular-nums">
                 {overviewStats.notCheckedIn?.toLocaleString() || '500'}
               </div>
             </button>
@@ -749,37 +1359,21 @@ export function AttendancePage() {
             {/* Card 3: On Leave */}
             <button
               type="button"
-              onClick={() => {
-                setStatusOverviewFilter((prev) => (prev === 'onLeave' ? 'ALL' : 'onLeave'));
-                setCurrentPage(1);
-              }}
-              title="Click to filter staff on leave"
-              className="py-2.5 px-2 sm:py-3 sm:px-3 rounded-xl border border-border bg-white transition-colors flex flex-col items-center justify-center text-center cursor-pointer shadow-2xs hover:border-slate-300"
+              onClick={() => handleCardFilterToggle('on-leave')}
+              className={cn(
+                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+                cardFilter === 'on-leave'
+                  ? 'border-emerald-400 ring-2 ring-emerald-400/20 bg-emerald-50/70 shadow-xs'
+                  : 'border-border bg-card hover:border-emerald-400/40 hover:bg-muted/30 shadow-2xs'
+              )}
             >
-              <div className="text-emerald-600 flex items-center justify-center shrink-0 mb-1">
-                {/* Clean inline calendar exclamation icon matching reference */}
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="shrink-0 text-emerald-600"
-                >
-                  <rect x="3.5" y="4" width="17" height="17" rx="3" strokeWidth="2" />
-                  <rect x="6.5" y="1.5" width="2.5" height="4.5" rx="1.2" strokeWidth="2" fill="none" />
-                  <rect x="15" y="1.5" width="2.5" height="4.5" rx="1.2" strokeWidth="2" fill="none" />
-                  <line x1="3.5" y1="8" x2="20.5" y2="8" strokeWidth="2" />
-                  <line x1="12" y1="10.5" x2="12" y2="14.5" strokeWidth="2.2" />
-                  <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none" />
-                  <line x1="5.5" y1="19.5" x2="18.5" y2="19.5" strokeWidth="1.2" strokeDasharray="0.1 2" />
-                </svg>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
+                <CalendarIcon className="size-5" />
               </div>
-              <div className="text-xs font-semibold text-text-muted leading-tight">On Leave</div>
-              <div className="text-xl sm:text-2xl font-black text-emerald-600 tracking-tight mt-0.5 tabular-nums leading-tight">
+              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+                On Leave
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1 tabular-nums">
                 {overviewStats.onLeave?.toLocaleString() || '456'}
               </div>
             </button>
@@ -787,18 +1381,21 @@ export function AttendancePage() {
             {/* Card 4: Checked Out */}
             <button
               type="button"
-              onClick={() => {
-                setStatusOverviewFilter((prev) => (prev === 'checkedOut' ? 'ALL' : 'checkedOut'));
-                setCurrentPage(1);
-              }}
-              title="Click to filter staff who checked out"
-              className="py-2.5 px-2 sm:py-3 sm:px-3 rounded-xl border border-border bg-white transition-colors flex flex-col items-center justify-center text-center cursor-pointer shadow-2xs hover:border-slate-300"
+              onClick={() => handleCardFilterToggle('checked-out')}
+              className={cn(
+                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+                cardFilter === 'checked-out'
+                  ? 'border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/70 shadow-xs'
+                  : 'border-border bg-card hover:border-amber-400/40 hover:bg-muted/30 shadow-2xs'
+              )}
             >
-              <div className="text-amber-600 flex items-center justify-center shrink-0 mb-1">
-                <Icon name="logout" size={18} />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
+                <LogOutIcon className="size-5" />
               </div>
-              <div className="text-xs font-semibold text-text-muted leading-tight">Checked Out</div>
-              <div className="text-xl sm:text-2xl font-black text-amber-600 tracking-tight mt-0.5 tabular-nums leading-tight">
+              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+                Checked Out
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold text-amber-500 tracking-tight mt-1 tabular-nums">
                 {overviewStats.checkedOut?.toLocaleString() || '250'}
               </div>
             </button>
@@ -806,326 +1403,202 @@ export function AttendancePage() {
         </div>
       </div>
 
-      {/* SECTION 3: Tabs (Records & Requests - Leave Types Screen Deleted) */}
-      <div className="flex items-center gap-1 border-b border-border">
-        <button
-          type="button"
-          onClick={() => setActiveTab('records')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'records'
-              ? 'border-primary text-primary bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
-          }`}
-        >
-          <Icon name="attendance" size={14} />
-          <span>Records</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-accent text-accent-foreground font-mono font-bold">
-            {attendanceList.length}
-          </span>
-        </button>
+      {/* SECTION 3: Tabs Switcher */}
+      <Tabs
+        tabs={[
+          { id: 'records', label: 'Records', icon: ClockIcon, count: attendanceList.length },
+          { id: 'requests', label: 'Requests', icon: MailIcon, count: requestsList.length },
+          { id: 'daily', label: 'Daily attendance', icon: CalendarIcon },
+          { id: 'summary', label: 'Attendance summary', icon: BarChartIcon },
+        ]}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+      />
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('requests')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'requests'
-              ? 'border-primary text-primary bg-surface'
-              : 'border-transparent text-text-muted hover:text-text-main'
-          }`}
-        >
-          <Icon name="bell" size={14} />
-          <span>Requests</span>
-          {requestsList.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-mono font-bold">
-              {requestsList.length}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* TAB 1: Attendance Records */}
+      {/* TAB 1: Attendance Records (Screenshot 1) */}
       {activeTab === 'records' && (
-        <Card className="space-y-4">
-          {/* Filters Bar: Search on left, Date & Role filters + Clear on right */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3 pb-3 border-b border-border/70">
-            {/* Search by Name / Role / Site */}
-            <div className="relative min-w-[240px] flex-1 max-w-sm">
-              <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
-                type="text"
-                value={recordSearch}
-                onChange={(e) => {
-                  setRecordSearch(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search staff, site, location..."
-                className="w-full h-9 pl-9 pr-3 text-xs bg-slate-50 border border-border rounded-lg text-text-main placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            {/* Filter controls moved to the right side */}
-            <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2.5">
-              {/* Filter by Role with 'No Role' option */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-text-muted">Role:</span>
-                <select
-                  value={roleFilter}
-                  onChange={(e) => {
-                    setRoleFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="h-9 px-2.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                >
-                  <option value="ALL">All Roles</option>
-                  <option value="Owner">Owner</option>
-                  <option value="Manager">Manager</option>
-                  <option value="Supervisor">Supervisor</option>
-                  <option value="Worker">Worker</option>
-                  <option value="NO_ROLE">No Role</option>
-                </select>
-              </div>
-
-              {/* Date Range: From Date to To Date */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-text-muted">From:</span>
+        <Card bodyClassName="p-5">
+          {/* Filters Bar with Increased Gap */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-3.5 border-b border-border">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
+              {/* Search by Name / Role / Site */}
+              <div className="relative min-w-[200px] flex-1 max-w-xs">
+                <SearchIcon className="size-4 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
                 <input
-                  type="date"
-                  value={startDateFilter}
-                  onChange={(e) => {
-                    setStartDateFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="h-9 px-2.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  type="text"
+                  value={recordSearch}
+                  onChange={(e) => setRecordSearch(e.target.value)}
+                  placeholder="Search staff, role, site..."
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
+              {/* Filter by Role */}
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="py-1.5 px-3 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value="ALL">All Roles</option>
+                <option value="Owner">Owner</option>
+                <option value="Manager">Manager</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Worker">Worker</option>
+              </select>
+
+              {/* Date Picker Filter */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-text-muted">To:</span>
                 <input
                   type="date"
-                  value={endDateFilter}
-                  onChange={(e) => {
-                    setEndDateFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="h-9 px-2.5 text-xs bg-slate-50 border border-border rounded-lg text-text-main focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  value={selectedDateFilter}
+                  onChange={(e) => setSelectedDateFilter(e.target.value)}
+                  className="py-1 px-2.5 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
                 />
-              </div>
-
-              {/* Active Card Filter Badge & Clear All Filters Button */}
-              {statusOverviewFilter !== 'ALL' && (
-                <span className="h-9 px-2.5 rounded-lg text-xs font-semibold bg-primary/10 text-primary border border-primary/20 flex items-center gap-1.5">
-                  <span>Filtered: {
-                    statusOverviewFilter === 'checkedIn' ? 'Checked In' :
-                    statusOverviewFilter === 'notCheckedIn' ? 'Not Checked In' :
-                    statusOverviewFilter === 'onLeave' ? 'On Leave' : 'Checked Out'
-                  }</span>
+                {selectedDateFilter && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setStatusOverviewFilter('ALL');
-                      setCurrentPage(1);
-                    }}
-                    className="hover:opacity-70 cursor-pointer font-bold text-sm leading-none"
-                    title="Remove status filter"
+                    onClick={() => setSelectedDateFilter('')}
+                    className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded bg-muted border border-border cursor-pointer"
+                    title="Clear date filter"
                   >
-                    ×
+                    Clear Date
                   </button>
-                </span>
+                )}
+              </div>
+
+              {/* Active Card Filter Badge */}
+              {cardFilter && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-xs font-semibold text-primary">
+                  <span>
+                    Status:{' '}
+                    {cardFilter === 'checked-in'
+                      ? 'Checked In'
+                      : cardFilter === 'not-checked-in'
+                      ? 'Not Checked In'
+                      : cardFilter === 'on-leave'
+                      ? 'On Leave'
+                      : 'Checked Out'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCardFilter(null)}
+                    className="p-0.5 hover:bg-primary/20 rounded transition-colors cursor-pointer"
+                    title="Clear status filter"
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </div>
               )}
 
-              {(recordSearch || roleFilter !== 'ALL' || startDateFilter || endDateFilter || statusOverviewFilter !== 'ALL') && (
+              {/* Clear All Filters */}
+              {(recordSearch || roleFilter !== 'ALL' || selectedDateFilter || cardFilter) && (
                 <button
                   type="button"
                   onClick={() => {
                     setRecordSearch('');
                     setRoleFilter('ALL');
-                    setStartDateFilter('');
-                    setEndDateFilter('');
-                    setStatusOverviewFilter('ALL');
-                    setCurrentPage(1);
+                    setSelectedDateFilter('');
+                    setCardFilter(null);
                   }}
-                  className="h-9 px-3 text-xs font-semibold rounded-lg bg-accent text-accent-foreground border border-brand-200 hover:bg-brand-100 transition-colors cursor-pointer flex items-center gap-1"
-                  title="Clear all active filters"
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground px-2 py-1 rounded bg-muted border border-border cursor-pointer transition-colors"
                 >
-                  <Icon name="close" size={12} />
-                  <span>Clear</span>
+                  Clear All
                 </button>
               )}
             </div>
+
+            <div className="text-xs text-muted-foreground shrink-0 font-medium">
+              Showing <span className="font-bold text-foreground">{filteredRecords.length}</span> staff records
+            </div>
           </div>
 
-          {/* Table Container */}
-          <div className="overflow-x-auto rounded-xl border border-border/80">
+          <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-border/80 uppercase font-semibold text-[10px] text-text-muted tracking-wider">
+              <thead className="bg-muted/50 border-b border-border uppercase font-semibold text-[10px] text-muted-foreground tracking-wider">
                 <tr>
-                  {/* Employee with sort: ONLY heading with sorting, single angular bracket */}
-                  <th
-                    onClick={() => handleSort('userName')}
-                    className="p-3.5 cursor-pointer hover:text-text-main transition-colors select-none"
-                    title="Sort by employee name"
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>Employee</span>
-                      <span className="text-xs font-bold text-primary">
-                        {sortDirection === 'asc' ? '›' : '‹'}
-                      </span>
-                    </div>
-                  </th>
-
-                  <th className="p-3.5">Assigned Site</th>
-                  <th className="p-3.5">check-in</th>
-                  <th className="p-3.5">check-out</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5">Marked By</th>
-                  <th className="p-3.5">Location</th>
-                  <th className="p-3.5">Hours</th>
-                  <th className="p-3.5 text-right">Actions</th>
+                  <th className="p-3">Employee</th>
+                  <th className="p-3">Assigned Office / Site</th>
+                  <th className="p-3">Check-In / Out</th>
+                  <th className="p-3">Location</th>
+                  <th className="p-3">Total Working Hours</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
-                {paginatedRecords.length === 0 ? (
+              <tbody className="divide-y divide-border">
+                {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-text-muted">
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
                       No attendance records found matching filters.
                     </td>
                   </tr>
                 ) : (
-                  paginatedRecords.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
-                      {/* Employee Cell: Clicking name or avatar triggers view modal */}
+                  filteredRecords.map((r) => (
+                    <tr key={r.id} className="hover:bg-muted/40 transition-colors">
                       <td className="p-3">
-                        <div
-                          onClick={() => setViewTargetRecord(r)}
-                          className="flex items-center gap-2.5 cursor-pointer group"
-                          title="Click to view full attendance details"
-                        >
+                        <div className="flex items-center gap-2.5">
                           <Avatar name={r.userName} size="sm" />
                           <div>
-                            <div className="font-semibold text-text-main group-hover:text-primary transition-colors underline-offset-2 group-hover:underline">
-                              {r.userName}
-                            </div>
-                            <div className="text-[11px] text-text-muted">{r.role || '—'}</div>
+                            <div className="font-semibold text-foreground">{r.userName}</div>
+                            <div className="text-[11px] text-muted-foreground">{r.role}</div>
                           </div>
                         </div>
                       </td>
-
                       <td className="p-3">
-                        {(() => {
-                          const siteLat = r.coordinates?.lat || officeLocation.lat || 19.967048;
-                          const siteLng = r.coordinates?.lng || officeLocation.lng || 73.754104;
-                          const siteMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.site || officeLocation.name || 'Site')}+${siteLat},${siteLng}`;
-
-                          return (
-                            <div>
-                              <a
-                                href={siteMapsUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-semibold text-text-main text-xs flex items-center gap-1 hover:text-primary transition-colors group/site cursor-pointer"
-                                title="Open assigned site location in Google Maps"
-                              >
-                                <Icon name="mapPin" size={13} className="text-primary shrink-0 group-hover/site:scale-110 transition-transform" />
-                                <span className="group-hover/site:underline truncate">{r.site || officeLocation.name}</span>
-                              </a>
-                              {r.distanceMeters !== null && r.distanceMeters !== undefined && (
-                                <div className="text-[10px] text-text-muted mt-0.5">
-                                  Distance: <span className="font-mono text-emerald-700 font-semibold">{r.distanceMeters}m</span>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-
-                      {/* check-in */}
-                      <td className="p-3 font-mono text-[11px] text-emerald-700 font-bold">
-                        {r.checkInTime || '—'}
-                      </td>
-
-                      {/* check-out */}
-                      <td className="p-3 font-mono text-[11px] text-text-muted font-medium">
-                        {r.checkOutTime || (r.checkInTime ? 'Active On-Site' : '—')}
-                      </td>
-
-                      {/* Status */}
-                      <td className="p-3">
-                        {r.status === 'present' ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Present
-                          </span>
-                        ) : r.status === 'absent' ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-200">
-                            Absent
-                          </span>
-                        ) : r.status === 'half-day' ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            Half Day
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                            On Leave
-                          </span>
+                        <div className="font-medium text-foreground flex items-center gap-1">
+                          <MapPinIcon className="size-3.5 text-primary shrink-0" />
+                          <span>{r.site || officeLocation.name}</span>
+                        </div>
+                        {r.distanceMeters !== null && r.distanceMeters !== undefined && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            Distance: <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">{r.distanceMeters}m</span>
+                          </div>
                         )}
                       </td>
-
-                      {/* Marked By */}
-                      <td className="p-3 text-[11px] font-medium text-text-main">
-                        {r.markedBy || 'self'}
+                      <td className="p-3 font-mono text-[11px]">
+                        <div className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                          In: {r.checkInTime || '—'}
+                        </div>
+                        <div className="text-muted-foreground">
+                          Out: {r.checkOutTime || (r.checkInTime ? 'Active' : '—')}
+                        </div>
                       </td>
-
-                      {/* Location with Google Maps Redirection */}
                       <td className="p-3">
-                        {(() => {
-                          const lat = r.coordinates?.lat ?? officeLocation.lat ?? 19.967048;
-                          const lng = r.coordinates?.lng ?? officeLocation.lng ?? 73.754104;
-                          const locName = r.punchLocation || r.site || officeLocation.name || 'Recorded Punch Location';
-                          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-
-                          return (
-                            <a
-                              href={mapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="group/loc inline-flex flex-col text-left hover:opacity-90 transition-opacity cursor-pointer"
-                              title={`View recorded GPS location for ${r.userName} on Google Maps`}
-                            >
-                              <div className="flex items-center gap-1 font-semibold text-text-main text-xs group-hover/loc:text-primary transition-colors">
-                                <Icon name="mapPin" size={13} className="text-emerald-600 shrink-0 group-hover/loc:scale-110 transition-transform" />
-                                <span className="underline-offset-2 group-hover/loc:underline truncate max-w-[130px] sm:max-w-[170px]">
-                                  {locName}
-                                </span>
-                              </div>
-                              <span className="font-mono text-[10px] text-text-muted mt-0.5 flex items-center gap-1">
-                                <span>{Number(lat).toFixed(4)}° N, {Number(lng).toFixed(4)}° E</span>
-                                <span className="text-[9px] text-primary font-sans font-semibold group-hover/loc:underline">↗ Maps</span>
-                              </span>
-                            </a>
-                          );
-                        })()}
+                        {r.coordinates?.lat && r.coordinates?.lng ? (
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1 font-medium text-foreground text-[11px]">
+                              <MapPinIcon className="size-3 text-emerald-600 shrink-0" />
+                              <span className="truncate">{r.punchLocation || r.site || 'Punch GPS Site'}</span>
+                            </div>
+                            <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                              {r.coordinates.lat.toFixed(4)}° N, {r.coordinates.lng.toFixed(4)}° E
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <MapPinIcon className="size-3 text-muted-foreground shrink-0" />
+                            <span>{r.site || officeLocation.name || 'Office Location'}</span>
+                          </div>
+                        )}
                       </td>
-
                       <td className="p-3 font-mono">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
                           r.checkInTime 
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
-                            : 'text-text-muted bg-slate-100'
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' 
+                            : 'text-muted-foreground bg-muted'
                         }`}>
                           {calculateWorkingHours(r.checkInTime, r.checkOutTime)}
                         </span>
                       </td>
-
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* View Button */}
                           <button
                             type="button"
                             onClick={() => setViewTargetRecord(r)}
-                            className="p-1.5 text-text-muted hover:text-primary hover:bg-accent rounded-md transition-colors cursor-pointer"
+                            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors cursor-pointer"
                             title="View punch details"
                           >
-                            <Icon name="eye" size={14} />
+                            <EyeIcon className="size-3.5" />
                           </button>
 
                           {/* Edit Button */}
@@ -1141,10 +1614,10 @@ export function AttendancePage() {
                                   reason: r.correctionReason || '',
                                 });
                               }}
-                              className="p-1.5 text-text-muted hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors cursor-pointer"
+                              className="p-1.5 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10 rounded-md transition-colors cursor-pointer"
                               title="Edit / Correct record"
                             >
-                              <Icon name="edit" size={14} />
+                              <EditIcon className="size-3.5" />
                             </button>
                           )}
 
@@ -1152,11 +1625,11 @@ export function AttendancePage() {
                           {isAdminOrManager && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteRecord(r.id)}
-                              className="p-1.5 text-text-muted hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                              onClick={() => setRecordPendingDelete(r)}
+                              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors cursor-pointer"
                               title="Delete record"
                             >
-                              <Icon name="trash" size={14} />
+                              <TrashIcon className="size-3.5" />
                             </button>
                           )}
                         </div>
@@ -1167,73 +1640,654 @@ export function AttendancePage() {
               </tbody>
             </table>
           </div>
+        </Card>
+      )}
 
-          {/* Pagination at the bottom */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-border/70 text-xs text-text-muted shrink-0 font-medium">
-            <div>
-              <span className="font-semibold text-text-main">
-                {sortedRecords.length > 0
-                  ? `${(currentPage - 1) * rowsPerPage + 1}–${Math.min(currentPage * rowsPerPage, sortedRecords.length)} of ${sortedRecords.length}`
-                  : '0 of 0'}
-              </span>
+      {/* TAB 2: Attendance request Screen */}
+      {activeTab === 'requests' && (
+        <div className="space-y-4">
+          <Card bodyClassName="p-5 sm:p-6 space-y-4">
+            {/* Header Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
+                  Attendance request
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leadingIcon="refresh"
+                  onClick={() => {
+                    loadData();
+                    toast.success('Attendance requests refreshed');
+                  }}
+                >
+                  Refresh
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leadingIcon="plus"
+                  onClick={openRequestModal}
+                >
+                  Request Regularization
+                </Button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded-lg border border-border bg-surface hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold cursor-pointer"
-              >
-                Previous
-              </button>
-              <span className="px-2 font-semibold text-text-main">
-                {currentPage} / {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="px-3 py-1.5 rounded-lg border border-border bg-surface hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold cursor-pointer"
-              >
-                Next
-              </button>
+            {/* Filter and Live Search Toolbar */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border border-border">
+              {/* Search Field */}
+              <div className="relative flex-1 min-w-[200px]">
+                <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search by staff name or reason..."
+                  value={requestSearch}
+                  onChange={(e) => setRequestSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                {requestSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setRequestSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Date Filters, Status Dropdown, Sorting Arrow */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* From Date */}
+                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
+                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">From:</span>
+                  <input
+                    type="date"
+                    value={requestFromDate}
+                    onChange={(e) => setRequestFromDate(e.target.value)}
+                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
+                    title="From Date"
+                  />
+                </div>
+
+                {/* To Date */}
+                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
+                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">To:</span>
+                  <input
+                    type="date"
+                    value={requestToDate}
+                    onChange={(e) => setRequestToDate(e.target.value)}
+                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
+                    title="To Date"
+                  />
+                </div>
+
+                {/* Status Dropdown */}
+                <select
+                  value={requestStatusFilter}
+                  onChange={(e) => setRequestStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium shadow-2xs"
+                  title="Filter by Status"
+                >
+                  <option value="ALL">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+
+                {/* Sorting Arrow */}
+                <button
+                  type="button"
+                  onClick={() => setRequestSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors cursor-pointer shadow-2xs"
+                  title={requestSortOrder === 'desc' ? 'Showing newest first. Click to sort oldest first.' : 'Showing oldest first. Click to sort newest first.'}
+                >
+                  {requestSortOrder === 'desc' ? (
+                    <ArrowDownIcon className="size-3.5 text-primary" />
+                  ) : (
+                    <ArrowUpIcon className="size-3.5 text-primary" />
+                  )}
+                  <span>{requestSortOrder === 'desc' ? 'Newest' : 'Oldest'}</span>
+                </button>
+
+                {/* Reset Filters */}
+                {(requestSearch || requestStatusFilter !== 'ALL' || requestFromDate || requestToDate) && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => {
+                      setRequestSearch('');
+                      setRequestStatusFilter('ALL');
+                      setRequestFromDate('');
+                      setRequestToDate('');
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Reset
+                  </Button>
+                )}
+              </div>
             </div>
+
+            {/* Table Format for Attendance Requests */}
+            <div className="overflow-x-auto rounded-xl border border-border bg-card">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-muted/50 border-b border-border uppercase font-semibold text-[10px] text-muted-foreground tracking-wider">
+                  <tr>
+                    <th className="p-3.5">Person Name</th>
+                    <th className="p-3.5">Reason</th>
+                    <th className="p-3.5 text-center">Status</th>
+                    <th className="p-3.5 text-right">View</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {sortedRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-12 text-center text-muted-foreground">
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="size-12 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
+                            <MailIcon className="size-6 opacity-70" />
+                          </div>
+                          <h4 className="text-sm font-semibold text-foreground">No attendance requests found</h4>
+                          <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                            {requestSearch || requestStatusFilter !== 'ALL' || requestFromDate || requestToDate
+                              ? 'No requests match your current filters. Try resetting the filters.'
+                              : 'No attendance requests submitted yet.'}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedRequests.map((req) => {
+                      const isPending = (req.status || '').toLowerCase() === 'pending';
+                      const isApproved = (req.status || '').toLowerCase() === 'approved';
+                      const isRejected = (req.status || '').toLowerCase() === 'rejected';
+                      const personName = req.employeeName || req.userName || 'Staff Member';
+
+                      return (
+                        <tr key={req.id} className="hover:bg-muted/40 transition-colors">
+                          {/* Person Name */}
+                          <td className="p-3.5 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <Avatar name={personName} size="sm" />
+                              <div>
+                                <div className="font-semibold text-foreground text-xs sm:text-sm">
+                                  {personName}
+                                </div>
+                                {req.role && (
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {req.role}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Reason */}
+                          <td className="p-3.5 max-w-xs sm:max-w-md">
+                            <p className="text-foreground text-xs leading-relaxed line-clamp-2" title={req.reason}>
+                              {req.reason}
+                            </p>
+                          </td>
+
+                          {/* Status / Quick Action */}
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            {isPending ? (
+                              <div className="inline-flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDecideRequest(req.id, 'approve')}
+                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                                  title="Approve Request"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDecideRequest(req.id, 'reject')}
+                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer"
+                                  title="Reject Request"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            ) : isApproved ? (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                Approved
+                              </span>
+                            ) : isRejected ? (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-destructive/15 text-destructive border border-destructive/30">
+                                Rejected
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border capitalize">
+                                {req.status || 'Unknown'}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* View Button */}
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => setSelectedViewRequest(req)}
+                              className="hover:border-primary hover:text-primary transition-colors"
+                            >
+                              View
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 3: Daily Attendance */}
+      {activeTab === 'daily' && (
+        <Card bodyClassName="p-5 sm:p-6">
+          {/* Header & Filter Section */}
+          <div className="space-y-3.5">
+            {/* Header Row */}
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Daily attendance</h2>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">Present, late, absent and not marked for one day.</p>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    loadData();
+                    toast.success('Daily attendance refreshed');
+                  }}
+                  className="size-8.5 inline-flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  title="Refresh"
+                >
+                  <RefreshIcon className="size-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={exportDailyExcel}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
+                >
+                  <FileSpreadsheetIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Download Excel</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={exportDailyCsv}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
+                >
+                  <DownloadIcon className="size-4" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Row: Date and Department */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Date input */}
+              <div className="relative inline-flex items-center">
+                <input
+                  type="text"
+                  value={dailyDateDisplay}
+                  onChange={(e) => setDailyDateDisplay(e.target.value)}
+                  placeholder="DD-MM-YYYY"
+                  className="h-9 px-3.5 pr-9 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-36 cursor-pointer"
+                />
+                <CalendarIcon className="size-4 absolute right-3 pointer-events-none text-muted-foreground" />
+              </div>
+
+              {/* Department selector */}
+              <div className="relative inline-flex items-center">
+                <select
+                  value={dailyDeptFilter}
+                  onChange={(e) => setDailyDeptFilter(e.target.value)}
+                  className="h-9 appearance-none pl-3.5 pr-8 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer min-w-[160px]"
+                >
+                  <option value="All">All departments</option>
+                  <option value="Accounts">Accounts</option>
+                  <option value="Design">Design</option>
+                  <option value="Executive">Executive</option>
+                  <option value="Operations">Operations</option>
+                  <option value="Site Operations">Site Operations</option>
+                  <option value="Estimation">Estimation</option>
+                </select>
+                <ArrowUpDownIcon className="size-3.5 absolute right-2.5 pointer-events-none text-muted-foreground" />
+              </div>
+            </div>
+          </div>
+
+          {/* Table with slight gap from heading & buttons */}
+          <div className="mt-5 rounded-xl border border-border overflow-x-auto bg-card shadow-2xs">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-muted-foreground">
+                  <th className="py-3 px-4 font-semibold w-14">Sr No</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Employee Code</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Full Name</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Department</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Designation</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Status</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Shift</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Check In</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Check Out</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Hours Worked</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Overtime (hrs)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredDailyRecords.map((row, idx) => (
+                  <tr key={row.id} className="hover:bg-muted/40 transition-colors">
+                    <td className="py-3.5 px-4 text-muted-foreground">{idx + 1}</td>
+                    <td className="py-3.5 px-4 font-medium text-foreground whitespace-nowrap">{row.employeeCode}</td>
+                    <td className="py-3.5 px-4 font-semibold text-foreground whitespace-nowrap">{row.name}</td>
+                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.department}</td>
+                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.designation}</td>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {row.status === 'Present' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Present</span>
+                      )}
+                      {row.status === 'Not marked' && (
+                        <span className="text-teal-600 dark:text-teal-400 font-semibold">Not marked</span>
+                      )}
+                      {row.status === 'Late' && (
+                        <span className="text-amber-600 dark:text-amber-400 font-semibold">Late</span>
+                      )}
+                      {row.status === 'Half Day' && (
+                        <span className="text-amber-700 dark:text-amber-400 font-semibold">Half Day</span>
+                      )}
+                      {row.status === 'Absent' && (
+                        <span className="text-rose-600 dark:text-rose-400 font-semibold">Absent</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.shift}</td>
+                    <td className="py-3.5 px-4 font-mono text-foreground whitespace-nowrap">{row.checkIn}</td>
+                    <td className="py-3.5 px-4 font-mono text-muted-foreground whitespace-nowrap">{row.checkOut}</td>
+                    <td className="py-3.5 px-4 text-foreground tabular-nums">{row.hoursWorked}</td>
+                    <td className="py-3.5 px-4 text-foreground tabular-nums">{row.overtimeHrs}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
 
-      {/* TAB 2: Requests */}
-      {activeTab === 'requests' && (
-        <Card className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/70">
-            <div>
-              <h2 className="text-base font-bold text-text-main">Regularization Requests</h2>
-              <p className="text-xs text-text-muted mt-0.5">Missed punches and attendance adjustment approvals</p>
+      {/* TAB 4: Attendance Summary */}
+      {activeTab === 'summary' && (
+        <Card bodyClassName="p-5 sm:p-6">
+          {/* Header & Filter Section */}
+          <div className="space-y-3.5">
+            {/* Header Row */}
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Attendance summary</h2>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
+                  Per employee for one month: present, late, half day, overtime, absent and unmarked days, with penalty and overtime pay.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    loadData();
+                    toast.success('Attendance summary refreshed');
+                  }}
+                  className="size-8.5 inline-flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  title="Refresh"
+                >
+                  <RefreshIcon className="size-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={exportSummaryExcel}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
+                >
+                  <FileSpreadsheetIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Download Excel</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={exportSummaryCsv}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
+                >
+                  <DownloadIcon className="size-4" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Row: Month and Department */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Month selector */}
+              <div className="relative inline-flex items-center">
+                <select
+                  value={summaryMonth}
+                  onChange={(e) => setSummaryMonth(e.target.value)}
+                  className="h-9 appearance-none pl-3.5 pr-8 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer min-w-[150px]"
+                >
+                  <option value="October, 2026">October, 2026</option>
+                  <option value="September, 2026">September, 2026</option>
+                  <option value="August, 2026">August, 2026</option>
+                  <option value="July, 2026">July, 2026</option>
+                </select>
+                <CalendarIcon className="size-4 absolute right-2.5 pointer-events-none text-muted-foreground" />
+              </div>
+
+              {/* Department selector */}
+              <div className="relative inline-flex items-center">
+                <select
+                  value={summaryDeptFilter}
+                  onChange={(e) => setSummaryDeptFilter(e.target.value)}
+                  className="h-9 appearance-none pl-3.5 pr-8 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer min-w-[160px]"
+                >
+                  <option value="All">All departments</option>
+                  <option value="Accounts">Accounts</option>
+                  <option value="Design">Design</option>
+                  <option value="Executive">Executive</option>
+                  <option value="Operations">Operations</option>
+                  <option value="Site Operations">Site Operations</option>
+                  <option value="Estimation">Estimation</option>
+                </select>
+                <ArrowUpDownIcon className="size-3.5 absolute right-2.5 pointer-events-none text-muted-foreground" />
+              </div>
             </div>
           </div>
 
-          {requestsList.length === 0 ? (
-            <div className="p-12 text-center text-xs text-text-muted">
-              No pending attendance regularization requests.
+          {/* Table with slight gap from heading & buttons */}
+          <div className="mt-5 rounded-xl border border-border overflow-x-auto bg-card shadow-2xs">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-muted-foreground">
+                  <th className="py-3 px-4 font-semibold w-14">Sr No</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Employee Code</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Full Name</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Department</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Present</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Late</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Half Day</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Overtime</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Absent</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Unmarked Working Days</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Late Penalty</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Overtime Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredSummaryRecords.map((row, idx) => (
+                  <tr key={row.id} className="hover:bg-muted/40 transition-colors">
+                    <td className="py-3.5 px-4 text-muted-foreground">{idx + 1}</td>
+                    <td className="py-3.5 px-4 font-medium text-foreground whitespace-nowrap">{row.employeeCode}</td>
+                    <td className="py-3.5 px-4 font-semibold text-foreground whitespace-nowrap">{row.name}</td>
+                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.department}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Present', row.present)}
+                        className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline cursor-pointer"
+                        title="Click to see days and change them"
+                      >
+                        {row.present}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Late', row.late)}
+                        className="text-amber-600 dark:text-amber-400 font-semibold hover:underline cursor-pointer"
+                        title="Click to see days and change them"
+                      >
+                        {row.late}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Half Day', row.halfDay)}
+                        className="text-foreground font-semibold hover:underline cursor-pointer"
+                        title="Click to see days and change them"
+                      >
+                        {row.halfDay}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Overtime', row.overtime)}
+                        className="text-foreground font-semibold hover:underline cursor-pointer"
+                        title="Click to see days and change them"
+                      >
+                        {row.overtime}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Absent', row.absent)}
+                        className={row.absent > 0 ? "text-rose-600 dark:text-rose-400 font-semibold hover:underline cursor-pointer" : "text-muted-foreground hover:underline cursor-pointer"}
+                        title="Click to see days and change them"
+                      >
+                        {row.absent}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Unmarked Working Days', row.unmarked)}
+                        className="text-foreground font-semibold hover:underline cursor-pointer"
+                        title="Click to see days and change them"
+                      >
+                        {row.unmarked}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Late Penalty', row.latePenalty)}
+                        className="text-muted-foreground hover:underline cursor-pointer"
+                        title="Click to see days and change them"
+                      >
+                        {row.latePenalty}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSummaryBreakdown(row, 'Overtime Amount', row.overtimeAmount)}
+                        className={row.overtimeAmount > 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold hover:underline cursor-pointer" : "text-muted-foreground hover:underline cursor-pointer"}
+                        title="Click to see days and change them"
+                      >
+                        {row.overtimeAmount}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Caption Note matching screenshot */}
+          <p className="text-xs text-muted-foreground mt-3">
+            Click any number to see its days and change them. Absent days include days the system marked absent automatically.
+          </p>
+        </Card>
+      )}
+
+      {/* MODAL: Attendance Summary Breakdown & Day Adjuster */}
+      {summaryBreakdownTarget && (
+        <Modal
+          isOpen={!!summaryBreakdownTarget}
+          onClose={() => setSummaryBreakdownTarget(null)}
+          title={`Monthly Days — ${summaryBreakdownTarget.name}`}
+          subtitle={`Category: ${summaryBreakdownTarget.category} • Selected Month: ${summaryMonth}`}
+          footer={
+            <Button variant="outline" size="sm" onClick={() => setSummaryBreakdownTarget(null)}>
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-muted/50 rounded-xl border border-border flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Metric Count</span>
+                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{summaryBreakdownTarget.value}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Employee Code</span>
+                <p className="font-mono font-medium text-foreground mt-0.5">{summaryBreakdownTarget.employeeCode || '—'}</p>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-2.5">
-              {requestsList.map((req) => (
-                <div key={req.id} className="p-3.5 rounded-xl border border-border bg-surface flex items-center justify-between gap-3">
+
+            <p className="text-[11px] text-muted-foreground">
+              Click any status below to change the recorded day's status. Absent days include days the system marked absent automatically.
+            </p>
+
+            <div className="max-h-72 overflow-y-auto space-y-2 divide-y divide-border/60 pr-1">
+              {summaryBreakdownTarget.days.map((dayItem, dIdx) => (
+                <div key={dIdx} className="pt-2 first:pt-0 flex items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold text-xs text-text-main">{req.employeeName}</div>
-                    <div className="text-[11px] text-text-muted mt-0.5">{req.type} • {req.date}</div>
-                    <p className="text-xs text-text-muted mt-1">{req.reason}</p>
+                    <div className="font-semibold text-foreground">{dayItem.date}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {dayItem.checkIn ? `${dayItem.checkIn} - ${dayItem.checkOut || 'Active'}` : 'System logged entry'}
+                    </div>
                   </div>
-                  <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                    {req.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={dayItem.status}
+                      onChange={(e) => handleUpdateBreakdownDayStatus(dIdx, e.target.value)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-border bg-card text-foreground cursor-pointer"
+                    >
+                      <option value="Present">Present</option>
+                      <option value="Late">Late</option>
+                      <option value="Half Day">Half Day</option>
+                      <option value="Overtime">Overtime</option>
+                      <option value="Absent">Absent</option>
+                      <option value="Unmarked Working Days">Unmarked</option>
+                    </select>
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-        </Card>
+          </div>
+        </Modal>
       )}
 
       {/* MODAL 1: Office Location Settings */}
@@ -1245,21 +2299,21 @@ export function AttendancePage() {
         <form onSubmit={handleSaveOfficeSettings} className="space-y-4 text-xs">
           {/* Office Name */}
           <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
               Office Name
             </label>
             <input
               type="text"
               value={officeForm.name}
               onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-medium focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+              className="w-full px-3 py-2 border-2 border-emerald-500/80 rounded-lg text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-card"
             />
           </div>
 
           {/* Latitude & Longitude */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Latitude
               </label>
               <input
@@ -1267,11 +2321,11 @@ export function AttendancePage() {
                 step="any"
                 value={officeForm.lat}
                 onChange={(e) => setOfficeForm({ ...officeForm, lat: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-card"
               />
             </div>
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Longitude
               </label>
               <input
@@ -1279,30 +2333,30 @@ export function AttendancePage() {
                 step="any"
                 value={officeForm.lng}
                 onChange={(e) => setOfficeForm({ ...officeForm, lng: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-card"
               />
             </div>
           </div>
 
-          {/* Pin Current GPS Location Button */}
-          <div className="p-3 rounded-xl bg-accent border border-brand-200">
+          {/* Use My Current Location Button (Screenshot 3) */}
+          <div>
             <button
               type="button"
               onClick={handleUseCurrentLocationForOffice}
-              className="w-full py-2 px-3 text-xs font-semibold rounded-lg bg-primary hover:bg-[#4338ca] text-primary-foreground transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+              className="w-full py-2.5 px-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-semibold border border-primary/20 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
             >
-              <Icon name="mapPin" size={14} />
+              <NavigationIcon className="size-4 text-primary" />
               <span>Use My Current Location (saves immediately)</span>
             </button>
-            <p className="text-[11px] text-text-muted mt-1.5 leading-relaxed">
-              Do this while standing at the office on a phone if possible. Staff then pull-to-refresh the app.
+            <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+              Do this while standing at the office, on a phone if possible. A computer can save the wrong pin (often ~2 km off). Staff then pull-to-refresh the app.
             </p>
           </div>
 
-          {/* Geo-Fence Radius */}
-          <div className="space-y-2 pt-2 border-t border-border/80">
+          {/* Geo-Fence Radius Slider & Input (Screenshot 3) */}
+          <div className="space-y-2 pt-2 border-t border-border">
             <div className="flex items-center justify-between">
-              <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Geo-Fence Radius
               </label>
               <div className="flex items-center gap-1.5">
@@ -1312,9 +2366,9 @@ export function AttendancePage() {
                   max="5000"
                   value={officeForm.radiusMeters}
                   onChange={(e) => setOfficeForm({ ...officeForm, radiusMeters: parseInt(e.target.value, 10) || 0 })}
-                  className="w-20 px-2 py-1 text-center font-bold text-sm border border-border rounded-lg text-text-main"
+                  className="w-20 px-2 py-1 text-center font-bold text-sm border border-border rounded-lg text-foreground bg-card"
                 />
-                <span className="text-xs text-text-muted font-medium">m</span>
+                <span className="text-xs text-muted-foreground font-medium">m</span>
               </div>
             </div>
 
@@ -1325,231 +2379,276 @@ export function AttendancePage() {
               step="25"
               value={officeForm.radiusMeters}
               onChange={(e) => setOfficeForm({ ...officeForm, radiusMeters: parseInt(e.target.value, 10) || 0 })}
-              className="w-full accent-primary cursor-pointer"
+              className="w-full accent-emerald-600 cursor-pointer"
             />
+            <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+              <span>0m</span>
+              <span>5000m</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Type an exact value in the box for a tight fence (e.g. 1m or 2m), or drag to adjust.
+            </p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-            <button
+          {/* Info callout matching Screenshot 3 */}
+          <div className="p-3 rounded-xl bg-muted/50 border border-border text-[11px] text-muted-foreground leading-relaxed">
+            Employees must be within <strong className="text-foreground">{officeForm.radiusMeters}m</strong> of{' '}
+            <strong className="text-foreground">{officeForm.name}</strong> to punch in/out. Admins and managers can override this for manual attendance marking.
+          </div>
+
+          {/* Geofence status indicator */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+              <ShieldIcon className="size-3.5 text-emerald-700 dark:text-emerald-400" />
+              <span>Office Geofence Enforcement ({officeForm.radiusMeters}m)</span>
+            </span>
+            <span className="text-[11px] text-muted-foreground">High-precision PWA GPS Verification</span>
+          </div>
+
+          {/* Footer Buttons (Screenshot 3) */}
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setIsOfficeSettingsOpen(false)}
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main hover:bg-slate-50 cursor-pointer"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-[#4338ca] text-primary-foreground transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+              variant="primary"
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
-              <Icon name="check" size={14} />
+              <CheckIcon className="size-3.5 mr-1" />
               <span>Save Settings</span>
-            </button>
+            </Button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL 2: Mark Staff Attendance Modal (Direct searchable dropdown, roles hidden except Owner) */}
+      {/* MODAL 2: Punch Attendance Modal (Screenshot 2) */}
       <Modal
         isOpen={isMarkStaffModalOpen}
-        onClose={() => {
-          setIsMarkStaffModalOpen(false);
-          setIsStaffDropdownOpen(false);
-          setStaffSearchQuery('');
-        }}
-        title="Mark Staff Attendance"
+        onClose={() => setIsMarkStaffModalOpen(false)}
+        title="Punch Attendance"
       >
         <form onSubmit={handleMarkForStaffSubmit} className="space-y-4 text-xs">
-          {/* Segmented Check In / Check Out toggle buttons (referenced from screenshot) */}
-          <div className="flex items-center p-1 bg-slate-100 rounded-xl w-fit border border-border/70">
+          {/* Punch In / Punch Out Segmented Switcher */}
+          <div className="inline-flex p-1 rounded-xl bg-muted/70 border border-border/60">
             <button
               type="button"
-              onClick={() => {
-                setStaffPunchType('check-in');
-                setStaffMarkForm((prev) => ({ ...prev, status: 'present' }));
-              }}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                staffPunchType === 'check-in'
-                  ? 'bg-surface text-text-main shadow-xs border border-border/60'
-                  : 'text-text-muted hover:text-text-main'
-              }`}
+              onClick={() => setStaffMarkForm((prev) => ({ ...prev, punchType: 'in' }))}
+              className={cn(
+                'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                staffMarkForm.punchType === 'in'
+                  ? 'bg-card text-foreground shadow-xs border border-border/80'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
             >
-              <Icon name="arrowRight" size={13} className="text-emerald-600" />
+              <LogInIcon className="size-4" />
               <span>Punch In</span>
             </button>
             <button
               type="button"
-              onClick={() => {
-                setStaffPunchType('check-out');
-              }}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                staffPunchType === 'check-out'
-                  ? 'bg-surface text-text-main shadow-xs border border-border/60'
-                  : 'text-text-muted hover:text-text-main'
-              }`}
+              onClick={() => setStaffMarkForm((prev) => ({ ...prev, punchType: 'out' }))}
+              className={cn(
+                'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                staffMarkForm.punchType === 'out'
+                  ? 'bg-card text-foreground shadow-xs border border-border/80'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
             >
-              <Icon name="logout" size={13} className="text-amber-600" />
+              <LogOutIcon className="size-4" />
               <span>Punch Out</span>
             </button>
           </div>
-          <div className="space-y-1.5 relative">
-            <label className="block text-[11px] font-bold text-text-muted uppercase">Select Employee</label>
-            
-            {/* Direct Searchable Dropdown List without separate search bar */}
-            {(() => {
-              const allStaffUsers = usersList.length > 0 ? usersList : mockUsers;
-              const currentStaff = allStaffUsers.find((u) => u.id === staffMarkForm.userId) || allStaffUsers[0];
-              const isOwner = (currentStaff?.role || '').toLowerCase() === 'owner';
-              const selectedDisplayName = currentStaff ? (isOwner ? `${currentStaff.name} (owner)` : currentStaff.name) : 'Select Employee';
 
-              return (
-                <div className="relative">
-                  <div className="relative flex items-center">
-                    <input
-                      type="text"
-                      value={isStaffDropdownOpen ? staffSearchQuery : selectedDisplayName}
-                      onFocus={() => {
-                        setIsStaffDropdownOpen(true);
-                        setStaffSearchQuery('');
-                      }}
-                      onChange={(e) => {
-                        setStaffSearchQuery(e.target.value);
-                        if (!isStaffDropdownOpen) setIsStaffDropdownOpen(true);
-                      }}
-                      placeholder="Click or type to search employee..."
-                      className="w-full px-3 py-2 pr-9 border border-border rounded-lg bg-white text-text-main font-medium focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsStaffDropdownOpen((prev) => !prev);
-                        if (!isStaffDropdownOpen) setStaffSearchQuery('');
-                      }}
-                      className="absolute right-2.5 text-text-muted hover:text-text-main cursor-pointer"
-                      tabIndex={-1}
-                    >
-                      <Icon name="chevronDown" size={15} />
-                    </button>
-                  </div>
-
-                  {/* Dropdown Options Popup */}
-                  {isStaffDropdownOpen && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => {
-                          setIsStaffDropdownOpen(false);
-                          setStaffSearchQuery('');
-                        }}
-                      />
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl max-h-56 overflow-y-auto z-50 divide-y divide-border/40">
-                        {filteredStaffForMarking.length === 0 ? (
-                          <div className="p-3 text-center text-text-muted text-xs">
-                            No employee found matching "{staffSearchQuery}"
-                          </div>
-                        ) : (
-                          filteredStaffForMarking.map((u) => {
-                            const isStaffOwner = (u.role || '').toLowerCase() === 'owner';
-                            const optionDisplayName = isStaffOwner ? `${u.name} (owner)` : u.name;
-                            const isSelected = u.id === staffMarkForm.userId;
-
-                            return (
-                              <button
-                                key={u.id}
-                                type="button"
-                                onClick={() => {
-                                  setStaffMarkForm({ ...staffMarkForm, userId: u.id });
-                                  setIsStaffDropdownOpen(false);
-                                  setStaffSearchQuery('');
-                                }}
-                                className={`w-full px-3 py-2.5 text-left text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
-                                  isSelected ? 'bg-accent/50 font-bold text-primary' : 'text-text-main'
-                                }`}
-                              >
-                                <span>{optionDisplayName}</span>
-                                {isSelected && <Icon name="check" size={14} className="text-primary" />}
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-text-muted uppercase">Status</label>
+          {/* Staff Member Dropdown (Only show Admin role) */}
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+              STAFF MEMBER
+            </label>
             <select
-              value={staffMarkForm.status}
-              onChange={(e) => setStaffMarkForm({ ...staffMarkForm, status: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main font-medium focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              value={staffMarkForm.userId}
+              onChange={(e) => setStaffMarkForm({ ...staffMarkForm, userId: e.target.value })}
+              className="w-full px-3.5 py-2.5 border border-border rounded-xl text-foreground font-medium bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs sm:text-sm transition-all cursor-pointer"
             >
-              <option value="present">Present (On-Site)</option>
-              <option value="absent">Absent</option>
-              <option value="half-day">Half Day</option>
-              <option value="leave">On Leave</option>
+              <option value="" disabled>Select staff...</option>
+              {staffOptions.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.isAdmin ? `${staff.name} (Admin)` : staff.name}
+                </option>
+              ))}
             </select>
           </div>
 
-          {staffMarkForm.status === 'present' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-In Time</label>
-                <input
-                  type="text"
-                  value={staffMarkForm.checkInTime}
-                  onChange={(e) => setStaffMarkForm({ ...staffMarkForm, checkInTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-Out Time</label>
-                <input
-                  type="text"
-                  value={staffMarkForm.checkOutTime}
-                  onChange={(e) => setStaffMarkForm({ ...staffMarkForm, checkOutTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
-                />
-              </div>
+          {/* Attendance Date Row */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                SELECT ATTENDANCE DATE
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  setStaffMarkForm((prev) => ({ ...prev, date: today }));
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-colors cursor-pointer"
+              >
+                <PlusIcon className="size-3.5 stroke-[2.5]" />
+                <span>Add Date</span>
+              </button>
             </div>
-          )}
-
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-text-muted uppercase">Override Reason / Notes</label>
-            <input
-              type="text"
-              value={staffMarkForm.notes}
-              onChange={(e) => setStaffMarkForm({ ...staffMarkForm, notes: e.target.value })}
-              placeholder="e.g. Field site duty, client meeting"
-              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
-            />
+            <div className="relative">
+              <input
+                type="date"
+                value={staffMarkForm.date}
+                onChange={(e) => setStaffMarkForm({ ...staffMarkForm, date: e.target.value })}
+                className="w-full px-3.5 py-2.5 border border-border rounded-xl text-foreground font-medium bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs sm:text-sm transition-all cursor-pointer"
+              />
+            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-            <button
+          {/* Punch Time Row */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                {staffMarkForm.punchType === 'out' ? 'PUNCH TIME (CHECK OUT TIME)' : 'PUNCH TIME (CHECK IN TIME)'}
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date();
+                  const hh = String(now.getHours()).padStart(2, '0');
+                  const mm = String(now.getMinutes()).padStart(2, '0');
+                  setStaffMarkForm((prev) => ({ ...prev, punchTime: `${hh}:${mm}` }));
+                }}
+                className="text-xs font-semibold text-primary hover:underline transition-colors cursor-pointer"
+              >
+                Set to Current Time
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type="time"
+                value={staffMarkForm.punchTime}
+                onChange={(e) => setStaffMarkForm({ ...staffMarkForm, punchTime: e.target.value })}
+                className="w-full px-3.5 py-2.5 border border-border rounded-xl text-foreground font-mono font-medium bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs sm:text-sm transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Admin Override Alert */}
+          <div className="p-3.5 rounded-xl border border-warning/30 bg-warning/10 text-foreground flex items-start gap-2.5">
+            <ShieldIcon className="size-4 text-warning shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground font-medium leading-relaxed">
+              <strong className="text-warning font-semibold">Admin/Manager override:</strong> Location check bypassed for manual attendance.
+            </p>
+          </div>
+
+          {/* Modal Footer Actions */}
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <Button
               type="button"
-              onClick={() => {
-                setIsMarkStaffModalOpen(false);
-                setIsStaffDropdownOpen(false);
-                setStaffSearchQuery('');
-              }}
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main hover:bg-slate-50 cursor-pointer"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsMarkStaffModalOpen(false)}
+              className="flex-1"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-[#4338ca] text-primary-foreground shadow-sm cursor-pointer"
+              variant="primary"
+              size="sm"
+              className="flex-1"
+              leadingIcon="check"
             >
-              Record Attendance
-            </button>
+              {staffMarkForm.punchType === 'out' ? 'Punch Out' : 'Punch In'}
+            </Button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL 3: Manager Correction Modal */}
+      {/* MODAL 3: Add Leave Type (Screenshot 2) */}
+      <Modal
+        isOpen={isAddLeaveTypeOpen}
+        onClose={() => setIsAddLeaveTypeOpen(false)}
+        title="Add Leave Type"
+      >
+        <form onSubmit={handleAddLeaveType} className="space-y-4 text-xs">
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase">Leave Type Title</label>
+            <input
+              type="text"
+              required
+              value={leaveTypeForm.name}
+              onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, name: e.target.value })}
+              placeholder="e.g. Casual Leave, Maternity Leave"
+              className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase">Days / Year</label>
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={leaveTypeForm.daysPerYear}
+                onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, daysPerYear: parseInt(e.target.value, 10) || 1 })}
+                className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase">Carry Forward</label>
+              <select
+                value={leaveTypeForm.carryForward}
+                onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, carryForward: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase">Description</label>
+            <input
+              type="text"
+              value={leaveTypeForm.description}
+              onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, description: e.target.value })}
+              placeholder="Optional notes"
+              className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAddLeaveTypeOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+            >
+              Create Leave Type
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 5: Manager Correction Modal */}
       {correctionTarget && (
         <Modal
           isOpen={!!correctionTarget}
@@ -1558,11 +2657,11 @@ export function AttendancePage() {
         >
           <div className="space-y-4 text-xs">
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase">Status</label>
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase">Status</label>
               <select
                 value={correctionData.status}
                 onChange={(e) => setCorrectionData({ ...correctionData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
               >
                 <option value="present">Present</option>
                 <option value="absent">Absent</option>
@@ -1572,58 +2671,60 @@ export function AttendancePage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-In Time</label>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase">Check-In Time</label>
                 <input
                   type="text"
                   value={correctionData.checkInTime}
                   onChange={(e) => setCorrectionData({ ...correctionData, checkInTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
+                  className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono bg-card focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-text-muted uppercase">Check-Out Time</label>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase">Check-Out Time</label>
                 <input
                   type="text"
                   value={correctionData.checkOutTime}
                   onChange={(e) => setCorrectionData({ ...correctionData, checkOutTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
+                  className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono bg-card focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-text-muted uppercase">Correction Reason</label>
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase">Correction Reason</label>
               <input
                 type="text"
                 required
                 value={correctionData.reason}
                 onChange={(e) => setCorrectionData({ ...correctionData, reason: e.target.value })}
                 placeholder="Manager note or regularization reason"
-                className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+                className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setCorrectionTarget(null)}
-                className="px-4 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text-main hover:bg-slate-50 cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
                 onClick={handleSaveCorrection}
-                className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-[#4338ca] text-primary-foreground shadow-sm cursor-pointer"
               >
                 Save Correction
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* MODAL 4: View Attendance Record Modal */}
+      {/* MODAL 6: View Attendance Record Modal */}
       {viewTargetRecord && (
         <Modal
           isOpen={!!viewTargetRecord}
@@ -1637,46 +2738,404 @@ export function AttendancePage() {
           }
         >
           <div className="space-y-4 text-xs">
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-border/80 grid grid-cols-2 gap-3">
+            <div className="p-3.5 bg-muted/50 rounded-xl border border-border grid grid-cols-2 gap-3">
               <div>
-                <span className="text-[10px] uppercase font-bold text-text-muted">Date</span>
-                <p className="font-semibold text-text-main mt-0.5">{viewTargetRecord.date}</p>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Date</span>
+                <p className="font-semibold text-foreground mt-0.5">{viewTargetRecord.date}</p>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-text-muted">Total Working Hours</span>
-                <p className="font-bold text-emerald-700 mt-0.5">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Working Hours</span>
+                <p className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                   {calculateWorkingHours(viewTargetRecord.checkInTime, viewTargetRecord.checkOutTime)}
                 </p>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-text-muted">Check-In Time</span>
-                <p className="font-mono font-medium text-text-main mt-0.5">{viewTargetRecord.checkInTime || '—'}</p>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Check-In Time</span>
+                <p className="font-mono font-medium text-foreground mt-0.5">{viewTargetRecord.checkInTime || '—'}</p>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-text-muted">Check-Out Time</span>
-                <p className="font-mono font-medium text-text-main mt-0.5">{viewTargetRecord.checkOutTime || 'Active On-Site'}</p>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Check-Out Time</span>
+                <p className="font-mono font-medium text-foreground mt-0.5">{viewTargetRecord.checkOutTime || 'Active'}</p>
               </div>
             </div>
 
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-border/80 space-y-2">
-              <span className="text-[10px] uppercase font-bold text-text-muted">Punch Location</span>
-              <div className="flex items-center gap-1.5 font-medium text-text-main">
-                <Icon name="mapPin" size={14} className="text-emerald-600" />
+            <div className="p-3.5 bg-muted/50 rounded-xl border border-border space-y-2">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Punch Location</span>
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <MapPinIcon className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>{viewTargetRecord.punchLocation || viewTargetRecord.site || 'Office Location'}</span>
               </div>
               {viewTargetRecord.coordinates && (
-                <p className="font-mono text-[11px] text-text-muted">
+                <p className="font-mono text-[11px] text-muted-foreground">
                   GPS: {viewTargetRecord.coordinates.lat?.toFixed(6)}° N, {viewTargetRecord.coordinates.lng?.toFixed(6)}° E (Accuracy: {viewTargetRecord.coordinates.accuracy || 10}m)
                 </p>
               )}
             </div>
 
             {viewTargetRecord.correctionReason && (
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-                <span className="text-[10px] uppercase font-bold text-amber-900">Adjustment Note</span>
-                <p className="text-amber-800 mt-0.5">{viewTargetRecord.correctionReason}</p>
+              <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+                <span className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">Adjustment Note</span>
+                <p className="text-amber-800 dark:text-amber-300 mt-0.5">{viewTargetRecord.correctionReason}</p>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Regularization Request Modal */}
+      {isRequestModalOpen && (
+        <Modal
+          isOpen={isRequestModalOpen}
+          onClose={() => setIsRequestModalOpen(false)}
+          title="Request Attendance Regularization"
+          subtitle="Submit missed punches or adjustments with actual arrival and departure times"
+        >
+          <form onSubmit={handleSubmitRequest} className="space-y-4 text-xs">
+            {/* Staff Member Selector (Shown for Admin/Managers, locked for staff) */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Staff Member
+              </label>
+              {canCorrectAttendance ? (
+                <select
+                  value={requestForm.userId}
+                  onChange={(e) => setRequestForm({ ...requestForm, userId: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                >
+                  {staffOptions.map((staff) => (
+                    <option key={staff.id} value={staff.id}>
+                      {staff.isAdmin ? `${staff.name} (Admin)` : staff.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  disabled
+                  value={currentUser?.name || 'Staff Member'}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-muted text-foreground font-medium text-xs opacity-75"
+                />
+              )}
+            </div>
+
+            {/* Request Type */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Request Type
+              </label>
+              <select
+                value={requestForm.type}
+                onChange={(e) => setRequestForm({ ...requestForm, type: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+              >
+                <option value="Punch Regularization">Punch Regularization (Forgot to Punch / Sensor Glitch)</option>
+                <option value="On-Duty (Site Visit)">On-Duty (Client Meeting / Site Inspection)</option>
+                <option value="Work From Home">Work From Home (Approved Remote)</option>
+              </select>
+            </div>
+
+            {/* Date with quick presets */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Attendance Date
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      setRequestForm((prev) => ({ ...prev, date: today }));
+                    }}
+                    className="px-2 py-0.5 text-[10px] font-semibold rounded bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-colors cursor-pointer"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const y = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+                      setRequestForm((prev) => ({ ...prev, date: y }));
+                    }}
+                    className="px-2 py-0.5 text-[10px] font-semibold rounded bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors cursor-pointer"
+                  >
+                    Yesterday
+                  </button>
+                </div>
+              </div>
+              <input
+                type="date"
+                required
+                value={requestForm.date}
+                onChange={(e) => setRequestForm({ ...requestForm, date: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+              />
+            </div>
+
+            {/* Time In and Time Out */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Time In (Check-In)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date();
+                      const hh = String(now.getHours()).padStart(2, '0');
+                      const mm = String(now.getMinutes()).padStart(2, '0');
+                      setRequestForm((prev) => ({ ...prev, requestedCheckIn: `${hh}:${mm}` }));
+                    }}
+                    className="text-[10px] font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    Set Current
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. 09:00 AM"
+                  value={requestForm.requestedCheckIn}
+                  onChange={(e) => setRequestForm({ ...requestForm, requestedCheckIn: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Time Out (Check-Out)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestForm((prev) => ({ ...prev, requestedCheckOut: '06:00 PM' }));
+                    }}
+                    className="text-[10px] font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    Set 6:00 PM
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. 06:00 PM"
+                  value={requestForm.requestedCheckOut}
+                  onChange={(e) => setRequestForm({ ...requestForm, requestedCheckOut: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Reason / Notes */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Reason / Explanation
+              </label>
+              <textarea
+                required
+                rows={3}
+                placeholder="Reason for regularization (e.g., Biometric sensor glitch at main gate, or morning on-site inspection at client villa)..."
+                value={requestForm.reason}
+                onChange={(e) => setRequestForm({ ...requestForm, reason: e.target.value })}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+              />
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRequestModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                leadingIcon="check"
+              >
+                Submit Request
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ConfirmDialog for Deleting Attendance Record */}
+      <ConfirmDialog
+        isOpen={!!recordPendingDelete}
+        title="Delete attendance record?"
+        message={`Are you sure you want to delete the attendance record for "${recordPendingDelete?.userName}" on ${recordPendingDelete?.date}? This action cannot be undone.`}
+        confirmText="Delete Record"
+        variant="danger"
+        loading={deleteRecordLoading}
+        onConfirm={async () => {
+          if (!recordPendingDelete) return;
+          setDeleteRecordLoading(true);
+          try {
+            await attendanceService.deleteAttendanceRecord(recordPendingDelete.id);
+            toast.success('Attendance record deleted');
+            setRecordPendingDelete(null);
+            loadData();
+          } catch (err) {
+            toast.error('Failed to delete attendance record');
+          } finally {
+            setDeleteRecordLoading(false);
+          }
+        }}
+        onCancel={() => setRecordPendingDelete(null)}
+      />
+
+      {/* Attendance Request View Details Modal */}
+      {selectedViewRequest && (
+        <Modal
+          isOpen={!!selectedViewRequest}
+          onClose={() => setSelectedViewRequest(null)}
+          title="Attendance Request Details"
+        >
+          <div className="space-y-4 text-xs">
+            {/* Staff Info Header */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/40 border border-border">
+              <div className="flex items-center gap-3">
+                <Avatar name={selectedViewRequest.employeeName || selectedViewRequest.userName || 'Staff'} size="md" />
+                <div>
+                  <h4 className="font-bold text-sm text-foreground">
+                    {selectedViewRequest.employeeName || selectedViewRequest.userName}
+                  </h4>
+                  <p className="text-muted-foreground text-[11px] mt-0.5">
+                    {selectedViewRequest.role ? `${selectedViewRequest.role} • ` : ''}
+                    Submitted: {selectedViewRequest.requestedAt || selectedViewRequest.date || '—'}
+                  </p>
+                </div>
+              </div>
+              <div>
+                {(selectedViewRequest.status || '').toLowerCase() === 'approved' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    <CheckIcon className="size-3.5" /> Approved
+                  </span>
+                )}
+                {(selectedViewRequest.status || '').toLowerCase() === 'rejected' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-destructive/15 text-destructive border border-destructive/30">
+                    <XIcon className="size-3.5" /> Rejected
+                  </span>
+                )}
+                {(selectedViewRequest.status || '').toLowerCase() === 'pending' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-warning/15 text-warning border border-warning/30">
+                    <ClockIcon className="size-3.5" /> Pending Review
+                  </span>
+                )}
+                {(selectedViewRequest.status || '').toLowerCase() === 'withdrawn' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
+                    Withdrawn
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-xl border border-border bg-card">
+              <div>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Attendance Date
+                </span>
+                <div className="flex items-center gap-1.5 mt-1 font-semibold text-foreground">
+                  <CalendarIcon className="size-3.5 text-muted-foreground" />
+                  <span>{selectedViewRequest.date || '—'}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Requested Check-In
+                </span>
+                <div className="flex items-center gap-1.5 mt-1 font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                  <LogInIcon className="size-3.5" />
+                  <span>{selectedViewRequest.requestedCheckIn || '—'}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Requested Check-Out
+                </span>
+                <div className="flex items-center gap-1.5 mt-1 font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                  <LogOutIcon className="size-3.5" />
+                  <span>{selectedViewRequest.requestedCheckOut || '—'}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Working Hours
+                </span>
+                <div className="flex items-center gap-1.5 mt-1 font-medium text-foreground">
+                  <ClockIcon className="size-3.5 text-muted-foreground" />
+                  <span>{calculateWorkingHours(selectedViewRequest.requestedCheckIn, selectedViewRequest.requestedCheckOut)}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Request Type
+                </span>
+                <div className="mt-1 font-medium text-foreground">
+                  {selectedViewRequest.type || 'Punch Regularization'}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Current Status
+                </span>
+                <div className="mt-1 font-medium capitalize text-foreground">
+                  {selectedViewRequest.status || 'Pending'}
+                </div>
+              </div>
+            </div>
+
+            {/* Reason Box */}
+            <div className="p-3.5 rounded-xl border border-border bg-muted/30">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                Reason for Regularization / Correction
+              </span>
+              <p className="text-foreground font-medium leading-relaxed">
+                {selectedViewRequest.reason || 'No specific reason provided.'}
+              </p>
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedViewRequest(null)}
+              >
+                Close
+              </Button>
+
+              {(selectedViewRequest.status || '').toLowerCase() === 'pending' && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDecideRequest(selectedViewRequest.id, 'reject')}
+                    className="text-destructive hover:bg-destructive/10 border-destructive/30"
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleDecideRequest(selectedViewRequest.id, 'approve')}
+                  >
+                    Approve Request
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </Modal>
       )}

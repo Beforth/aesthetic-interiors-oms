@@ -30,24 +30,24 @@ export function OverallProgressGraph({
 
   return (
     <div
-      className={`p-5 bg-surface rounded-2xl border border-border shadow-2xs flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-xs ${className}`}
+      className={`p-5 bg-card rounded-xl border border-border shadow-2xs flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-xs ${className}`}
     >
       {/* Background Subtle Gradient Aura */}
-      <div className="absolute -top-16 -right-16 w-44 h-44 rounded-full bg-brand-500/10 blur-3xl pointer-events-none" />
+      <div className="absolute -top-16 -right-16 w-44 h-44 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-16 -left-16 w-44 h-44 rounded-full bg-accent-foreground/5 blur-3xl pointer-events-none" />
 
       {/* Card Header */}
       <div className="flex items-center justify-between pb-2 border-b border-border/80 relative z-10">
         <div>
-          <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-brand-600 animate-pulse" />
+          <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
             <span>Overall Progress</span>
           </h3>
-          <p className="text-xs text-text-muted mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Cross-project execution health & milestone fulfillment
           </p>
         </div>
-        <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+        <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
           Live Portfolio
         </span>
       </div>
@@ -63,20 +63,19 @@ export function OverallProgressGraph({
           >
             <defs>
               <linearGradient id="blobGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.20" />
-                <stop offset="50%" stopColor="#818cf8" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#c084fc" stopOpacity="0.18" />
+                <stop offset="0%" stopColor="var(--primary, #2563eb)" stopOpacity="0.20" />
+                <stop offset="50%" stopColor="var(--primary, #2563eb)" stopOpacity="0.15" />
+                <stop offset="100%" stopColor="var(--accent, #6366f1)" stopOpacity="0.10" />
               </linearGradient>
 
               <linearGradient id="blobGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.28" />
-                <stop offset="100%" stopColor="#a855f7" stopOpacity="0.22" />
+                <stop offset="0%" stopColor="var(--primary, #2563eb)" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="var(--accent, #6366f1)" stopOpacity="0.18" />
               </linearGradient>
 
               <linearGradient id="progressArcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#4f46e5" />
-                <stop offset="60%" stopColor="#6366f1" />
-                <stop offset="100%" stopColor="#a855f7" />
+                <stop offset="0%" stopColor="var(--primary, #2563eb)" />
+                <stop offset="100%" stopColor="var(--primary, #2563eb)" />
               </linearGradient>
 
               <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
@@ -107,9 +106,9 @@ export function OverallProgressGraph({
               cy="100"
               r={radius}
               fill="none"
-              stroke="#e0e7ff"
+              stroke="currentColor"
               strokeWidth="9"
-              className="opacity-75"
+              className="text-secondary opacity-75"
             />
 
             {/* Active Circular Progress Arc */}
@@ -132,14 +131,14 @@ export function OverallProgressGraph({
           </svg>
 
           {/* Central Cutout Content Pill */}
-          <div className="relative z-10 w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-surface/95 backdrop-blur-md border border-brand-200/60 shadow-lg flex flex-col items-center justify-center text-center p-2">
-            <span className="text-3xl sm:text-4xl font-extrabold text-brand-700 tracking-tight leading-none">
+          <div className="relative z-10 w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-card/95 backdrop-blur-md border border-border shadow-lg flex flex-col items-center justify-center text-center p-2">
+            <span className="text-3xl sm:text-4xl font-extrabold text-primary tracking-tight leading-none">
               {clampedProgress}%
             </span>
-            <span className="text-[11px] uppercase font-bold tracking-wider text-text-muted mt-1">
+            <span className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground mt-1">
               Progress
             </span>
-            <span className="text-[9px] text-brand-600 font-medium">
+            <span className="text-[9px] text-primary font-medium">
               Overall Portfolio
             </span>
           </div>
@@ -148,45 +147,45 @@ export function OverallProgressGraph({
 
       {/* Cross-Project Portfolio Metrics Breakdown */}
       <div className="grid grid-cols-2 gap-2 pt-3 border-t border-border/80">
-        <div className="p-2.5 rounded-xl bg-brand-50/70 border border-brand-100 flex items-center justify-between">
+        <div className="p-2.5 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase font-semibold text-text-muted">
+            <div className="text-[10px] uppercase font-semibold text-muted-foreground">
               Live Sites
             </div>
-            <div className="text-sm font-bold text-text-main">
+            <div className="text-sm font-bold text-foreground">
               {activeCount} Active
             </div>
           </div>
-          <div className="w-6 h-6 rounded-lg bg-brand-600 text-white flex items-center justify-center shrink-0">
+          <div className="w-6 h-6 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0">
             <Icon name="briefcase" size={13} />
           </div>
         </div>
 
-        <div className="p-2.5 rounded-xl bg-brand-50/70 border border-brand-100 flex items-center justify-between">
+        <div className="p-2.5 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase font-semibold text-text-muted">
+            <div className="text-[10px] uppercase font-semibold text-muted-foreground">
               Milestones Done
             </div>
-            <div className="text-sm font-bold text-text-main">
+            <div className="text-sm font-bold text-foreground">
               {completedMilestones}
               {totalMilestones > 0 && (
-                <span className="text-xs font-normal text-text-muted">/{totalMilestones}</span>
+                <span className="text-xs font-normal text-muted-foreground">/{totalMilestones}</span>
               )}
             </div>
           </div>
-          <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+          <div className="w-6 h-6 rounded-lg bg-success text-white flex items-center justify-center shrink-0">
             <Icon name="check" size={13} />
           </div>
         </div>
       </div>
 
       {/* Footer Milestone Health Status Pill */}
-      <div className="mt-3 flex items-center justify-between text-xs text-text-muted">
+      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5 font-medium">
-          <Icon name="sparkles" size={13} className="text-brand-600" />
-          <span>Delivered: <strong className="text-text-main">{completedCount} Completed</strong></span>
+          <Icon name="sparkles" size={13} className="text-primary" />
+          <span>Delivered: <strong className="text-foreground">{completedCount} Completed</strong></span>
         </span>
-        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+        <span className="text-[11px] font-bold text-success bg-success/15 border border-success/30 px-2 py-0.5 rounded-full">
           {clampedProgress >= 75 ? 'Healthy Velocity' : clampedProgress >= 40 ? 'On Track' : 'Mobilizing'}
         </span>
       </div>

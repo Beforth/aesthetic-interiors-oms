@@ -92,7 +92,7 @@ export function Sidebar({ onNavigate, className = '' }) {
             A
           </span>
           <div className="overflow-hidden min-w-0">
-            <div className="text-sm font-semibold text-text-main leading-tight truncate">
+            <div className="text-sm font-semibold text-foreground leading-tight truncate">
               Aesthetic Interiors
             </div>
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">

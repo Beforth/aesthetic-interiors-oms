@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiClient } from '../services/apiClient';
 import { userService } from '../services/userService';
-import { stageService } from '../services/stageService';
 import { roleService } from '../services/roleService';
 import { ROLES, ROLE_LABELS } from '../config/roles';
 import { SYSTEM_PERMISSIONS } from '../config/permissions';
@@ -48,17 +48,20 @@ function firstErrors(errors) {
 export function UsersPage() {
   const toast = useToast();
   const { currentUser, hasPermission } = useAuth();
+  const isOwner =
+    currentUser?.role === 'owner' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === ROLES.ADMIN;
   // What each part of Settings needs (mirrors the list at the top of backend accounts/defaults.py):
-  const canManageUsers = hasPermission('users.manage'); // Users tab: add, edit, activate, delete
-  const canChangeRoles = hasPermission('roles.change'); // create custom roles
-  const canEditStageTemplate = hasPermission('settings.stageTemplate'); // 12-stage master template tab
-  const isAdmin = canManageUsers;
+  const canManageUsers = isOwner || hasPermission('users.manage'); // Users tab: add, edit, activate, delete
+  const canChangeRoles = isOwner || hasPermission('roles.change'); // create custom roles
+  const isAdmin = isOwner || canManageUsers;
 
   // Open the first tab this person is allowed to use
   const [activeTab, setActiveTab] = useState(() => {
-    if (hasPermission('users.manage')) return 'directory';
+    if (hasPermission('users.manage') || isOwner) return 'directory';
     if (hasPermission('roles.change')) return 'roles';
-    return 'stages';
+    return 'directory';
   });
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]); // every role from the server: { key, label, description, permissions, isSystem, userCount }
@@ -116,17 +119,6 @@ export function UsersPage() {
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // Stage Template states (FR-STG-02)
-  const [stageTemplate, setStageTemplate] = useState([]);
-  const [isStageModalOpen, setIsStageModalOpen] = useState(false);
-  const [editingStage, setEditingStage] = useState(null);
-  const [stageFormData, setStageFormData] = useState({
-    name: '',
-    description: '',
-    durationDays: 10,
-    defaultAgencyTrade: '',
-  });
-
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -147,14 +139,6 @@ export function UsersPage() {
     }
   };
 
-  const loadStageTemplate = async () => {
-    try {
-      setStageTemplate(await stageService.getStageTemplate());
-    } catch (err) {
-      toast.error(err.message || 'Failed to load the stage template');
-    }
-  };
-
   // Each part of the page loads only what the signed-in user is allowed to read
   useEffect(() => {
     if (canManageUsers) {
@@ -162,7 +146,6 @@ export function UsersPage() {
     } else {
       setLoading(false);
     }
-    if (canEditStageTemplate) loadStageTemplate();
     if (canManageUsers || canChangeRoles) loadRoles();
   }, []);
 
@@ -403,78 +386,6 @@ export function UsersPage() {
     }
   };
 
-  // Stage Template Handlers (FR-STG-02)
-  const handleOpenAddStage = () => {
-    setEditingStage(null);
-    setStageFormData({
-      name: '',
-      description: '',
-      durationDays: 10,
-      defaultAgencyTrade: '',
-    });
-    setIsStageModalOpen(true);
-  };
-
-  const handleOpenEditStage = (stage) => {
-    setEditingStage(stage);
-    setStageFormData({
-      name: stage.name,
-      description: stage.description,
-      durationDays: stage.durationDays,
-      defaultAgencyTrade: stage.defaultAgencyTrade || '',
-    });
-    setIsStageModalOpen(true);
-  };
-
-  const handleStageSubmit = async (e) => {
-    e.preventDefault();
-    if (!stageFormData.name.trim()) return;
-
-    try {
-      if (editingStage) {
-        const updated = stageTemplate.map((s) =>
-          s.order === editingStage.order
-            ? { ...s, ...stageFormData, durationDays: Number(stageFormData.durationDays) || 7 }
-            : s
-        );
-        setStageTemplate(await stageService.updateStageTemplate(updated));
-      } else {
-        const newStage = {
-          order: stageTemplate.length + 1,
-          ...stageFormData,
-          durationDays: Number(stageFormData.durationDays) || 7,
-        };
-        const updated = [...stageTemplate, newStage];
-        setStageTemplate(await stageService.updateStageTemplate(updated));
-      }
-      setIsStageModalOpen(false);
-      toast.success(editingStage ? `Stage "${stageFormData.name}" updated` : `Stage "${stageFormData.name}" added to template`);
-    } catch (err) {
-      toast.error(err.message || 'Failed to save stage template');
-    }
-  };
-
-  const handleDeleteStage = async (stage) => {
-    const remaining = stageTemplate.filter((s) => s.order !== stage.order);
-    const reordered = remaining.map((s, idx) => ({ ...s, order: idx + 1 }));
-    try {
-      // The server returns the saved template, so the list always shows what was really stored
-      setStageTemplate(await stageService.updateStageTemplate(reordered));
-      toast.success(`Stage "${stage.name}" removed from template`);
-    } catch (err) {
-      toast.error(err.message || 'Failed to remove the stage');
-    }
-  };
-
-  const handleResetDefaultStages = async () => {
-    try {
-      setStageTemplate(await stageService.resetDefaultTemplate());
-      toast.success('Template reset to BeForth 12 canonical stages');
-    } catch (err) {
-      toast.error(err.message || 'Failed to reset the template');
-    }
-  };
-
   const handleToggleStatus = async () => {
     if (!confirmTarget) return;
     setConfirmLoading(true);
@@ -524,7 +435,7 @@ export function UsersPage() {
       key: 'role',
       header: 'Assigned Role',
       render: (u) => (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
           {ROLE_LABELS[u.role] || u.role}
         </span>
       ),
@@ -538,7 +449,7 @@ export function UsersPage() {
       key: 'joinedOn',
       header: 'Joined On',
       render: (u) => (
-        <span className="text-xs text-text-muted">{formatDate(u.joinedOn || u.createdAt)}</span>
+        <span className="text-xs text-muted-foreground">{formatDate(u.joinedOn || u.createdAt)}</span>
       ),
     },
     {
@@ -553,7 +464,7 @@ export function UsersPage() {
             ariaLabel={`View ${u.name}`}
             title="View User Details"
             onClick={() => setViewingUser(u)}
-            className="hover:bg-brand-50 text-brand-700"
+            className="hover:bg-muted text-muted-foreground hover:text-foreground"
           />
 
           {isAdmin && (
@@ -564,7 +475,7 @@ export function UsersPage() {
                 ariaLabel={`Edit ${u.name}`}
                 title="Edit User"
                 onClick={() => handleOpenEdit(u)}
-                className="hover:bg-brand-50 text-brand-700"
+                className="hover:bg-muted text-muted-foreground hover:text-foreground"
               />
 
               {u.id !== currentUser?.id && (
@@ -574,7 +485,7 @@ export function UsersPage() {
                   ariaLabel={`${u.status === 'active' ? 'Deactivate' : 'Reactivate'} ${u.name}`}
                   title={u.status === 'active' ? 'Deactivate User' : 'Reactivate User'}
                   onClick={() => setConfirmTarget(u)}
-                  className="hover:bg-brand-50 text-brand-700"
+                  className="hover:bg-muted text-muted-foreground hover:text-foreground"
                 />
               )}
 
@@ -599,7 +510,7 @@ export function UsersPage() {
     <div className="space-y-4">
       <PageHeader
         title="Settings > Users & Roles"
-        subtitle="Manage personnel records, site access credentials, and master 12-stage sequential template"
+        subtitle="Manage personnel records and site access credentials"
         actions={
           (canChangeRoles || canManageUsers) && (
             <div className="flex items-center gap-2">
@@ -628,7 +539,7 @@ export function UsersPage() {
         }
       />
 
-      {/* Tabs Switcher: each tab appears only for the people allowed to use it */}
+      {/* Tabs Switcher: Users Directory and Roles */}
       <Tabs
         tabs={[
           ...(canManageUsers
@@ -636,9 +547,6 @@ export function UsersPage() {
             : []),
           ...(canManageUsers || canChangeRoles
             ? [{ id: 'roles', label: 'Roles', icon: 'shield', count: roles.length }]
-            : []),
-          ...(canEditStageTemplate
-            ? [{ id: 'stages', label: '12-Stage Master Template', icon: 'layers', count: stageTemplate.length }]
             : []),
         ]}
         activeTab={activeTab}
@@ -738,7 +646,7 @@ export function UsersPage() {
                             ariaLabel={`Edit role ${role.label}`}
                             title="Edit Role"
                             onClick={() => handleOpenEditRole(role)}
-                            className="hover:bg-brand-50 text-brand-700"
+                            className="hover:bg-primary/10 text-primary"
                           />
                           {!role.isSystem && (
                             <IconButton
@@ -747,7 +655,7 @@ export function UsersPage() {
                               ariaLabel={`Delete role ${role.label}`}
                               title="Delete Role"
                               onClick={() => setDeleteRoleTarget(role)}
-                              className="hover:bg-danger-light text-danger"
+                              className="hover:bg-destructive/10 text-destructive"
                             />
                           )}
                         </div>
@@ -766,105 +674,7 @@ export function UsersPage() {
             </table>
           </div>
         </Card>
-      ) : (
-        /* 12-Stage Master Template: Horizontal Pipeline Display with Testimonial Banner & Minimal Animation */
-        <div className="space-y-5">
-          {/* Quality Assurance Testimonial Banner */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-brand-50/50 border border-brand-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-brand-600 text-surface flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                <Icon name="check-circle" size={20} className="text-surface" />
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm italic text-brand-950 font-medium leading-relaxed">
-                  "Our 12-stage sequential blueprint ensures zero site trade clashes and timely handover across all residential and commercial interior spaces."
-                </p>
-                <div className="text-[11px] text-brand-700 font-semibold mt-1">
-                  — Rohit Kumar, Principal Partner & Lead Architect
-                </div>
-              </div>
-            </div>
-
-            {canEditStageTemplate && (
-              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  leadingIcon="refresh"
-                  onClick={handleResetDefaultStages}
-                >
-                  Reset Defaults
-                </Button>
-                <Button
-                  variant="primary"
-                  size="xs"
-                  leadingIcon="plus"
-                  onClick={handleOpenAddStage}
-                >
-                  Add Stage
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Horizontal Sequential Workflow Pipeline */}
-          <Card
-            title="Sequential Execution Roadmap"
-            subtitle="Scroll horizontally to inspect sequential fit-out milestone stages in order of execution"
-          >
-            <div className="flex items-stretch gap-4 overflow-x-auto pb-4 pt-2 px-1 snap-x scrollbar-thin">
-              {stageTemplate.map((stage) => (
-                <div
-                  key={stage.order}
-                  className="min-w-[270px] max-w-[290px] shrink-0 snap-start bg-surface border border-border hover:border-brand-500 rounded-2xl p-4 flex flex-col justify-between hover:-translate-y-1.5 hover:shadow-md transition-all duration-300 ease-out group"
-                >
-                  <div>
-                    {/* Stage Step Badge and Duration */}
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className="w-7 h-7 rounded-lg bg-brand-600 text-surface font-bold text-xs flex items-center justify-center shadow-xs">
-                        {stage.order}
-                      </span>
-                      <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
-                        {stage.durationDays} days
-                      </span>
-                    </div>
-
-                    <h4 className="text-sm font-bold text-text-main group-hover:text-brand-600 transition-colors">
-                      {stage.name}
-                    </h4>
-                    <p className="text-xs text-text-muted mt-1.5 leading-relaxed line-clamp-3">
-                      {stage.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-4 mt-3 border-t border-border/70 flex items-center justify-between">
-                    <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200 truncate max-w-[150px]">
-                      {stage.defaultAgencyTrade || 'General Trade'}
-                    </span>
-                    {canEditStageTemplate && (
-                      <div className="flex items-center gap-1">
-                        <IconButton
-                          icon="edit"
-                          size="xs"
-                          ariaLabel={`Edit stage ${stage.name}`}
-                          onClick={() => handleOpenEditStage(stage)}
-                        />
-                        <IconButton
-                          icon="trash"
-                          size="xs"
-                          ariaLabel={`Delete stage ${stage.name}`}
-                          onClick={() => handleDeleteStage(stage)}
-                          className="hover:bg-danger-light text-danger"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
+      ) : null}
 
       {/* View User Modal */}
       <Modal
@@ -881,13 +691,13 @@ export function UsersPage() {
       >
         {viewingUser && (
           <div className="space-y-4">
-            <div className="flex items-center gap-4 p-3 bg-brand-50/60 rounded-xl border border-border">
+            <div className="flex items-center gap-4 p-3 bg-muted/60 rounded-xl border border-border">
               <Avatar name={viewingUser.name} size="lg" />
               <div>
-                <h3 className="text-base font-bold text-text-main">{viewingUser.name}</h3>
-                <p className="text-xs text-text-muted mt-0.5">{viewingUser.title || 'Team Member'}</p>
+                <h3 className="text-base font-bold text-foreground">{viewingUser.name}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{viewingUser.title || 'Team Member'}</p>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-brand-100 text-brand-800">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary">
                     {ROLE_LABELS[viewingUser.role] || viewingUser.role}
                   </span>
                   <StatusBadge status={viewingUser.status} size="sm" />
@@ -957,6 +767,7 @@ export function UsersPage() {
           <Input
             label="Full Name"
             required
+            leadingIcon="user"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g. Rahul Sharma"
@@ -967,6 +778,7 @@ export function UsersPage() {
             <Input
               label="Email Address"
               required
+              leadingIcon="mail"
               type="email"
               value={formData.email}
               onChange={(e) => {
@@ -987,6 +799,7 @@ export function UsersPage() {
             <Input
               label="Phone Number (10 digits)"
               required
+              leadingIcon="phone"
               type="tel"
               maxLength={10}
               value={formData.phone}
@@ -1008,6 +821,7 @@ export function UsersPage() {
 
           <Select
             label="Assigned System Role"
+            leadingIcon="shield"
             value={formData.role}
             onChange={(e) => setFormData((prev) => ({ ...prev, role: e.target.value }))}
             options={roleSelectOptions}
@@ -1016,17 +830,20 @@ export function UsersPage() {
           />
 
           <Input
-            label={editingUser ? 'Reset Password (optional)' : 'Initial Password'}
+            label={editingUser ? 'Reset Password (optional)' : 'Password'}
+            required={!editingUser}
+            leadingIcon="lock"
             type="text"
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            placeholder={editingUser ? 'Leave blank to keep existing password' : 'At least 8 characters'}
+            placeholder={editingUser ? 'Leave blank to keep existing password' : 'Enter password (min 8 characters)'}
             helperText="At least 8 characters; not too common and not only numbers"
             error={formErrors.password}
           />
 
           <Input
             label="Job Title / Trade Designation"
+            leadingIcon="briefcase"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
             placeholder="e.g. Senior Site Supervisor"
@@ -1034,6 +851,7 @@ export function UsersPage() {
 
           <Input
             label="Internal Notes"
+            leadingIcon="file-text"
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Skills, assigned properties, certifications..."
@@ -1102,10 +920,10 @@ export function UsersPage() {
             <div className="text-xs font-bold text-text-main mb-2">
               Assign Module Permissions ({roleFormData.selectedPermissions.length} selected):
             </div>
-            <div className="space-y-3 max-h-60 overflow-y-auto p-2 bg-brand-50/50 rounded border border-border">
+            <div className="space-y-3 max-h-60 overflow-y-auto p-2 bg-muted/50 rounded border border-border">
               {PERMISSION_GROUPS.map((grp) => (
                 <div key={grp.category} className="space-y-1">
-                  <div className="text-[11px] font-bold text-brand-700 uppercase tracking-wider">
+                  <div className="text-[11px] font-bold text-primary uppercase tracking-wider">
                     {grp.category}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-2">
@@ -1134,58 +952,6 @@ export function UsersPage() {
               ))}
             </div>
           </div>
-        </form>
-      </Modal>
-
-      {/* Stage Edit/Add Modal */}
-      <Modal
-        isOpen={isStageModalOpen}
-        onClose={() => setIsStageModalOpen(false)}
-        title={editingStage ? `Edit Stage: ${editingStage.name}` : 'Add Stage to Master Template'}
-        subtitle="Configure stage duration, description, and default subcontractor trade"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setIsStageModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleStageSubmit}>
-              {editingStage ? 'Save Changes' : 'Add Stage'}
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleStageSubmit} className="space-y-4">
-          <Input
-            label="Stage Name"
-            required
-            value={stageFormData.name}
-            onChange={(e) => setStageFormData({ ...stageFormData, name: e.target.value })}
-            placeholder="e.g. Acoustic Wood Cladding"
-          />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Standard Duration (Days)"
-              required
-              type="number"
-              value={stageFormData.durationDays}
-              onChange={(e) => setStageFormData({ ...stageFormData, durationDays: e.target.value })}
-            />
-
-            <Input
-              label="Default Trade Agency Type"
-              value={stageFormData.defaultAgencyTrade}
-              onChange={(e) => setStageFormData({ ...stageFormData, defaultAgencyTrade: e.target.value })}
-              placeholder="e.g. Carpentry, Glass, Painting"
-            />
-          </div>
-
-          <Input
-            label="Scope Description"
-            value={stageFormData.description}
-            onChange={(e) => setStageFormData({ ...stageFormData, description: e.target.value })}
-            placeholder="Detailed scope of works for site artisans..."
-          />
         </form>
       </Modal>
 

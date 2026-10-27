@@ -184,7 +184,7 @@ export function AppRoutes() {
         <Route
           path="settings/users"
           element={
-            <RoleRoute permissions={['users.manage', 'roles.change', 'settings.stageTemplate']}>
+            <RoleRoute permissions={['users.manage', 'roles.change']}>
               <UsersPage />
             </RoleRoute>
           }
