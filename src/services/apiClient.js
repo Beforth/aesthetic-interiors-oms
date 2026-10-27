@@ -130,8 +130,10 @@ export async function apiRequest(endpoint, options = {}) {
   const { _retried, ...fetchOptions } = options;
   const url = resolveUrl(endpoint);
 
+  // A file upload (FormData) sets its own Content-Type, with the multipart boundary.
+  const isUpload = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isUpload ? {} : { 'Content-Type': 'application/json' }),
     Accept: 'application/json',
     ...(fetchOptions.headers || {}),
   };

@@ -6,6 +6,7 @@ import { projectService } from '../services/projectService';
 import { taskService } from '../services/taskService';
 import { attendanceService } from '../services/attendanceService';
 import { userService } from '../services/userService';
+import { dashboardService } from '../services/dashboardService';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { calculateProgress } from '../utils/progress';
 import { useToast } from '../context/ToastContext';
@@ -35,16 +36,19 @@ export function DashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const [projList, taskList, attList, userList] = await Promise.all([
+      const [projList, taskList, attList, userList, summary] = await Promise.all([
         projectService.getAllProjects(currentUser),
         taskService.getAllTasks(),
         attendanceService.getTodayAttendance(),
         userService.getAllUsers(),
+        dashboardService.getSummary().catch(() => null),
       ]);
       setProjects(projList || []);
       setTasks(taskList || []);
       setAttendance(attList || []);
-      setUsers(userList || []);
+      // The team directory has no birthdays; the backend's dashboard numbers carry them for this month.
+      const birthdays = new Map((summary?.birthdays || []).map((b) => [String(b.userId), b.birthday]));
+      setUsers((userList || []).map((u) => (u.birthday ? u : { ...u, birthday: birthdays.get(String(u.id)) })));
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {

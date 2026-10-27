@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLE_LABELS } from '../config/roles';
@@ -20,6 +20,9 @@ import {
   compressImage,
 } from '../utils/dsr';
 import { validateRequired } from '../utils/validators';
+import { isDebug } from '../config/env';
+import { dsrService } from '../services/dsrService';
+import { projectService } from '../services/projectService';
 
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
@@ -187,6 +190,7 @@ export function DailyReportsPage() {
 
   // Initial load with localStorage support
   const [entries, setEntries] = useState(() => {
+    if (!isDebug()) return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -210,10 +214,12 @@ export function DailyReportsPage() {
   const updateEntries = (updater) => {
     setEntries((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch (err) {
-        console.warn('Failed to save to localStorage:', err);
+      if (isDebug()) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        } catch (err) {
+          console.warn('Failed to save to localStorage:', err);
+        }
       }
       return next;
     });
@@ -223,6 +229,33 @@ export function DailyReportsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showMore, setShowMore] = useState(false);
+
+  // With the backend on, the entries are fetched for the dates on screen and refetched after every change.
+  const live = !isDebug();
+  const [projectList, setProjectList] = useState([]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const refresh = () => setReloadKey((n) => n + 1);
+  const shown = rangeFor(filters);
+  useEffect(() => {
+    if (!live) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [rows, projectRows] = await Promise.all([
+          dsrService.listEntries({ from: shown.start, to: shown.end, everyone: canViewAll }),
+          projectService.getAllProjects(currentUser),
+        ]);
+        if (cancelled) return;
+        setEntries(rows);
+        setProjectList(projectRows.map((p) => ({ id: p.id, name: p.name })));
+      } catch (err) {
+        if (!cancelled) toast.error(err.message || 'Could not load the daily reports');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [live, shown.start, shown.end, canViewAll, reloadKey]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -251,6 +284,9 @@ export function DailyReportsPage() {
    *    Lower priority person CANNOT see higher priority person DSR.
    */
   const canUserViewEntry = (e) => {
+    // with the backend on, the server has already sent only what this person may see
+    if (live) return true;
+
     // 1. Own entries are always visible to the author
     if (e.authorName === me || (myId && String(e.authorId) === myId)) {
       return true;
@@ -295,7 +331,8 @@ export function DailyReportsPage() {
   const multiple = selectedPeople.length > 1;
 
   // Edit / delete permissions: can change own or if admin
-  const canChange = (e) => isAdmin || e.authorName === me || (myId && String(e.authorId) === myId);
+  const canChange = (e) =>
+    live ? e.canEdit === true : isAdmin || e.authorName === me || (myId && String(e.authorId) === myId);
 
   const setFilter = (key, value) => {
     setFilters((prev) => {
@@ -322,8 +359,13 @@ export function DailyReportsPage() {
   };
 
   const projects = useMemo(
-    () => [...new Set([...DSR_PROJECTS, ...accessibleEntries.map((e) => e.project)])],
-    [accessibleEntries]
+    () => [
+      ...new Set([
+        ...(live ? [NO_PROJECT, ...projectList.map((p) => p.name)] : DSR_PROJECTS),
+        ...accessibleEntries.map((e) => e.project),
+      ]),
+    ],
+    [accessibleEntries, projectList, live]
   );
 
   const filtered = useMemo(() => {
@@ -399,7 +441,7 @@ export function DailyReportsPage() {
 
   const closeForm = () => setFormOpen(false);
 
-  const submitForm = (e) => {
+  const submitForm = async (e) => {
     e.preventDefault();
     const found = {};
     const taskError = validateRequired(form.task, 'What you worked on', 3);
@@ -419,6 +461,24 @@ export function DailyReportsPage() {
       note: form.note.trim(),
       attachments: form.attachments || [],
     };
+
+    if (live) {
+      try {
+        if (editing) {
+          await dsrService.updateEntry(editing.id, values, projectList);
+          toast.success('Entry updated');
+        } else {
+          await dsrService.createEntry(values, projectList);
+          clearFilters();
+          toast.success('Work added');
+        }
+        setFormOpen(false);
+        refresh();
+      } catch (err) {
+        toast.error(err.message || 'Could not save the entry');
+      }
+      return;
+    }
 
     if (editing) {
       updateEntries((prev) =>
@@ -443,7 +503,18 @@ export function DailyReportsPage() {
     setFormOpen(false);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
+    if (live) {
+      try {
+        await dsrService.deleteEntry(deleting.id);
+        toast.success('Entry deleted');
+        refresh();
+      } catch (err) {
+        toast.error(err.message || 'Could not delete the entry');
+      }
+      setDeleting(null);
+      return;
+    }
     updateEntries((prev) => prev.filter((x) => x.id !== deleting.id));
     setDeleting(null);
     toast.success('Entry deleted');
@@ -469,6 +540,12 @@ export function DailyReportsPage() {
 
   const handleConfirmDeletePhoto = () => {
     if (!deletingPhoto) return;
+    if (live) {
+      // decision of the team leader: once uploaded, a photo cannot be changed or removed by anyone
+      toast.error('Photos cannot be edited or deleted once they are uploaded');
+      setDeletingPhoto(null);
+      return;
+    }
     const { entry, photo } = deletingPhoto;
 
     updateEntries((prev) =>
@@ -502,6 +579,25 @@ export function DailyReportsPage() {
   const handleDirectPhotoUpload = async (e, targetEntry) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    if (live) {
+      try {
+        const picked = [];
+        for (const file of Array.from(files)) {
+          const processed = await compressImage(file, 1400, 0.82);
+          picked.push({ id: `att-${Date.now()}-${picked.length}`, caption: '', ...processed });
+        }
+        const saved = await dsrService.addPhotos(targetEntry.id, picked, targetEntry);
+        if (viewing && viewing.id === targetEntry.id) setViewing(saved);
+        toast.success(`Attached ${picked.length} new photo${picked.length > 1 ? 's' : ''}`);
+        refresh();
+      } catch (err) {
+        toast.error(err.message || 'Failed to attach photos');
+      } finally {
+        e.target.value = '';
+      }
+      return;
+    }
 
     try {
       const newAtts = [];

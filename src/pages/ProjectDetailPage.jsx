@@ -352,8 +352,8 @@ export function ProjectDetailPage() {
     };
 
     const newStagesList = [...stages, newStage];
-    await projectService.updateProjectStages(project.id, newStagesList);
-    setProject((prev) => ({ ...prev, stages: newStagesList }));
+    const saved = await projectService.updateProjectStages(project.id, newStagesList);
+    setProject((prev) => ({ ...prev, stages: saved?.stages || newStagesList }));
     setIsAddStageOpen(false);
     toast.success(`Added stage "${newStage.name}" to project!`);
   };
@@ -364,8 +364,8 @@ export function ProjectDetailPage() {
     const { id: stageId, name: stageName } = stagePendingDelete;
     setStagePendingDelete(null);
     const filtered = stages.filter((s) => s.id !== stageId);
-    await projectService.updateProjectStages(project.id, filtered);
-    setProject((prev) => ({ ...prev, stages: filtered }));
+    const saved = await projectService.updateProjectStages(project.id, filtered);
+    setProject((prev) => ({ ...prev, stages: saved?.stages || filtered }));
     toast.success(`Removed stage "${stageName}"`);
   };
 
@@ -381,8 +381,8 @@ export function ProjectDetailPage() {
 
     // Recalculate order index
     const updated = reordered.map((s, idx) => ({ ...s, order: idx + 1 }));
-    await projectService.updateProjectStages(project.id, updated);
-    setProject((prev) => ({ ...prev, stages: updated }));
+    const saved = await projectService.updateProjectStages(project.id, updated);
+    setProject((prev) => ({ ...prev, stages: saved?.stages || updated }));
   };
 
   const overviewItems = [

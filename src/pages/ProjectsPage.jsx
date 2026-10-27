@@ -1045,9 +1045,9 @@ export function ProjectsPage() {
         const updatedStages = proj.stages.filter(
           (s) => s.id !== stageId && s.name !== stageName
         );
-        await projectService.updateProjectStages(projectId, updatedStages);
+        const saved = await projectService.updateProjectStages(projectId, updatedStages);
         setProjects((prev) =>
-          prev.map((p) => (p.id === projectId ? { ...p, stages: updatedStages } : p))
+          prev.map((p) => (p.id === projectId ? { ...p, stages: saved?.stages || updatedStages } : p))
         );
         toast.success(`Stage "${stageName}" removed from ${projectName}`);
       }
@@ -1305,11 +1305,11 @@ export function ProjectsPage() {
     });
 
     try {
-      await projectService.updateProjectStages(projectId, updatedStages);
+      const saved = await projectService.updateProjectStages(projectId, updatedStages);
       setProjects((prev) =>
         prev.map((p) =>
           p.id === projectId
-            ? { ...p, stages: updatedStages, status: 'in progress' }
+            ? { ...p, stages: saved?.stages || updatedStages, status: 'in progress' }
             : p
         )
       );

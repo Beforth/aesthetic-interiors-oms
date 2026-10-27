@@ -1,6 +1,7 @@
 import { ROLES } from '../config/roles';
 import { apiClient, USER_KEY } from './apiClient';
 import { mockClients } from '../data/clients';
+import { withBackend, pick } from './serviceMode';
 
 const STORAGE_KEY = 'osm_clients_v2';
 
@@ -49,7 +50,7 @@ function saveClients(clients) {
   }
 }
 
-export const clientService = {
+const mockClientService = {
   async getAllClients(user) {
     return apiClient.execute(async () => {
       const currentUser = getCurrentUser(user);
@@ -188,5 +189,64 @@ export const clientService = {
     }, 'Clients batch imported successfully');
   },
 };
+
+const CLIENT_URL = '/clients/clients/';
+
+function fromApiClient(client) {
+  // the pages also read `status` ('new' or 'old'), which is the same as `type`
+  return client ? { ...client, status: client.type } : client;
+}
+
+function toApiClient(data) {
+  const body = pick(data, ['name', 'phone', 'email', 'address', 'notes']);
+  const type = data.type || data.status;
+  if (type) body.type = type;
+  return body;
+}
+
+function announceClient(name, detail) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
+const liveClientService = {
+  async getAllClients() {
+    return (await apiClient.getAll(CLIENT_URL)).map(fromApiClient);
+  },
+
+  async getClientById(id) {
+    try {
+      return fromApiClient(await apiClient.get(`${CLIENT_URL}${id}/`));
+    } catch (err) {
+      if (err.status === 404) return null;
+      throw err;
+    }
+  },
+
+  async createClient(clientData) {
+    const created = fromApiClient(await apiClient.post(CLIENT_URL, toApiClient(clientData)));
+    announceClient('osm_client_updated', created);
+    return created;
+  },
+
+  async updateClient(id, updateData) {
+    const updated = fromApiClient(await apiClient.patch(`${CLIENT_URL}${id}/`, toApiClient(updateData)));
+    announceClient('osm_client_updated', updated);
+    return updated;
+  },
+
+  async deleteClient(id) {
+    await apiClient.delete(`${CLIENT_URL}${id}/`);
+    announceClient('osm_client_deleted', { id });
+    return true;
+  },
+
+  async importClients(importedList = []) {
+    const rows = importedList.map((row) => pick(row, ['name', 'phone', 'email', 'address', 'notes', 'type']));
+    const result = await apiClient.post(`${CLIENT_URL}import/`, { clients: rows });
+    return { importedCount: result.importedCount, skippedCount: result.skippedCount, skipped: result.skipped };
+  },
+};
+
+export const clientService = withBackend(mockClientService, liveClientService);
 
 export default clientService;
