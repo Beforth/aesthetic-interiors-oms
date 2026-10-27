@@ -8,7 +8,8 @@
  * 5. The ONLY place in the application that clears session on 401 Unauthorized.
  */
 
-export const API_BASE = '/api/v1';
+// VITE_API_URL (e.g. https://api.example.com) is for builds served apart from the backend; in dev the Vite proxy handles it.
+export const API_BASE = `${import.meta.env.PROD ? (import.meta.env.VITE_API_URL || '') : ''}/api/v1`;
 export const AUTH_PREFIX = 'osm.auth.';
 export const TOKEN_KEY = `${AUTH_PREFIX}token`;
 export const REFRESH_TOKEN_KEY = `${AUTH_PREFIX}refresh_token`;
