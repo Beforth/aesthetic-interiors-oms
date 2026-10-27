@@ -14,7 +14,8 @@ export function withBackend(mock, live) {
   names.forEach((name) => {
     service[name] = (...args) => {
       if (!isDebug() && typeof live[name] === 'function') return live[name].apply(service, args);
-      return mock[name].apply(service, args);
+      // a method with no mock (the new report tabs) gives nothing, and the page keeps its sample rows
+      return typeof mock[name] === 'function' ? mock[name].apply(service, args) : Promise.resolve(null);
     };
   });
   return service;
