@@ -32,7 +32,6 @@ export function DashboardPage() {
   const [users, setUsers] = useState(mockUsers);
   const [loading, setLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [trackerTab, setTrackerTab] = useState('leaderboard'); // 'leaderboard' | 'cards'
 
   const loadDashboardData = async () => {
     try {
@@ -347,32 +346,6 @@ export function DashboardPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* View Switcher Toggle */}
-                <div className="flex items-center gap-1 bg-brand-50 p-0.5 rounded-lg border border-brand-200">
-                  <button
-                    type="button"
-                    onClick={() => setTrackerTab('leaderboard')}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                      trackerTab === 'leaderboard'
-                        ? 'bg-white text-brand-700 shadow-2xs'
-                        : 'text-text-muted hover:text-text-main'
-                    }`}
-                  >
-                    Leaderboard
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTrackerTab('cards')}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                      trackerTab === 'cards'
-                        ? 'bg-white text-brand-700 shadow-2xs'
-                        : 'text-text-muted hover:text-text-main'
-                    }`}
-                  >
-                    Stage Cards
-                  </button>
-                </div>
-
                 <Link
                   to="/projects"
                   className="text-xs text-brand-600 hover:text-brand-700 font-semibold underline-offset-2 hover:underline self-start sm:self-auto cursor-pointer"
@@ -386,89 +359,14 @@ export function DashboardPage() {
               <div className="p-8 text-center text-xs text-text-muted bg-brand-50/50 rounded-xl">
                 No active projects found.
               </div>
-            ) : trackerTab === 'leaderboard' ? (
-              <Leaderboard
-                items={projectLeaderboardItems}
-                format={(val) => `${val}% Done`}
-                maxValue={100}
-                className="gap-2.5"
-              />
             ) : (
-              <div className="space-y-3.5">
-                {activeProjects.map((proj) => {
-                  const projProgress = calculateProgress(proj.stages || []);
-                  const currentStage = (proj.stages || []).find((s) => s.status === 'in progress') ||
-                    (proj.stages || []).find((s) => s.status === 'pending') || {
-                      name: 'Stage Initiation',
-                      order: 1,
-                    };
-
-                  return (
-                    <div
-                      key={proj.id}
-                      className="p-4 rounded-xl border border-border bg-surface hover:border-indigo-400 transition-all space-y-3 shadow-2xs"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Link
-                              to={`/projects/${proj.id}`}
-                              className="text-sm font-bold text-text-main hover:text-indigo-600 transition-colors truncate cursor-pointer"
-                            >
-                              {proj.name}
-                            </Link>
-                            <StatusBadge status={proj.status} size="sm" />
-                          </div>
-                          <p className="text-xs text-text-muted mt-0.5 truncate">
-                            Client: <span className="font-medium text-text-main">{proj.clientName}</span>
-                            {proj.siteAddress && ` • ${proj.siteAddress}`}
-                          </p>
-                        </div>
-
-                        <div className="text-right sm:shrink-0">
-                          <span className="text-xs font-mono font-bold text-text-main">
-                            {formatCurrency(proj.totalCost || proj.budget || 0)}
-                          </span>
-                          <div className="text-[11px] text-text-muted">Contract Value</div>
-                        </div>
-                      </div>
-
-                      {/* Process Stage Stepper & Metric Info */}
-                      <div className="p-2.5 rounded-lg bg-brand-50/50 border border-border/80 flex flex-col sm:flex-row sm:items-between justify-between gap-2 text-xs">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded text-[11px]">
-                            Stage {currentStage.order || '1'}
-                          </span>
-                          <span className="font-semibold text-text-main truncate">
-                            {currentStage.name}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-3 text-text-muted text-[11px] shrink-0">
-                          <span>Target: {formatDate(proj.endDate)}</span>
-                          <span>•</span>
-                          <span className="font-bold text-indigo-700">{projProgress}% Done</span>
-                        </div>
-                      </div>
-
-                      {/* Progress Bar (Solid Color) */}
-                      <div className="space-y-1">
-                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              projProgress >= 75
-                                ? 'bg-emerald-600'
-                                : projProgress >= 40
-                                ? 'bg-indigo-600'
-                                : 'bg-amber-500'
-                            }`}
-                            style={{ width: `${projProgress}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="max-h-[385px] overflow-y-auto pr-1 scrollbar-thin">
+                <Leaderboard
+                  items={projectLeaderboardItems}
+                  format={(val) => `${val}% Done`}
+                  maxValue={100}
+                  className="gap-2.5"
+                />
               </div>
             )}
           </div>

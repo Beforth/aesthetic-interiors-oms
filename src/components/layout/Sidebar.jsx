@@ -10,7 +10,9 @@ import {
   SidebarItem,
   SidebarFooter,
   SidebarTrigger,
+  useSidebar,
 } from '../ui/sidebar';
+import { cn } from '../../lib/utils';
 import Icon from '../ui/Icon';
 import { LogOutIcon } from '../ui/icons';
 
@@ -25,6 +27,8 @@ import { LogOutIcon } from '../ui/icons';
  */
 export function Sidebar({ onNavigate, className = '' }) {
   const { hasPermission, logout } = useAuth();
+  const { collapsed, isMobile } = useSidebar();
+  const isCollapsed = !isMobile && collapsed;
   const navigate = useNavigate();
   const location = useLocation();
   const navItems = getNavigationForUser(hasPermission);
@@ -86,20 +90,22 @@ export function Sidebar({ onNavigate, className = '' }) {
   return (
     <SidebarPrimitive className={className}>
       {/* Brand Header */}
-      <SidebarHeader className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
-            A
-          </span>
-          <div className="overflow-hidden min-w-0">
-            <div className="text-sm font-semibold text-foreground leading-tight truncate">
-              Aesthetic Interiors
-            </div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
-              Operations System
+      <SidebarHeader className={cn('flex items-center', isCollapsed ? 'justify-center px-2' : 'justify-between gap-2')}>
+        {!isCollapsed && (
+          <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+              A
+            </span>
+            <div className="overflow-hidden min-w-0">
+              <div className="text-sm font-semibold text-foreground leading-tight truncate">
+                Aesthetic Interiors
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
+                Operations System
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="flex items-center shrink-0">
           <SidebarTrigger />
         </div>

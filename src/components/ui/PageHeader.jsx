@@ -18,9 +18,12 @@ export function PageHeader({
   actions,
   className = '',
 }) {
-  // Defensively filter out redundant 'Operations' breadcrumb root across any screen
+  // Defensively filter out redundant 'Operations' or 'HRMS' breadcrumb root across any screen
   const visibleBreadcrumbs = breadcrumbs?.filter(
-    (b) => b?.label && b.label.toLowerCase() !== 'operations'
+    (b) =>
+      b?.label &&
+      b.label.toLowerCase() !== 'operations' &&
+      b.label.toLowerCase() !== 'hrms'
   );
 
   return (

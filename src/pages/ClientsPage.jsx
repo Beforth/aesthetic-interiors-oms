@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
 import { formatDate } from '../utils/formatters';
 import { validatePhone, sanitizePhone, validateEmail, validateRequired } from '../utils/validators';
+import { cn } from '../lib/utils';
 
 import PageHeader from '../components/ui/PageHeader';
 import DataToolbar from '../components/ui/DataToolbar';
@@ -68,6 +69,9 @@ export function ClientsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Small Associated Sites Popup State
+  const [sitesPopupClient, setSitesPopupClient] = useState(null);
+
   const fetchClientsAndProjects = async () => {
     setLoading(true);
     try {
@@ -118,7 +122,7 @@ export function ClientsPage() {
         (p) => p.status === 'completed' || p.status === 'done'
       ).length;
 
-      map[c.id] = { total: clientProjs.length, active, completed };
+      map[c.id] = { total: clientProjs.length, active, completed, items: clientProjs };
     });
     return map;
   }, [clients, projects]);
@@ -383,12 +387,22 @@ export function ClientsPage() {
     {
       key: 'name',
       header: 'Client Name',
+      width: '260px',
+      className: 'w-[260px] max-w-[280px]',
+      cellClassName: 'max-w-[280px]',
       render: (c) => (
-        <div className="flex items-center gap-3">
-          <Avatar name={c.name} size="sm" />
-          <div className="min-w-0">
-            <div className="font-semibold text-text-main truncate">{c.name}</div>
-            <div className="text-xs text-text-muted truncate">{c.email || 'No email registered'}</div>
+        <div className="flex items-start gap-3 w-full max-w-[260px]">
+          <Avatar name={c.name} size="sm" className="shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <div
+              className="font-semibold text-text-main leading-snug break-words [overflow-wrap:anywhere]"
+              title={c.name}
+            >
+              {c.name}
+            </div>
+            <div className="text-xs text-text-muted truncate mt-0.5" title={c.email || ''}>
+              {c.email || 'No email registered'}
+            </div>
           </div>
         </div>
       ),
@@ -396,11 +410,13 @@ export function ClientsPage() {
     {
       key: 'phone',
       header: 'Phone Number',
+      className: 'whitespace-nowrap w-[130px]',
+      cellClassName: 'whitespace-nowrap w-[130px]',
       render: (c) => (
         <a
           href={`tel:${c.phone}`}
           onClick={(e) => e.stopPropagation()}
-          className="font-mono text-xs text-foreground hover:text-primary underline-offset-2 hover:underline"
+          className="font-mono text-xs text-foreground hover:text-primary underline-offset-2 hover:underline whitespace-nowrap block"
         >
           {c.phone}
         </a>
@@ -409,8 +425,11 @@ export function ClientsPage() {
     {
       key: 'address',
       header: 'Site Address',
+      width: '180px',
+      className: 'max-w-[190px]',
+      cellClassName: 'max-w-[190px]',
       render: (c) => (
-        <span className="text-xs text-muted-foreground truncate max-w-xs block" title={c.address}>
+        <span className="text-xs text-muted-foreground truncate max-w-[180px] block" title={c.address}>
           {c.address || 'Bengaluru, Karnataka'}
         </span>
       ),
@@ -419,60 +438,52 @@ export function ClientsPage() {
       key: 'projects',
       header: 'Associated Projects',
       align: 'center',
+      className: 'whitespace-nowrap text-center w-[130px]',
+      cellClassName: 'whitespace-nowrap text-center w-[130px]',
       render: (c) => {
-        const stats = projectStatsMap[c.id] || { total: 0, active: 0, completed: 0 };
+        const stats = projectStatsMap[c.id] || { total: 0, items: [] };
         if (stats.total === 0) {
-          return <span className="text-xs text-muted-foreground italic">No sites linked</span>;
+          return <span className="text-xs text-muted-foreground italic">-</span>;
         }
 
         return (
-          <div className="flex flex-col items-center gap-1">
-            <div className="inline-flex items-center gap-1.5 flex-wrap justify-center max-w-[200px]">
-              {stats.active > 0 && (
-                <span
-                  title={`${stats.active} live fit-out project${stats.active > 1 ? 's' : ''}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-success/15 text-success border border-success/30 shadow-2xs"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                  {stats.active} {stats.active === 1 ? 'active' : 'active sites'}
-                </span>
-              )}
-              {stats.completed > 0 && (
-                <span
-                  title={`${stats.completed} delivered fit-out contract${stats.completed > 1 ? 's' : ''}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-info/10 text-info border border-info/30"
-                >
-                  <Icon name="check" size={11} className="stroke-[2.5]" />
-                  {stats.completed} {stats.completed === 1 ? 'done' : 'completed'}
-                </span>
-              )}
-            </div>
-            {stats.total > 1 && (
-              <span className="text-[10px] text-muted-foreground font-mono font-medium">
-                {stats.total} total
-              </span>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSitesPopupClient({
+                clientName: c.name,
+                sites: stats.items,
+              });
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 transition-colors cursor-pointer shadow-2xs"
+            title="Click to view associated sites"
+          >
+            <span>{stats.total} {stats.total === 1 ? 'Site' : 'Sites'}</span>
+            <Icon name="chevron-down" size={11} className="text-brand-500" />
+          </button>
         );
       },
     },
     {
       key: 'type',
       header: 'Client Status',
+      className: 'whitespace-nowrap w-[110px]',
+      cellClassName: 'whitespace-nowrap w-[110px]',
       render: (c) => {
         const isOld = c.type === 'old' || c.status === 'old';
         return (
-          <StatusBadge
-            status={isOld ? 'converted' : 'new'}
-            label={isOld ? 'Existing (Old) Client' : 'New Client'}
-            size="sm"
-          />
+          <span className="text-xs font-medium text-foreground whitespace-nowrap">
+            {isOld ? 'Old Client' : 'New Client'}
+          </span>
         );
       },
     },
     {
       key: 'createdAt',
       header: 'Onboarding Date',
+      className: 'whitespace-nowrap w-[120px]',
+      cellClassName: 'whitespace-nowrap w-[120px]',
       render: (c) => (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {formatDate(c.createdAt)}
@@ -483,6 +494,8 @@ export function ClientsPage() {
       key: 'actions',
       header: 'Actions',
       align: 'right',
+      className: 'whitespace-nowrap text-right w-[110px]',
+      cellClassName: 'whitespace-nowrap text-right w-[110px]',
       render: (c) => (
         <div
           className="flex items-center justify-end gap-1"
@@ -491,7 +504,7 @@ export function ClientsPage() {
           <IconButton
             icon="eye"
             size="sm"
-            ariaLabel={`View client ${c.name}`}
+            ariaLabel="View Details"
             title="View Details"
             onClick={() => navigate(`/clients/${c.id}`)}
             className="hover:bg-primary/10 text-primary"
@@ -501,16 +514,16 @@ export function ClientsPage() {
               <IconButton
                 icon="edit"
                 size="sm"
-                ariaLabel={`Edit client ${c.name}`}
-                title="Edit Client"
+                ariaLabel="Edit"
+                title="Edit"
                 onClick={(e) => handleOpenEdit(c, e)}
                 className="hover:bg-primary/10 text-primary"
               />
               <IconButton
                 icon="trash"
                 size="sm"
-                ariaLabel={`Delete client ${c.name}`}
-                title="Delete Client"
+                ariaLabel="Delete"
+                title="Delete"
                 onClick={(e) => handleOpenDelete(c, e)}
                 className="hover:bg-destructive/10 text-destructive"
               />
@@ -542,7 +555,7 @@ export function ClientsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Clients"
-        subtitle="Residential & commercial clients directory, site history, and project linkages"
+        subtitle="Client directory and project contacts"
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button
@@ -555,17 +568,15 @@ export function ClientsPage() {
               Export
             </Button>
 
-            <PermissionGate permission="clients.import">
-              <Button
-                variant="outline"
-                size="sm"
-                leadingIcon="upload"
-                onClick={() => setIsImportOpen(true)}
-                title="Import client records from spreadsheet"
-              >
-                Import
-              </Button>
-            </PermissionGate>
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon="upload"
+              onClick={() => setIsImportOpen(true)}
+              title="Import client records from spreadsheet"
+            >
+              Import
+            </Button>
 
             <PermissionGate permission="clients.manage">
               <Button
@@ -664,8 +675,6 @@ export function ClientsPage() {
                 <option value="date_asc">Oldest Registered</option>
                 <option value="name_asc">Name (A → Z)</option>
                 <option value="name_desc">Name (Z → A)</option>
-                <option value="projects_desc">Most Projects</option>
-                <option value="projects_asc">Least Projects</option>
               </select>
             </div>
 
@@ -727,16 +736,17 @@ export function ClientsPage() {
             </div>
           </div>
 
-          {/* Reset Filters button */}
+          {/* Clear Filters button - visible only when filters are active */}
           {hasActiveFilters && (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleResetFilters}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium underline underline-offset-2"
+              leadingIcon="x"
+              className="text-xs font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40 transition-colors"
             >
-              <Icon name="rotate-ccw" size={12} />
-              Reset filters
-            </button>
+              Clear
+            </Button>
           )}
         </div>
       </div>
@@ -887,6 +897,61 @@ export function ClientsPage() {
         confirmVariant="danger"
         loading={deleteLoading}
       />
+
+      {/* Small Associated Sites Popup Modal */}
+      {sitesPopupClient && (
+        <Modal
+          isOpen={Boolean(sitesPopupClient)}
+          onClose={() => setSitesPopupClient(null)}
+          title={`Associated Sites (${sitesPopupClient.sites.length})`}
+          subtitle={`Fit-out projects linked to ${sitesPopupClient.clientName}`}
+          size="sm"
+          footer={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSitesPopupClient(null)}
+            >
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
+            {sitesPopupClient.sites.map((site) => (
+              <div
+                key={site.id}
+                onClick={() => {
+                  setSitesPopupClient(null);
+                  navigate(`/projects/${site.id}`);
+                }}
+                className="p-2.5 rounded-xl border border-border bg-card hover:bg-muted/50 hover:border-brand-300 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                    {site.name}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                    {site.siteAddress || site.clientName || 'Interior Fit-Out Site'}
+                  </p>
+                </div>
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'px-2 py-0.5 rounded-full text-[10px] font-semibold border',
+                      site.status === 'completed' || site.status === 'done'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-brand-50 text-brand-700 border-brand-200'
+                    )}
+                  >
+                    {site.status === 'completed' || site.status === 'done' ? 'Completed' : 'Active'}
+                  </span>
+                  <Icon name="chevron-right" size={13} className="text-muted-foreground group-hover:text-primary transition-colors" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

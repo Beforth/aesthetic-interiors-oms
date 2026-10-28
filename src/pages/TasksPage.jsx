@@ -34,6 +34,8 @@ import {
   AlertCircleIcon,
   CheckCircleIcon,
   ClockIcon,
+  EyeIcon,
+  ArrowLeftIcon,
 } from '../components/ui/icons';
 
 /**
@@ -85,7 +87,7 @@ function ProjectSearchSelect({
     <div ref={containerRef} className="relative w-full z-20">
       <div
         className={cn(
-          'relative flex items-center w-full rounded-md border bg-background text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] transition-colors h-9 px-2.5 gap-2 cursor-pointer',
+          'relative flex items-center w-full rounded-lg border bg-background text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] transition-colors h-9 px-2.5 gap-2 cursor-pointer',
           isOpen ? 'border-ring ring-2 ring-ring/20' : 'border-border hover:border-muted-foreground/40'
         )}
         onClick={() => {
@@ -155,7 +157,7 @@ function ProjectSearchSelect({
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-60 overflow-y-auto rounded-lg border border-border bg-card text-card-foreground shadow-xl p-1">
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[185px] overflow-y-auto scrollbar-thin rounded-lg border border-border bg-card text-card-foreground shadow-xl p-1">
           <button
             type="button"
             onClick={() => handleSelect('ALL', '')}
@@ -201,6 +203,234 @@ function ProjectSearchSelect({
   );
 }
 
+/**
+ * Custom 5-item scrollable select for Assigned Project in Task Creation form
+ */
+function FormProjectSelect({ label = 'Assigned Project', required, error, value, onChange, projects = [] }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedProj = projects.find((p) => String(p.id) === String(value));
+  const filtered = projects.filter((p) =>
+    (p.name || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div ref={ref} className="relative space-y-1.5">
+      <label className="block text-xs font-medium text-foreground">
+        {label} {required && <span className="text-destructive">*</span>}
+      </label>
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={cn(
+          'w-full h-9 rounded-lg border bg-background px-3 text-xs flex items-center justify-between text-left transition-colors cursor-pointer',
+          error
+            ? 'border-destructive ring-1 ring-destructive'
+            : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
+        )}
+      >
+        <span className={cn('truncate', !selectedProj && 'text-muted-foreground')}>
+          {selectedProj?.name || 'Select a project'}
+        </span>
+        <ChevronDownIcon
+          className={cn('size-3.5 text-muted-foreground transition-transform shrink-0 ml-2', isOpen && 'rotate-180')}
+        />
+      </button>
+
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border border-border bg-card text-card-foreground shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          {projects.length > 5 && (
+            <div className="p-1.5 border-b border-border bg-muted/30">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-background rounded-md border border-border">
+                <SearchIcon className="size-3 text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search project..."
+                  className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  autoFocus
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-[185px] overflow-y-auto scrollbar-thin p-1 space-y-0.5">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground italic text-center">
+                No matching projects
+              </div>
+            ) : (
+              filtered.map((p) => {
+                const isSelected = String(p.id) === String(value);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(p.id);
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    className={cn(
+                      'w-full text-left px-2.5 py-2 rounded-md text-xs flex items-center justify-between hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors',
+                      isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                    )}
+                  >
+                    <span className="truncate">{p.name}</span>
+                    {isSelected && <CheckIcon className="size-3.5 text-primary shrink-0 ml-2" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Custom 5-item scrollable & searchable select for Assigned Person
+ * Owner is identified as 'Rohit Kumar (Me)', others show only name, and includes 'Not Assigned'
+ */
+function FormAssigneeSelect({ label = 'Assigned Person', required, error, value, onChange, users = [] }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const getUserLabel = (u) => {
+    if (!u) return 'Not Assigned';
+    const roleLower = String(u.role || '').toLowerCase();
+    const isOwner = roleLower === 'owner' || roleLower === 'admin' || (u.name && u.name.toLowerCase().includes('rohit'));
+    return isOwner ? `${u.name} (Me)` : u.name;
+  };
+
+  const selectedUser = users.find((u) => String(u.id) === String(value));
+  const displayLabel = value === '' || !value ? 'Not Assigned' : (selectedUser ? getUserLabel(selectedUser) : 'Not Assigned');
+
+  const filteredUsers = users.filter((u) => {
+    const text = getUserLabel(u).toLowerCase();
+    return text.includes(search.toLowerCase());
+  });
+
+  return (
+    <div ref={ref} className="relative space-y-1.5">
+      <label className="block text-xs font-medium text-foreground">
+        {label} {required && <span className="text-destructive">*</span>}
+      </label>
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={cn(
+          'w-full h-9 rounded-lg border bg-background px-3 text-xs flex items-center justify-between text-left transition-colors cursor-pointer',
+          error
+            ? 'border-destructive ring-1 ring-destructive'
+            : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
+        )}
+      >
+        <span className={cn('truncate', (!value || value === '') && 'text-muted-foreground')}>
+          {displayLabel}
+        </span>
+        <ChevronDownIcon
+          className={cn('size-3.5 text-muted-foreground transition-transform shrink-0 ml-2', isOpen && 'rotate-180')}
+        />
+      </button>
+
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border border-border bg-card text-card-foreground shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="p-1.5 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-background rounded-md border border-border">
+              <SearchIcon className="size-3 text-muted-foreground shrink-0" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search person..."
+                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="max-h-[185px] overflow-y-auto scrollbar-thin p-1 space-y-0.5">
+            {/* Not Assigned Option */}
+            {(!search || 'not assigned'.includes(search.toLowerCase())) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('');
+                  setIsOpen(false);
+                  setSearch('');
+                }}
+                className={cn(
+                  'w-full text-left px-2.5 py-2 rounded-md text-xs flex items-center justify-between hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors',
+                  value === '' ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground'
+                )}
+              >
+                <span>Not Assigned</span>
+                {value === '' && <CheckIcon className="size-3.5 text-primary shrink-0 ml-2" />}
+              </button>
+            )}
+
+            {filteredUsers.length === 0 && search && !'not assigned'.includes(search.toLowerCase()) ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground italic text-center">
+                No matching personnel
+              </div>
+            ) : (
+              filteredUsers.map((u) => {
+                const isSelected = String(u.id) === String(value);
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(String(u.id));
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    className={cn(
+                      'w-full text-left px-2.5 py-2 rounded-md text-xs flex items-center justify-between hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors',
+                      isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                    )}
+                  >
+                    <span className="truncate">{getUserLabel(u)}</span>
+                    {isSelected && <CheckIcon className="size-3.5 text-primary shrink-0 ml-2" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TASK_KANBAN_COLUMNS = [
   { id: 'todo', title: 'To Do', tone: 'default' },
   { id: 'in progress', title: 'In Progress', tone: 'info' },
@@ -224,11 +454,11 @@ export function TasksPage() {
 
   // View mode
   const [viewMode, setViewMode] = useState('board'); // 'board' or 'list'
-  const cardDensity = 'compact'; // Permanently compact per user request
+  const cardDensity = 'comfortable'; // Comfortable density with increased card size per user request
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('ALL');
   const [assigneeFilter, setAssigneeFilter] = useState('ALL');
-  const [typeFilter, setTypeFilter] = useState('ALL'); // 'site' or 'office'
+  const [typeFilter, setTypeFilter] = useState('ALL'); // 'on-site', 'office', 'meeting'
 
   // Create Task Full Screen Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -240,14 +470,15 @@ export function TasksPage() {
     projectId: 'P1',
     stageName: 'Site Prep',
     assignedToId: '',
-    type: 'site',
+    type: 'on-site',
     priority: 'medium',
     dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
   });
 
-  // Photo Attachment Modal state
+  // Photo Attachment Modal & Photo Viewer state
   const [photoTargetTask, setPhotoTargetTask] = useState(null);
   const [photoInputUrl, setPhotoInputUrl] = useState('');
+  const [viewingPhotoTask, setViewingPhotoTask] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -260,10 +491,9 @@ export function TasksPage() {
       setTasks(allTasks);
       setProjects(allProjects);
       setUsers(allUsers);
-      if (allUsers.length > 0) {
+      if (allProjects.length > 0) {
         setFormData((prev) => ({
           ...prev,
-          assignedToId: prev.assignedToId || String(allUsers[0].id),
           projectId: prev.projectId || allProjects[0]?.id || 'P1',
         }));
       }
@@ -298,8 +528,12 @@ export function TasksPage() {
       const matchesAssignee =
         assigneeFilter === 'ALL' || String(t.assignedToId) === String(assigneeFilter);
 
-      // 3. Location match: 'site' or 'office'
-      const matchesType = typeFilter === 'ALL' || t.type === typeFilter;
+      // 3. Location match: 'on-site' (or legacy 'site'), 'office', 'meeting'
+      const matchesType =
+        typeFilter === 'ALL' ||
+        t.type === typeFilter ||
+        (typeFilter === 'on-site' && (t.type === 'site' || t.type === 'on-site')) ||
+        (typeFilter === 'site' && (t.type === 'site' || t.type === 'on-site'));
 
       return matchesProject && matchesAssignee && matchesType;
     });
@@ -308,7 +542,7 @@ export function TasksPage() {
   // Summary Metrics
   const metrics = useMemo(() => {
     const total = tasks.length;
-    const siteCount = tasks.filter((t) => t.type === 'site').length;
+    const siteCount = tasks.filter((t) => t.type === 'site' || t.type === 'on-site').length;
     const officeCount = tasks.filter((t) => t.type === 'office').length;
     const overdueCount = tasks.filter((t) => t.isOverdue && t.status !== 'done').length;
     const completedCount = tasks.filter((t) => t.status === 'done').length;
@@ -318,19 +552,17 @@ export function TasksPage() {
   // Create Task Submit
   const handleCreateTask = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const titleErr = validateRequired(formData.title, 'Task Title', 3);
+    const titleErr = validateRequired(formData.title, 'Task Title', 2);
     const projErr = validateRequired(formData.projectId, 'Assigned Project');
-    const userErr = validateRequired(formData.assignedToId, 'Assigned Person');
     const dateErr = validateRequired(formData.dueDate, 'Due Date');
 
-    if (titleErr || projErr || userErr || dateErr) {
+    if (titleErr || projErr || dateErr) {
       setFormErrors({
         title: titleErr,
         projectId: projErr,
-        assignedToId: userErr,
         dueDate: dateErr,
       });
-      toast.error(titleErr || projErr || userErr || dateErr);
+      toast.error(titleErr || projErr || dateErr);
       return;
     }
     setFormErrors({});
@@ -339,22 +571,28 @@ export function TasksPage() {
     try {
       const targetProj = projects.find((p) => String(p.id) === String(formData.projectId));
       const targetUser = users.find((u) => String(u.id) === String(formData.assignedToId));
+      let assignedToName = 'Unassigned';
+      if (targetUser) {
+        const roleLower = String(targetUser.role || '').toLowerCase();
+        const isOwner = roleLower === 'owner' || roleLower === 'admin' || (targetUser.name && targetUser.name.toLowerCase().includes('rohit'));
+        assignedToName = isOwner ? `${targetUser.name} (Me)` : targetUser.name;
+      }
 
       await taskService.createTask({
         ...formData,
         projectName: targetProj?.name || 'Interior Site Fit-Out',
-        assignedToName: targetUser?.name || 'Assigned Craftsman',
+        assignedToName,
       });
 
-      toast.success(`Task "${formData.title}" assigned successfully`);
+      toast.success(`Task "${formData.title}" created successfully`);
       setIsModalOpen(false);
       setFormData({
         title: '',
         description: '',
         projectId: projects[0]?.id || 'P1',
         stageName: 'Site Prep',
-        assignedToId: users[0]?.id ? String(users[0].id) : '',
-        type: 'site',
+        assignedToId: '',
+        type: 'on-site',
         priority: 'medium',
         dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
       });
@@ -440,11 +678,171 @@ export function TasksPage() {
     }
   };
 
+  // In-Page Create Task View matching NewProjectPage layout, page margins, and padding
+  if (isModalOpen) {
+    return (
+      <div className="space-y-6 animate-fadeIn pb-12">
+        {/* Top Breadcrumb & Heading matching NewProjectPage */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(false)}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground mb-2 transition-colors group cursor-pointer"
+          >
+            <ArrowLeftIcon className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
+            <span>Tasks</span>
+          </button>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Create Task
+          </h1>
+        </div>
+
+        <form onSubmit={handleCreateTask} noValidate className="space-y-6">
+          <Card title={<span className="text-sm font-semibold text-foreground">Task Allocation</span>}>
+            <div className="space-y-5">
+              {/* Row 1: Task Title & Description side-by-side with resizable vertical expander */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">
+                    Task Title <span className="text-destructive">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={1}
+                    value={formData.title}
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, title: e.target.value }));
+                      if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: '' }));
+                    }}
+                    placeholder="e.g. Master bedroom veneer grain continuity inspection"
+                    className={cn(
+                      'w-full min-h-[42px] h-[42px] rounded-lg border bg-background px-3 py-2 text-xs text-foreground resize-y transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs',
+                      formErrors.title ? 'border-destructive ring-1 ring-destructive' : 'border-border'
+                    )}
+                  />
+                  {formErrors.title && (
+                    <p className="mt-1 text-[11px] text-destructive">{formErrors.title}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">
+                    Description
+                  </label>
+                  <textarea
+                    rows={1}
+                    value={formData.description}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="Add specific execution details, material references, or notes..."
+                    className="w-full min-h-[42px] h-[42px] rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground resize-y transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Assigned Project (Custom 5-item scrollable) & Location */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormProjectSelect
+                  label="Assigned Project"
+                  required
+                  error={formErrors.projectId}
+                  value={formData.projectId}
+                  onChange={(val) => {
+                    setFormData((prev) => ({ ...prev, projectId: val }));
+                    if (formErrors.projectId) setFormErrors((prev) => ({ ...prev, projectId: '' }));
+                  }}
+                  projects={projects}
+                />
+
+                <Select
+                  label="Location"
+                  value={formData.type}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
+                  options={[
+                    { value: 'on-site', label: 'On-Site' },
+                    { value: 'office', label: 'Office' },
+                    { value: 'meeting', label: 'Meeting' },
+                  ]}
+                />
+              </div>
+
+              {/* Row 3: Assigned Person & Stage / Trade */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormAssigneeSelect
+                  label="Assigned Person"
+                  value={formData.assignedToId}
+                  onChange={(val) => {
+                    setFormData((prev) => ({ ...prev, assignedToId: val }));
+                    if (formErrors.assignedToId) setFormErrors((prev) => ({ ...prev, assignedToId: '' }));
+                  }}
+                  users={users}
+                />
+
+                <Input
+                  label="Stage / Trade"
+                  value={formData.stageName}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, stageName: e.target.value }))}
+                  placeholder="e.g. Carpenter, False Ceiling, Electrical"
+                />
+              </div>
+
+              {/* Row 4: Due Date & Priority Level */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Due Date"
+                  type="date"
+                  required
+                  error={formErrors.dueDate}
+                  value={formData.dueDate}
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, dueDate: e.target.value }));
+                    if (formErrors.dueDate) setFormErrors((prev) => ({ ...prev, dueDate: '' }));
+                  }}
+                />
+
+                <Select
+                  label="Priority Level"
+                  value={formData.priority}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, priority: e.target.value }))}
+                  options={[
+                    { value: 'low', label: 'Low Priority' },
+                    { value: 'medium', label: 'Medium Priority' },
+                    { value: 'high', label: 'High Priority' },
+                  ]}
+                />
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="mt-6 pt-4 border-t border-border flex items-center justify-end gap-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={creatingTask}
+                leadingIcon="plus"
+              >
+                Create Task
+              </Button>
+            </div>
+          </Card>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Tasks & Site Checklist"
-        subtitle="SRS Section 3.7 - Assign and track site trades and office deliverables with photo proofs"
+        title="Tasks"
+        subtitle="Assign and track site trades and tasks"
         actions={
           <div className="flex items-center gap-2">
             {/* View Mode: Board vs List */}
@@ -494,7 +892,7 @@ export function TasksPage() {
       />
 
       {/* Filter Toolbar (3 Columns: Projects Searchable, Assignees, Location) */}
-      <Card className="overflow-visible relative z-30">
+      <Card className="overflow-visible relative z-30" bodyClassName="p-3 sm:p-3.5">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <ProjectSearchSelect
@@ -530,8 +928,9 @@ export function TasksPage() {
               onChange={(e) => setTypeFilter(e.target.value)}
               options={[
                 { value: 'ALL', label: 'Location' },
-                { value: 'site', label: 'Site' },
+                { value: 'on-site', label: 'On-Site' },
                 { value: 'office', label: 'Office' },
+                { value: 'meeting', label: 'Meeting' },
               ]}
             />
           </div>
@@ -546,72 +945,67 @@ export function TasksPage() {
             value={kanbanBoard}
             onChange={handleBoardChange}
             density={cardDensity}
-            columnClassName="w-64 sm:w-72 md:w-[280px] md:flex-initial shrink-0"
+            columnClassName="w-80 sm:w-96 md:flex-1 shrink-0"
             onAdd={canCreate ? () => setIsModalOpen(true) : undefined}
             renderCard={(t) => (
-              <div className="space-y-1">
-                {/* Top micro line: Priority indicator + Stage chip + Overdue/Photos */}
-                <div className="flex items-center justify-between gap-1 text-[9.5px]">
+              <div className="space-y-2 p-1">
+                {/* Top line: Priority indicator + Stage chip + Overdue/Photos */}
+                <div className="flex items-center justify-between gap-1.5 text-xs">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span
                       className={cn(
-                        'size-1.5 rounded-full shrink-0',
+                        'size-2 rounded-full shrink-0',
                         t.priority === 'high'
-                          ? 'bg-destructive ring-1 ring-destructive/30'
+                          ? 'bg-destructive ring-2 ring-destructive/20'
                           : t.priority === 'medium'
-                          ? 'bg-warning ring-1 ring-warning/30'
+                          ? 'bg-warning ring-2 ring-warning/20'
                           : 'bg-muted-foreground/40'
                       )}
                       title={`Priority: ${t.priority || 'medium'}`}
                     />
-                    <span className="font-medium text-secondary-foreground bg-secondary px-1 py-0.2 rounded text-[9.5px] truncate max-w-[110px]">
-                      {t.stageName || t.type}
+                    <span className="font-semibold text-secondary-foreground bg-secondary px-2 py-0.5 rounded text-xs truncate max-w-[140px]">
+                      {t.stageName || (t.type === 'site' || t.type === 'on-site' ? 'On-Site' : t.type === 'office' ? 'Office' : 'Meeting')}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    {t.photos && t.photos.length > 0 && (
-                      <span
-                        className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground font-mono bg-muted px-1 py-0.2 rounded"
-                        title={`${t.photos.length} site proof photo(s)`}
-                      >
-                        <CameraIcon className="size-2.5" />
-                        {t.photos.length}
-                      </span>
-                    )}
-                    {t.isOverdue && (
-                      <span className="text-[9px] font-bold text-destructive bg-destructive/10 px-1 py-0.2 rounded">
-                        Overdue
-                      </span>
-                    )}
-                  </div>
+                  {t.isOverdue && (
+                    <span className="text-[10px] font-bold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded shrink-0">
+                      Overdue
+                    </span>
+                  )}
                 </div>
 
-                {/* Task Title (Compact single line or 2-line clamp) */}
-                <p className="font-semibold text-[11.5px] text-foreground leading-snug line-clamp-1">
+                {/* Task Title (Prominent, clear font) */}
+                <p className="font-semibold text-sm text-foreground leading-snug line-clamp-2">
                   {t.title}
                 </p>
 
-                {/* Project Name micro-text */}
-                {t.projectName && (
-                  <p className="text-[9.5px] text-muted-foreground truncate leading-none">
-                    {t.projectName}
+                {/* Task Description snippet if available */}
+                {t.description && (
+                  <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                    {t.description}
                   </p>
                 )}
 
-                {/* Bottom micro-bar: Assignee + Fast Actions */}
-                <div className="flex items-center justify-between pt-1 border-t border-border/60 text-[10px]">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Avatar name={t.assignedToName || 'Artisan'} size="xs" />
-                    <span className="text-[10px] text-muted-foreground truncate max-w-[85px] font-medium">
-                      {t.assignedToName?.split(' ')[0] || 'Artisan'}
+                {/* Project Name & Due Date */}
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground pt-0.5">
+                  <span className="truncate font-medium text-foreground/80">{t.projectName || 'General'}</span>
+                  {t.dueDate && <span className="font-mono text-[11px] shrink-0">Due: {t.dueDate}</span>}
+                </div>
+
+                {/* Bottom bar: Assignee + Fast Actions */}
+                <div className="flex items-center justify-between pt-2 border-t border-border/70 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar name={t.assignedToName || 'Artisan'} size="sm" />
+                    <span className="text-xs text-foreground font-medium truncate max-w-[120px]">
+                      {t.assignedToName || 'Unassigned'}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
-                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
                       title="Attach Photo Proof (FR-TSK-04)"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -619,11 +1013,24 @@ export function TasksPage() {
                         setPhotoInputUrl('https://images.unsplash.com/photo-1541123437800-1bb1317badc2?w=300');
                       }}
                     >
-                      <CameraIcon className="size-3" />
+                      <CameraIcon className="size-3.5" />
                     </button>
+                    {t.photos && t.photos.length > 0 && (
+                      <button
+                        type="button"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                        title="View photo proof"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingPhotoTask(t);
+                        }}
+                      >
+                        <EyeIcon className="size-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+                      className="px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer shadow-2xs"
                       title="Advance status"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -669,12 +1076,7 @@ export function TasksPage() {
                               : 'bg-muted-foreground/40'
                           )}
                         />
-                        {t.type} • Priority: {t.priority}
-                        {t.photos && t.photos.length > 0 && (
-                          <span className="text-muted-foreground font-mono inline-flex items-center gap-0.5">
-                            • <CameraIcon className="size-2.5" /> {t.photos.length}
-                          </span>
-                        )}
+                        {t.type === 'site' || t.type === 'on-site' ? 'On-Site' : t.type === 'office' ? 'Office' : 'Meeting'} • Priority: {t.priority}
                       </div>
                     </td>
                     <td className="py-2 px-3">
@@ -683,8 +1085,8 @@ export function TasksPage() {
                     </td>
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-2">
-                        <Avatar name={t.assignedToName} size="xs" />
-                        <span className="text-foreground">{t.assignedToName}</span>
+                        <Avatar name={t.assignedToName || 'Artisan'} size="xs" />
+                        <span className="text-foreground">{t.assignedToName || 'Unassigned'}</span>
                       </div>
                     </td>
                     <td className="py-2 px-3 font-mono">
@@ -700,7 +1102,7 @@ export function TasksPage() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
                           title="Attach photo proof"
                           onClick={() => {
                             setPhotoTargetTask(t);
@@ -709,6 +1111,16 @@ export function TasksPage() {
                         >
                           <CameraIcon className="size-3.5" />
                         </button>
+                        {t.photos && t.photos.length > 0 && (
+                          <button
+                            type="button"
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                            title="View photo proof"
+                            onClick={() => setViewingPhotoTask(t)}
+                          >
+                            <EyeIcon className="size-3.5" />
+                          </button>
+                        )}
                         <Button
                           variant="outline"
                           size="xs"
@@ -744,6 +1156,40 @@ export function TasksPage() {
         }
       >
         <div className="space-y-3 text-xs">
+          {/* Currently Attached Photos preview */}
+          {photoTargetTask?.photos && photoTargetTask.photos.length > 0 && (
+            <div className="space-y-1.5 pb-2 border-b border-border">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">
+                  Attached Photos ({photoTargetTask.photos.length}):
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setViewingPhotoTask(photoTargetTask)}
+                  className="text-xs text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <EyeIcon className="size-3.5" /> View Gallery
+                </button>
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {photoTargetTask.photos.map((pUrl, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setViewingPhotoTask(photoTargetTask)}
+                    className="relative group rounded-md overflow-hidden border border-border shrink-0 cursor-pointer"
+                    title="Click to view photo"
+                  >
+                    <img src={pUrl} alt={`Photo ${i + 1}`} className="size-14 object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                      <EyeIcon className="size-4" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Input
             label="Photo URL or Cloudflare R2 Upload Path"
             required
@@ -764,187 +1210,62 @@ export function TasksPage() {
         </div>
       </Modal>
 
-      {/* Full-Screen Create Task Popup Screen (matching Attendance screen layout, buttons & padding) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-background overflow-y-auto flex flex-col animate-in fade-in duration-200">
-          {/* Top Sticky Header */}
-          <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between shadow-2xs">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="inline-flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                aria-label="Back to tasks"
-              >
-                <Icon name="arrow-left" size={18} />
-              </button>
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-text-main tracking-tight leading-none">
-                  Create Operational Task
-                </h2>
-                <p className="text-xs text-text-muted mt-1">
-                  Assign deliverables to site craftsmen or office design team
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={handleCreateTask}
-                loading={creatingTask}
-                leadingIcon="plus"
-              >
-                Create Task
-              </Button>
-            </div>
+      {/* View Task Photos Lightbox Modal */}
+      <Modal
+        isOpen={!!viewingPhotoTask}
+        onClose={() => setViewingPhotoTask(null)}
+        title={`Task Photos: ${viewingPhotoTask?.title || 'Inspection Proofs'}`}
+        subtitle={`${viewingPhotoTask?.photos?.length || 0} photo(s) attached • ${viewingPhotoTask?.projectName || ''}`}
+        size="lg"
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs text-muted-foreground">
+              Stage: <strong className="text-foreground">{viewingPhotoTask?.stageName || 'Site Trade'}</strong>
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewingPhotoTask(null)}
+            >
+              Close
+            </Button>
           </div>
-
-          {/* Full Screen Body with Container & Padding Matching Attendance Screen */}
-          <div className="flex-1 px-3 sm:px-5 lg:px-6 py-4 sm:py-6 w-full max-w-7xl mx-auto space-y-6">
-            <form onSubmit={handleCreateTask} className="space-y-6" noValidate>
-              <Card
-                title="Task Specification & Allocation"
-                subtitle="Enter the task scope, assign responsible personnel, and establish due dates"
-              >
-                <div className="space-y-5">
-                  {/* Task Title */}
-                  <div>
-                    <Input
-                      label="Task Title / Snag Description"
-                      required
-                      error={formErrors.title}
-                      value={formData.title}
-                      onChange={(e) => {
-                        setFormData((prev) => ({ ...prev, title: e.target.value }));
-                        if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: '' }));
-                      }}
-                      placeholder="e.g. Master bedroom veneer grain continuity inspection"
-                    />
-                  </div>
-
-                  {/* Project & Assignment Type */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Select
-                      label="Assigned Project"
-                      required
-                      error={formErrors.projectId}
-                      value={formData.projectId}
-                      onChange={(e) => {
-                        setFormData((prev) => ({ ...prev, projectId: e.target.value }));
-                        if (formErrors.projectId) setFormErrors((prev) => ({ ...prev, projectId: '' }));
-                      }}
-                      options={projects.map((p) => ({ value: p.id, label: p.name }))}
-                    />
-
-                    <Select
-                      label="Assignment Type"
-                      value={formData.type}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
-                      options={[
-                        { value: 'site', label: 'Site Trade Task (On-Site)' },
-                        { value: 'office', label: 'Office Deliverable (Studio)' },
-                      ]}
-                    />
-                  </div>
-
-                  {/* Assigned Person & Stage */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Select
-                      label="Assigned Person"
-                      required
-                      error={formErrors.assignedToId}
-                      value={formData.assignedToId}
-                      onChange={(e) => {
-                        setFormData((prev) => ({ ...prev, assignedToId: e.target.value }));
-                        if (formErrors.assignedToId) setFormErrors((prev) => ({ ...prev, assignedToId: '' }));
-                      }}
-                      options={users.map((u) => ({
-                        value: String(u.id),
-                        label: `${u.name} (${u.role})`,
-                      }))}
-                    />
-
-                    <Input
-                      label="Stage / Trade"
-                      value={formData.stageName}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, stageName: e.target.value }))}
-                      placeholder="e.g. Carpenter, False Ceiling, Electrical"
-                    />
-                  </div>
-
-                  {/* Due Date & Priority */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Due Date"
-                      type="date"
-                      required
-                      error={formErrors.dueDate}
-                      value={formData.dueDate}
-                      onChange={(e) => {
-                        setFormData((prev) => ({ ...prev, dueDate: e.target.value }));
-                        if (formErrors.dueDate) setFormErrors((prev) => ({ ...prev, dueDate: '' }));
-                      }}
-                    />
-
-                    <Select
-                      label="Priority Level"
-                      value={formData.priority}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, priority: e.target.value }))}
-                      options={[
-                        { value: 'low', label: 'Low Priority' },
-                        { value: 'medium', label: 'Medium Priority' },
-                        { value: 'high', label: 'High Priority (Urgent Snag)' },
-                      ]}
-                    />
-                  </div>
-
-                  {/* Description / Additional Notes */}
-                  <div>
-                    <Textarea
-                      label="Detailed Instructions / Notes (Optional)"
-                      rows={4}
-                      value={formData.description}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="Add any specific execution details, material references, or inspection criteria..."
-                    />
+        }
+      >
+        <div className="space-y-4 py-2">
+          {viewingPhotoTask?.photos && viewingPhotoTask.photos.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {viewingPhotoTask.photos.map((url, idx) => (
+                <div
+                  key={idx}
+                  className="group relative rounded-xl border border-border overflow-hidden bg-muted/20 shadow-2xs"
+                >
+                  <img
+                    src={url}
+                    alt={`Proof ${idx + 1}`}
+                    className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                    <span className="text-xs text-white font-medium">Photo #{idx + 1}</span>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-white underline underline-offset-2 hover:text-primary-foreground font-semibold"
+                    >
+                      Open Full Size ↗
+                    </a>
                   </div>
                 </div>
-
-                <div className="mt-6 pt-4 border-t border-border flex items-center justify-end gap-2.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsModalOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    loading={creatingTask}
-                    leadingIcon="plus"
-                  >
-                    Create & Assign Task
-                  </Button>
-                </div>
-              </Card>
-            </form>
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center text-xs text-muted-foreground">
+              No photos attached to this task.
+            </div>
+          )}
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

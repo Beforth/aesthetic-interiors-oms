@@ -24,6 +24,7 @@ import { cn } from '../lib/utils';
 import {
   FileSpreadsheetIcon,
   DownloadIcon,
+  UploadIcon,
   RefreshIcon,
   ArrowUpDownIcon,
   ArrowUpIcon,
@@ -119,7 +120,7 @@ export function calculateWorkingHours(checkInStr, checkOutStr) {
   const hrs = Math.floor(diff / 60);
   const mins = diff % 60;
 
-  return `${hrs.toString().padStart(2, '0')}h ${mins.toString().padStart(2, '0')}m${isActive ? ' (Active)' : ''}`;
+  return `${hrs.toString().padStart(2, '0')}h ${mins.toString().padStart(2, '0')}m`;
 }
 
 export function AttendancePage() {
@@ -154,6 +155,7 @@ export function AttendancePage() {
   const [gpsError, setGpsError] = useState('');
   const [distanceToOffice, setDistanceToOffice] = useState(null);
   const watchIdRef = useRef(null);
+  const attendanceImportInputRef = useRef(null);
 
   // Live Digital Clock & Calendar Date
   const [clockData, setClockData] = useState(() => {
@@ -263,292 +265,10 @@ export function AttendancePage() {
     checkedOut: 250,
   });
 
-  // Daily Attendance View State & Mock Data (matches screenshots)
-  const [dailyDateDisplay, setDailyDateDisplay] = useState(() => (isDebug() ? '26-10-2026' : todayDdMmYyyy()));
-  const [dailyDeptFilter, setDailyDeptFilter] = useState('All');
-  const [dailyRecords, setDailyRecords] = useState(isDebug() ? [
-    {
-      id: 'd1',
-      srNo: 1,
-      employeeCode: 'E101',
-      name: 'Rohit Kumar',
-      department: 'Executive',
-      designation: 'Managing Director & Admin',
-      status: 'Present',
-      shift: '09:30-18:30',
-      checkIn: '09:20',
-      checkOut: '18:45',
-      hoursWorked: 9,
-      overtimeHrs: 0,
-    },
-    {
-      id: 'd2',
-      srNo: 2,
-      employeeCode: 'E102',
-      name: 'Neha Kulkarni',
-      department: 'Operations',
-      designation: 'Operations Manager',
-      status: 'Present',
-      shift: '10:00-19:00',
-      checkIn: '09:55',
-      checkOut: '19:10',
-      hoursWorked: 9,
-      overtimeHrs: 1,
-    },
-    {
-      id: 'd3',
-      srNo: 3,
-      employeeCode: 'E103',
-      name: 'Vikram Jadhav',
-      department: 'Site Operations',
-      designation: 'Site Supervisor',
-      status: 'Present',
-      shift: '09:00-18:00',
-      checkIn: '08:50',
-      checkOut: '18:30',
-      hoursWorked: 9,
-      overtimeHrs: 1,
-    },
-    {
-      id: 'd4',
-      srNo: 4,
-      employeeCode: 'E104',
-      name: 'Suresh Gaikwad',
-      department: 'Site Operations',
-      designation: 'Lead Artisan',
-      status: 'Present',
-      shift: '09:00-18:00',
-      checkIn: '09:00',
-      checkOut: '18:00',
-      hoursWorked: 9,
-      overtimeHrs: 0,
-    },
-    {
-      id: 'd5',
-      srNo: 5,
-      employeeCode: 'E105',
-      name: 'Amit Sharma',
-      department: 'Site Operations',
-      designation: 'Senior Supervisor',
-      status: 'Absent',
-      shift: '09:00-18:00',
-      checkIn: '—',
-      checkOut: '—',
-      hoursWorked: 0,
-      overtimeHrs: 0,
-    },
-    {
-      id: 'd6',
-      srNo: 6,
-      employeeCode: 'E106',
-      name: 'Priya Deshmukh',
-      department: 'Design & Finishes',
-      designation: 'Artisan Specialist',
-      status: 'Leave',
-      shift: '09:30-18:30',
-      checkIn: '—',
-      checkOut: '—',
-      hoursWorked: 0,
-      overtimeHrs: 0,
-    },
-    {
-      id: 'd7',
-      srNo: 7,
-      employeeCode: 'E107',
-      name: 'Rajesh Kulkarni',
-      department: 'Site Operations',
-      designation: 'Craftsman',
-      status: 'Not marked',
-      shift: '09:00-18:00',
-      checkIn: '—',
-      checkOut: '—',
-      hoursWorked: 0,
-      overtimeHrs: 0,
-    },
-  ] : []);
-
-  // Attendance Summary View State & Mock Data
-  const [summaryMonth, setSummaryMonth] = useState(() => (isDebug() ? 'October, 2026' : currentMonthLabel()));
-  const [summaryDeptFilter, setSummaryDeptFilter] = useState('All');
-  const [summaryRecords, setSummaryRecords] = useState(isDebug() ? [
-    {
-      id: 's1',
-      srNo: 1,
-      employeeCode: 'E101',
-      name: 'Rohit Kumar',
-      department: 'Executive',
-      present: 22,
-      late: 1,
-      halfDay: 0,
-      overtime: 2,
-      absent: 0,
-      unmarked: 2,
-      latePenalty: 0,
-      overtimeAmount: 500,
-    },
-    {
-      id: 's2',
-      srNo: 2,
-      employeeCode: 'E102',
-      name: 'Neha Kulkarni',
-      department: 'Operations',
-      present: 20,
-      late: 2,
-      halfDay: 1,
-      overtime: 4,
-      absent: 0,
-      unmarked: 0,
-      latePenalty: 0,
-      overtimeAmount: 800,
-    },
-    {
-      id: 's3',
-      srNo: 3,
-      employeeCode: 'E103',
-      name: 'Vikram Jadhav',
-      department: 'Site Operations',
-      present: 21,
-      late: 3,
-      halfDay: 0,
-      overtime: 5,
-      absent: 1,
-      unmarked: 0,
-      latePenalty: 0,
-      overtimeAmount: 1000,
-    },
-    {
-      id: 's4',
-      srNo: 4,
-      employeeCode: 'E104',
-      name: 'Suresh Gaikwad',
-      department: 'Site Operations',
-      present: 23,
-      late: 0,
-      halfDay: 0,
-      overtime: 3,
-      absent: 1,
-      unmarked: 0,
-      latePenalty: 0,
-      overtimeAmount: 600,
-    },
-    {
-      id: 's5',
-      srNo: 5,
-      employeeCode: 'E105',
-      name: 'Amit Sharma',
-      department: 'Site Operations',
-      present: 19,
-      late: 2,
-      halfDay: 1,
-      overtime: 1,
-      absent: 2,
-      unmarked: 1,
-      latePenalty: 0,
-      overtimeAmount: 300,
-    },
-    {
-      id: 's6',
-      srNo: 6,
-      employeeCode: 'E106',
-      name: 'Priya Deshmukh',
-      department: 'Design & Finishes',
-      present: 18,
-      late: 1,
-      halfDay: 2,
-      overtime: 0,
-      absent: 1,
-      unmarked: 3,
-      latePenalty: 0,
-      overtimeAmount: 0,
-    },
-    {
-      id: 's7',
-      srNo: 7,
-      employeeCode: 'E107',
-      name: 'Rajesh Kulkarni',
-      department: 'Site Operations',
-      present: 20,
-      late: 4,
-      halfDay: 0,
-      overtime: 2,
-      absent: 2,
-      unmarked: 1,
-      latePenalty: 0,
-      overtimeAmount: 400,
-    },
-  ] : []);
-
-  const [summaryBreakdownTarget, setSummaryBreakdownTarget] = useState(null);
-
-  // With the backend on, the two report tabs are read from it for the date / month on screen.
-  const live = !isDebug();
-  const [reportsTick, setReportsTick] = useState(0);
-  useEffect(() => {
-    const date = ddMmYyyyToIso(dailyDateDisplay);
-    if (!live || !date) return undefined;
-    let cancelled = false;
-    attendanceService
-      .getDailyAttendance({ date, department: dailyDeptFilter })
-      .then((rows) => {
-        if (!cancelled && rows) setDailyRecords(rows);
-      })
-      .catch((err) => !cancelled && toast.error(err.message || 'Could not load the daily attendance'));
-    return () => {
-      cancelled = true;
-    };
-  }, [live, dailyDateDisplay, dailyDeptFilter, reportsTick]);
-
-  useEffect(() => {
-    const month = monthLabelToIso(summaryMonth);
-    if (!live || !month) return undefined;
-    let cancelled = false;
-    attendanceService
-      .getAttendanceSummary({ month, department: summaryDeptFilter })
-      .then((rows) => {
-        if (!cancelled && rows) setSummaryRecords(rows);
-      })
-      .catch((err) => !cancelled && toast.error(err.message || 'Could not load the attendance summary'));
-    return () => {
-      cancelled = true;
-    };
-  }, [live, summaryMonth, summaryDeptFilter, reportsTick]);
-
-  const filteredDailyRecords = useMemo(() => {
-    return dailyRecords.filter((r) => {
-      if (cardFilter === 'checked-in') {
-        const hasPunchedIn = Boolean(r.checkIn && r.checkIn !== '—' && r.status !== 'Leave' && r.status !== 'On Leave');
-        if (!hasPunchedIn) return false;
-      } else if (cardFilter === 'not-checked-in') {
-        const isNotCheckedIn =
-          (!r.checkIn || r.checkIn === '—' || r.status === 'Not marked' || r.status === 'Absent') &&
-          r.status !== 'Leave' &&
-          r.status !== 'On Leave';
-        if (!isNotCheckedIn) return false;
-      } else if (cardFilter === 'on-leave') {
-        const isOnLeave = r.status === 'Leave' || r.status === 'On Leave';
-        if (!isOnLeave) return false;
-      } else if (cardFilter === 'checked-out') {
-        const isCheckedOut = Boolean(r.checkOut && r.checkOut !== '—');
-        if (!isCheckedOut) return false;
-      }
-
-      if (dailyDeptFilter !== 'All' && r.department !== dailyDeptFilter) return false;
-      return true;
-    });
-  }, [dailyRecords, cardFilter, dailyDeptFilter]);
-
-  const filteredSummaryRecords = useMemo(() => {
-    return summaryRecords.filter((r) => {
-      if (summaryDeptFilter !== 'All' && r.department !== summaryDeptFilter) return false;
-      return true;
-    });
-  }, [summaryRecords, summaryDeptFilter]);
-
   const staffOptions = useMemo(() => {
     const list = [];
     const seen = new Set();
 
-    // 1. Authorized project users
     (isDebug() ? mockUsers : []).forEach((u) => {
       if (u.role !== 'client' && u.role !== ROLES.CLIENT && !seen.has(u.name)) {
         seen.add(u.name);
@@ -564,23 +284,23 @@ export function AttendancePage() {
       }
     });
 
-    // 2. Additional daily records
-    dailyRecords.forEach((r) => {
-      if (r.name && !seen.has(r.name) && r.name !== '—') {
-        seen.add(r.name);
+    attendanceList.forEach((r) => {
+      if (r.userName && !seen.has(r.userName) && r.userName !== '—') {
+        seen.add(r.userName);
         const isAdmin =
-          r.designation?.toLowerCase() === 'admin' ||
-          r.name.toLowerCase().includes('admin');
+          r.role?.toLowerCase() === 'admin' ||
+          r.role?.toLowerCase() === 'owner' ||
+          r.userName.toLowerCase().includes('admin');
         list.push({
           id: r.id,
-          name: r.name,
+          name: r.userName,
           isAdmin,
         });
       }
     });
 
     return list;
-  }, [dailyRecords]);
+  }, [attendanceList]);
 
   const openPunchModal = () => {
     const now = new Date();
@@ -654,190 +374,6 @@ export function AttendancePage() {
       requestedCheckOut: '06:00 PM',
     });
     setIsRequestModalOpen(true);
-  };
-
-  const triggerExportDownload = (content, filename, mimeType) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const exportDailyCsv = () => {
-    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Designation', 'Status', 'Shift', 'Check In', 'Check Out', 'Hours Worked', 'Overtime (hrs)'];
-    const rows = filteredDailyRecords.map((r, idx) => [
-      idx + 1,
-      r.employeeCode,
-      r.name,
-      r.department,
-      r.designation,
-      r.status,
-      r.shift,
-      r.checkIn,
-      r.checkOut,
-      r.hoursWorked,
-      r.overtimeHrs,
-    ]);
-    const csv = [headers.join(','), ...rows.map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))].join('\r\n');
-    triggerExportDownload(csv, `Daily_Attendance_${dailyDateDisplay.replace(/[^a-zA-Z0-9]/g, '_')}.csv`, 'text/csv;charset=utf-8;');
-    toast.success('Daily attendance exported to CSV');
-  };
-
-  const exportDailyExcel = () => {
-    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Designation', 'Status', 'Shift', 'Check In', 'Check Out', 'Hours Worked', 'Overtime (hrs)'];
-    const rows = filteredDailyRecords.map((r, idx) => [
-      idx + 1,
-      r.employeeCode,
-      r.name,
-      r.department,
-      r.designation,
-      r.status,
-      r.shift,
-      r.checkIn,
-      r.checkOut,
-      r.hoursWorked,
-      r.overtimeHrs,
-    ]);
-    const tableHtml = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Daily Attendance</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-      <body>
-        <table border="1">
-          <thead><tr style="background:#f1f5f9;font-weight:bold;">${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
-          <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-    triggerExportDownload(tableHtml, `Daily_Attendance_${dailyDateDisplay.replace(/[^a-zA-Z0-9]/g, '_')}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
-    toast.success('Daily attendance downloaded for Excel');
-  };
-
-  const exportSummaryCsv = () => {
-    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Present', 'Late', 'Half Day', 'Overtime', 'Absent', 'Unmarked Working Days', 'Late Penalty', 'Overtime Amount'];
-    const rows = filteredSummaryRecords.map((r, idx) => [
-      idx + 1,
-      r.employeeCode,
-      r.name,
-      r.department,
-      r.present,
-      r.late,
-      r.halfDay,
-      r.overtime,
-      r.absent,
-      r.unmarked,
-      r.latePenalty,
-      r.overtimeAmount,
-    ]);
-    const csv = [headers.join(','), ...rows.map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))].join('\r\n');
-    triggerExportDownload(csv, `Attendance_Summary_${summaryMonth.replace(/[^a-zA-Z0-9]/g, '_')}.csv`, 'text/csv;charset=utf-8;');
-    toast.success('Attendance summary exported to CSV');
-  };
-
-  const exportSummaryExcel = () => {
-    const headers = ['Sr No', 'Employee Code', 'Full Name', 'Department', 'Present', 'Late', 'Half Day', 'Overtime', 'Absent', 'Unmarked Working Days', 'Late Penalty', 'Overtime Amount'];
-    const rows = filteredSummaryRecords.map((r, idx) => [
-      idx + 1,
-      r.employeeCode,
-      r.name,
-      r.department,
-      r.present,
-      r.late,
-      r.halfDay,
-      r.overtime,
-      r.absent,
-      r.unmarked,
-      r.latePenalty,
-      r.overtimeAmount,
-    ]);
-    const tableHtml = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Attendance Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-      <body>
-        <table border="1">
-          <thead><tr style="background:#f1f5f9;font-weight:bold;">${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
-          <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-    triggerExportDownload(tableHtml, `Attendance_Summary_${summaryMonth.replace(/[^a-zA-Z0-9]/g, '_')}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
-    toast.success('Attendance summary downloaded for Excel');
-  };
-
-  const handleOpenSummaryBreakdown = async (record, category, count) => {
-    if (live) {
-      try {
-        const days = await attendanceService.getSummaryDays({
-          userId: record.id,
-          month: monthLabelToIso(summaryMonth),
-          category,
-        });
-        setSummaryBreakdownTarget({ ...record, category, value: count, days });
-      } catch (err) {
-        toast.error(err.message || 'Could not load the days');
-      }
-      return;
-    }
-    const generatedDays = [];
-    const totalEntries = Math.max(1, typeof count === 'number' ? count : 1);
-    for (let i = 1; i <= Math.min(totalEntries, 28); i++) {
-      const dayNum = String(i * 2 > 28 ? i : i * 2).padStart(2, '0');
-      generatedDays.push({
-        date: `${dayNum}-10-2026`,
-        status: category,
-        checkIn: category === 'Present' || category === 'Late' ? (category === 'Late' ? '10:45 AM' : '09:58 AM') : null,
-        checkOut: category === 'Present' || category === 'Late' ? '07:05 PM' : null,
-      });
-    }
-
-    setSummaryBreakdownTarget({
-      ...record,
-      category,
-      value: count,
-      days: generatedDays,
-    });
-  };
-
-  const handleUpdateBreakdownDayStatus = async (dayIndex, newStatus) => {
-    if (!summaryBreakdownTarget) return;
-    if (live) {
-      const day = summaryBreakdownTarget.days[dayIndex];
-      try {
-        await attendanceService.setDayStatus({
-          userId: summaryBreakdownTarget.id,
-          date: day.date,
-          recordId: day.recordId,
-          status: newStatus,
-        });
-        const days = await attendanceService.getSummaryDays({
-          userId: summaryBreakdownTarget.id,
-          month: monthLabelToIso(summaryMonth),
-          category: summaryBreakdownTarget.category,
-        });
-        setSummaryBreakdownTarget((prev) => (prev ? { ...prev, days, value: days.length } : prev));
-        setReportsTick((n) => n + 1);
-        toast.success(`Updated day status to ${newStatus}`);
-      } catch (err) {
-        toast.error(err.message || 'Could not change the day');
-      }
-      return;
-    }
-    const updatedDays = [...summaryBreakdownTarget.days];
-    updatedDays[dayIndex] = {
-      ...updatedDays[dayIndex],
-      status: newStatus,
-    };
-    setSummaryBreakdownTarget({
-      ...summaryBreakdownTarget,
-      days: updatedDays,
-    });
-    toast.success(`Updated day status to ${newStatus}`);
   };
 
   // Fetch all initial data
@@ -1292,11 +828,7 @@ export function AttendancePage() {
       {/* SECTION 1: PageHeader */}
       <PageHeader
         title="Attendance"
-        subtitle="Track staff attendance with geo-fenced punch in/out"
-        breadcrumbs={[
-          { label: 'HRMS', path: '/dashboard' },
-          { label: 'Attendance' },
-        ]}
+        subtitle="Staff attendance and daily check-ins"
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button
@@ -1327,6 +859,30 @@ export function AttendancePage() {
               Export Excel
             </Button>
 
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon="upload"
+              onClick={() => attendanceImportInputRef.current?.click()}
+            >
+              Import Excel
+            </Button>
+
+            <input
+              type="file"
+              ref={attendanceImportInputRef}
+              accept=".xlsx,.xls,.csv"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  toast.success(`Imported attendance records from ${file.name}`);
+                  loadData();
+                }
+                e.target.value = '';
+              }}
+            />
+
             {isAdminOrManager && (
               <Button
                 variant="primary"
@@ -1345,25 +901,16 @@ export function AttendancePage() {
       <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-card border border-border shadow-xs space-y-3">
         {/* Top Header Row of Container Card */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* PWA GPS Geofence Real-time Badge */}
+          {/* PWA GPS Geofence Real-time Info */}
           <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-                distanceToOffice !== null && distanceToOffice <= (officeLocation.radiusMeters || 500)
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-              }`}
-            >
-              <span className="size-2 rounded-full bg-current animate-pulse" />
-              <span>
-                {locating
-                  ? 'PWA GPS Locating...'
-                  : distanceToOffice !== null
-                  ? distanceToOffice <= (officeLocation.radiusMeters || 500)
-                    ? `Inside Geofence • ${distanceToOffice}m from ${officeLocation.name}`
-                    : `Outside Geofence • ${distanceToOffice > 1000 ? (distanceToOffice / 1000).toFixed(1) + 'km' : distanceToOffice + 'm'} away`
-                  : 'PWA GPS Active'}
-              </span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {locating
+                ? 'PWA GPS Locating...'
+                : distanceToOffice !== null
+                ? distanceToOffice <= (officeLocation.radiusMeters || 500)
+                  ? `Inside Geofence • ${distanceToOffice}m from ${officeLocation.name}`
+                  : `Outside Geofence • ${distanceToOffice > 1000 ? (distanceToOffice / 1000).toFixed(1) + 'km' : distanceToOffice + 'm'} away`
+                : 'PWA GPS Active'}
             </span>
 
             <button
@@ -1519,8 +1066,6 @@ export function AttendancePage() {
         tabs={[
           { id: 'records', label: 'Records', icon: ClockIcon, count: attendanceList.length },
           { id: 'requests', label: 'Requests', icon: MailIcon, count: requestsList.length },
-          { id: 'daily', label: 'Daily attendance', icon: CalendarIcon },
-          { id: 'summary', label: 'Attendance summary', icon: BarChartIcon },
         ]}
         activeTab={activeTab}
         onChange={setActiveTab}
@@ -1530,7 +1075,7 @@ export function AttendancePage() {
       {activeTab === 'records' && (
         <Card bodyClassName="p-5">
           {/* Filters Bar with Increased Gap */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-3.5 border-b border-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
             <div className="flex flex-wrap items-center gap-3 flex-1">
               {/* Search by Name / Role / Site */}
               <div className="relative min-w-[200px] flex-1 max-w-xs">
@@ -1623,29 +1168,29 @@ export function AttendancePage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/50 border-b border-border uppercase font-semibold text-[10px] text-muted-foreground tracking-wider">
+          <div className="overflow-x-auto max-h-[410px] overflow-y-auto scrollbar-thin rounded-xl border border-border bg-card">
+            <table className="w-full text-left text-xs border-separate border-spacing-0">
+              <thead>
                 <tr>
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Assigned Office / Site</th>
-                  <th className="p-3">Check-In / Out</th>
-                  <th className="p-3">Location</th>
-                  <th className="p-3">Total Working Hours</th>
-                  <th className="p-3 text-right">Actions</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Employee</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Assigned Office / Site</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Check-In / Out</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Location</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Total Working Hours</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 text-right font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground border-b border-border/60">
                       No attendance records found matching filters.
                     </td>
                   </tr>
                 ) : (
                   filteredRecords.map((r) => (
                     <tr key={r.id} className="hover:bg-muted/40 transition-colors">
-                      <td className="p-3">
+                      <td className="p-3 border-b border-border/60">
                         <div className="flex items-center gap-2.5">
                           <Avatar name={r.userName} size="sm" />
                           <div>
@@ -1654,7 +1199,7 @@ export function AttendancePage() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 border-b border-border/60">
                         <div className="font-medium text-foreground flex items-center gap-1">
                           <MapPinIcon className="size-3.5 text-primary shrink-0" />
                           <span>{r.site || officeLocation.name}</span>
@@ -1665,15 +1210,19 @@ export function AttendancePage() {
                           </div>
                         )}
                       </td>
-                      <td className="p-3 font-mono text-[11px]">
-                        <div className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                          In: {r.checkInTime || '—'}
-                        </div>
-                        <div className="text-muted-foreground">
-                          Out: {r.checkOutTime || (r.checkInTime ? 'Active' : '—')}
+                      <td className="p-3 border-b border-border/60">
+                        <div className="inline-grid grid-cols-[28px_auto] items-center gap-x-2 gap-y-0.5 text-xs">
+                          <span className="text-[11px] font-medium text-foreground text-right">In:</span>
+                          <span className="font-mono text-foreground font-semibold">
+                            {r.checkInTime && r.checkInTime !== '-' ? r.checkInTime : '—'}
+                          </span>
+                          <span className="text-[11px] font-medium text-foreground text-right">Out:</span>
+                          <span className="font-mono text-foreground font-semibold">
+                            {r.checkOutTime && r.checkOutTime !== '-' ? r.checkOutTime : '—'}
+                          </span>
                         </div>
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 border-b border-border/60">
                         {r.coordinates?.lat && r.coordinates?.lng ? (
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1 font-medium text-foreground text-[11px]">
@@ -1691,25 +1240,21 @@ export function AttendancePage() {
                           </div>
                         )}
                       </td>
-                      <td className="p-3 font-mono">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
-                          r.checkInTime 
-                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' 
-                            : 'text-muted-foreground bg-muted'
-                        }`}>
+                      <td className="p-3 font-mono text-[11px] border-b border-border/60">
+                        <span className="text-foreground font-medium">
                           {calculateWorkingHours(r.checkInTime, r.checkOutTime)}
                         </span>
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3 text-right border-b border-border/60">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* View Button */}
                           <button
                             type="button"
                             onClick={() => setViewTargetRecord(r)}
-                            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors cursor-pointer"
+                            className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
                             title="View punch details"
                           >
-                            <EyeIcon className="size-3.5" />
+                            <EyeIcon className="size-4" />
                           </button>
 
                           {/* Edit Button */}
@@ -1725,10 +1270,10 @@ export function AttendancePage() {
                                   reason: r.correctionReason || '',
                                 });
                               }}
-                              className="p-1.5 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10 rounded-md transition-colors cursor-pointer"
+                              className="p-2 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
                               title="Edit / Correct record"
                             >
-                              <EditIcon className="size-3.5" />
+                              <EditIcon className="size-4" />
                             </button>
                           )}
 
@@ -1737,10 +1282,10 @@ export function AttendancePage() {
                             <button
                               type="button"
                               onClick={() => setRecordPendingDelete(r)}
-                              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors cursor-pointer"
+                              className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer"
                               title="Delete record"
                             >
-                              <TrashIcon className="size-3.5" />
+                              <TrashIcon className="size-4" />
                             </button>
                           )}
                         </div>
@@ -1759,7 +1304,7 @@ export function AttendancePage() {
         <div className="space-y-4">
           <Card bodyClassName="p-5 sm:p-6 space-y-4">
             {/* Header Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
                   Attendance request
@@ -2002,403 +1547,6 @@ export function AttendancePage() {
             </div>
           </Card>
         </div>
-      )}
-
-      {/* TAB 3: Daily Attendance */}
-      {activeTab === 'daily' && (
-        <Card bodyClassName="p-5 sm:p-6">
-          {/* Header & Filter Section */}
-          <div className="space-y-3.5">
-            {/* Header Row */}
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Daily attendance</h2>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-1">Present, late, absent and not marked for one day.</p>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    loadData();
-                    toast.success('Daily attendance refreshed');
-                  }}
-                  className="size-8.5 inline-flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                  title="Refresh"
-                >
-                  <RefreshIcon className="size-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={exportDailyExcel}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
-                >
-                  <FileSpreadsheetIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Download Excel</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={exportDailyCsv}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
-                >
-                  <DownloadIcon className="size-4" />
-                  <span>Export CSV</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Filter Row: Date and Department */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Date input */}
-              <div className="relative inline-flex items-center">
-                <input
-                  type="text"
-                  value={dailyDateDisplay}
-                  onChange={(e) => setDailyDateDisplay(e.target.value)}
-                  placeholder="DD-MM-YYYY"
-                  className="h-9 px-3.5 pr-9 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-36 cursor-pointer"
-                />
-                <CalendarIcon className="size-4 absolute right-3 pointer-events-none text-muted-foreground" />
-              </div>
-
-              {/* Department selector */}
-              <div className="relative inline-flex items-center">
-                <select
-                  value={dailyDeptFilter}
-                  onChange={(e) => setDailyDeptFilter(e.target.value)}
-                  className="h-9 appearance-none pl-3.5 pr-8 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer min-w-[160px]"
-                >
-                  <option value="All">All departments</option>
-                  <option value="Accounts">Accounts</option>
-                  <option value="Design">Design</option>
-                  <option value="Executive">Executive</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Site Operations">Site Operations</option>
-                  <option value="Estimation">Estimation</option>
-                </select>
-                <ArrowUpDownIcon className="size-3.5 absolute right-2.5 pointer-events-none text-muted-foreground" />
-              </div>
-            </div>
-          </div>
-
-          {/* Table with slight gap from heading & buttons */}
-          <div className="mt-5 rounded-xl border border-border overflow-x-auto bg-card shadow-2xs">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-muted-foreground">
-                  <th className="py-3 px-4 font-semibold w-14">Sr No</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Employee Code</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Full Name</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Department</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Designation</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Status</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Shift</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Check In</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Check Out</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Hours Worked</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Overtime (hrs)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredDailyRecords.map((row, idx) => (
-                  <tr key={row.id} className="hover:bg-muted/40 transition-colors">
-                    <td className="py-3.5 px-4 text-muted-foreground">{idx + 1}</td>
-                    <td className="py-3.5 px-4 font-medium text-foreground whitespace-nowrap">{row.employeeCode}</td>
-                    <td className="py-3.5 px-4 font-semibold text-foreground whitespace-nowrap">{row.name}</td>
-                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.department}</td>
-                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.designation}</td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      {row.status === 'Present' && (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Present</span>
-                      )}
-                      {row.status === 'Not marked' && (
-                        <span className="text-teal-600 dark:text-teal-400 font-semibold">Not marked</span>
-                      )}
-                      {row.status === 'Late' && (
-                        <span className="text-amber-600 dark:text-amber-400 font-semibold">Late</span>
-                      )}
-                      {row.status === 'Half Day' && (
-                        <span className="text-amber-700 dark:text-amber-400 font-semibold">Half Day</span>
-                      )}
-                      {row.status === 'Absent' && (
-                        <span className="text-rose-600 dark:text-rose-400 font-semibold">Absent</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.shift}</td>
-                    <td className="py-3.5 px-4 font-mono text-foreground whitespace-nowrap">{row.checkIn}</td>
-                    <td className="py-3.5 px-4 font-mono text-muted-foreground whitespace-nowrap">{row.checkOut}</td>
-                    <td className="py-3.5 px-4 text-foreground tabular-nums">{row.hoursWorked}</td>
-                    <td className="py-3.5 px-4 text-foreground tabular-nums">{row.overtimeHrs}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* TAB 4: Attendance Summary */}
-      {activeTab === 'summary' && (
-        <Card bodyClassName="p-5 sm:p-6">
-          {/* Header & Filter Section */}
-          <div className="space-y-3.5">
-            {/* Header Row */}
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Attendance summary</h2>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
-                  Per employee for one month: present, late, half day, overtime, absent and unmarked days, with penalty and overtime pay.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    loadData();
-                    toast.success('Attendance summary refreshed');
-                  }}
-                  className="size-8.5 inline-flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                  title="Refresh"
-                >
-                  <RefreshIcon className="size-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={exportSummaryExcel}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
-                >
-                  <FileSpreadsheetIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Download Excel</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={exportSummaryCsv}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors shadow-2xs cursor-pointer"
-                >
-                  <DownloadIcon className="size-4" />
-                  <span>Export CSV</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Filter Row: Month and Department */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Month selector */}
-              <div className="relative inline-flex items-center">
-                <select
-                  value={summaryMonth}
-                  onChange={(e) => setSummaryMonth(e.target.value)}
-                  className="h-9 appearance-none pl-3.5 pr-8 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer min-w-[150px]"
-                >
-                  <option value="October, 2026">October, 2026</option>
-                  <option value="September, 2026">September, 2026</option>
-                  <option value="August, 2026">August, 2026</option>
-                  <option value="July, 2026">July, 2026</option>
-                </select>
-                <CalendarIcon className="size-4 absolute right-2.5 pointer-events-none text-muted-foreground" />
-              </div>
-
-              {/* Department selector */}
-              <div className="relative inline-flex items-center">
-                <select
-                  value={summaryDeptFilter}
-                  onChange={(e) => setSummaryDeptFilter(e.target.value)}
-                  className="h-9 appearance-none pl-3.5 pr-8 text-xs sm:text-sm font-medium border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer min-w-[160px]"
-                >
-                  <option value="All">All departments</option>
-                  <option value="Accounts">Accounts</option>
-                  <option value="Design">Design</option>
-                  <option value="Executive">Executive</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Site Operations">Site Operations</option>
-                  <option value="Estimation">Estimation</option>
-                </select>
-                <ArrowUpDownIcon className="size-3.5 absolute right-2.5 pointer-events-none text-muted-foreground" />
-              </div>
-            </div>
-          </div>
-
-          {/* Table with slight gap from heading & buttons */}
-          <div className="mt-5 rounded-xl border border-border overflow-x-auto bg-card shadow-2xs">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-muted-foreground">
-                  <th className="py-3 px-4 font-semibold w-14">Sr No</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Employee Code</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Full Name</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Department</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Present</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Late</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Half Day</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Overtime</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Absent</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Unmarked Working Days</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Late Penalty</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap text-center">Overtime Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredSummaryRecords.map((row, idx) => (
-                  <tr key={row.id} className="hover:bg-muted/40 transition-colors">
-                    <td className="py-3.5 px-4 text-muted-foreground">{idx + 1}</td>
-                    <td className="py-3.5 px-4 font-medium text-foreground whitespace-nowrap">{row.employeeCode}</td>
-                    <td className="py-3.5 px-4 font-semibold text-foreground whitespace-nowrap">{row.name}</td>
-                    <td className="py-3.5 px-4 text-muted-foreground whitespace-nowrap">{row.department}</td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Present', row.present)}
-                        className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline cursor-pointer"
-                        title="Click to see days and change them"
-                      >
-                        {row.present}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Late', row.late)}
-                        className="text-amber-600 dark:text-amber-400 font-semibold hover:underline cursor-pointer"
-                        title="Click to see days and change them"
-                      >
-                        {row.late}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Half Day', row.halfDay)}
-                        className="text-foreground font-semibold hover:underline cursor-pointer"
-                        title="Click to see days and change them"
-                      >
-                        {row.halfDay}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Overtime', row.overtime)}
-                        className="text-foreground font-semibold hover:underline cursor-pointer"
-                        title="Click to see days and change them"
-                      >
-                        {row.overtime}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Absent', row.absent)}
-                        className={row.absent > 0 ? "text-rose-600 dark:text-rose-400 font-semibold hover:underline cursor-pointer" : "text-muted-foreground hover:underline cursor-pointer"}
-                        title="Click to see days and change them"
-                      >
-                        {row.absent}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Unmarked Working Days', row.unmarked)}
-                        className="text-foreground font-semibold hover:underline cursor-pointer"
-                        title="Click to see days and change them"
-                      >
-                        {row.unmarked}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Late Penalty', row.latePenalty)}
-                        className="text-muted-foreground hover:underline cursor-pointer"
-                        title="Click to see days and change them"
-                      >
-                        {row.latePenalty}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSummaryBreakdown(row, 'Overtime Amount', row.overtimeAmount)}
-                        className={row.overtimeAmount > 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold hover:underline cursor-pointer" : "text-muted-foreground hover:underline cursor-pointer"}
-                        title="Click to see days and change them"
-                      >
-                        {row.overtimeAmount}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Caption Note matching screenshot */}
-          <p className="text-xs text-muted-foreground mt-3">
-            Click any number to see its days and change them. Absent days include days the system marked absent automatically.
-          </p>
-        </Card>
-      )}
-
-      {/* MODAL: Attendance Summary Breakdown & Day Adjuster */}
-      {summaryBreakdownTarget && (
-        <Modal
-          isOpen={!!summaryBreakdownTarget}
-          onClose={() => setSummaryBreakdownTarget(null)}
-          title={`Monthly Days — ${summaryBreakdownTarget.name}`}
-          subtitle={`Category: ${summaryBreakdownTarget.category} • Selected Month: ${summaryMonth}`}
-          footer={
-            <Button variant="outline" size="sm" onClick={() => setSummaryBreakdownTarget(null)}>
-              Close
-            </Button>
-          }
-        >
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-muted/50 rounded-xl border border-border flex items-center justify-between">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-muted-foreground">Metric Count</span>
-                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{summaryBreakdownTarget.value}</p>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground">Employee Code</span>
-                <p className="font-mono font-medium text-foreground mt-0.5">{summaryBreakdownTarget.employeeCode || '—'}</p>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-muted-foreground">
-              Click any status below to change the recorded day's status. Absent days include days the system marked absent automatically.
-            </p>
-
-            <div className="max-h-72 overflow-y-auto space-y-2 divide-y divide-border/60 pr-1">
-              {summaryBreakdownTarget.days.map((dayItem, dIdx) => (
-                <div key={dIdx} className="pt-2 first:pt-0 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-foreground">{dayItem.date}</div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      {dayItem.checkIn ? `${dayItem.checkIn} - ${dayItem.checkOut || 'Active'}` : 'System logged entry'}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={dayItem.status}
-                      onChange={(e) => handleUpdateBreakdownDayStatus(dIdx, e.target.value)}
-                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-border bg-card text-foreground cursor-pointer"
-                    >
-                      <option value="Present">Present</option>
-                      <option value="Late">Late</option>
-                      <option value="Half Day">Half Day</option>
-                      <option value="Overtime">Overtime</option>
-                      <option value="Absent">Absent</option>
-                      <option value="Unmarked Working Days">Unmarked</option>
-                    </select>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Modal>
       )}
 
       {/* MODAL 1: Office Location Settings */}
@@ -2856,7 +2004,7 @@ export function AttendancePage() {
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Working Hours</span>
-                <p className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                <p className="font-bold text-foreground mt-0.5">
                   {calculateWorkingHours(viewTargetRecord.checkInTime, viewTargetRecord.checkOutTime)}
                 </p>
               </div>
@@ -2866,7 +2014,7 @@ export function AttendancePage() {
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-muted-foreground">Check-Out Time</span>
-                <p className="font-mono font-medium text-foreground mt-0.5">{viewTargetRecord.checkOutTime || 'Active'}</p>
+                <p className="font-mono font-medium text-foreground mt-0.5">{viewTargetRecord.checkOutTime || '—'}</p>
               </div>
             </div>
 

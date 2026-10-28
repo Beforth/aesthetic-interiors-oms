@@ -1454,14 +1454,8 @@ export function ProjectsPage() {
     <div className="space-y-6 pb-12">
       {/* Page Header */}
       <PageHeader
-        title="Site Stages"
-        subtitle={
-          selectedProjectId === 'ALL'
-            ? '12 SRS Interior Fit-Out Stages (Cleaning to Painter) across all active site contracts'
-            : currentSelectedProject
-            ? `12 Site Stages progress for ${currentSelectedProject.name}`
-            : 'Select a project from the dropdown to monitor its 12 site stages'
-        }
+        title="Projects"
+        subtitle="Active site stages and execution progress"
         actions={
           <div className="flex items-center gap-2">
             {/* View Switcher: Board vs Grid */}

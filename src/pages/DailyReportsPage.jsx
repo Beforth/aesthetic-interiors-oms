@@ -274,6 +274,7 @@ export function DailyReportsPage() {
   const [deletingPhoto, setDeletingPhoto] = useState(null); // { entry, photo }
   const detailFileInputRef = useRef(null);
   const tableUploadInputRef = useRef(null);
+  const dsrImportInputRef = useRef(null);
   const [selectedUploadTarget, setSelectedUploadTarget] = useState(null);
 
   /**
@@ -663,8 +664,8 @@ export function DailyReportsPage() {
     <div className="relative space-y-6 pb-12">
       {/* Page Header */}
       <PageHeader
-        title="Daily Status Report"
-        subtitle={`${whose} operational site execution, photos, and daily task records`}
+        title="Daily Reports"
+        subtitle="Daily site work logs and photo updates"
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button
@@ -675,6 +676,27 @@ export function DailyReportsPage() {
             >
               Export CSV
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon="upload"
+              onClick={() => dsrImportInputRef.current?.click()}
+            >
+              Import CSV
+            </Button>
+            <input
+              type="file"
+              ref={dsrImportInputRef}
+              accept=".csv"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  toast.success(`Imported daily status reports from ${file.name}`);
+                }
+                e.target.value = '';
+              }}
+            />
             <PermissionGate permission="dsr.submit">
               <Button
                 variant="primary"

@@ -127,8 +127,8 @@ export function LeavePayslipsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Leave & Monthly Payslips"
-        subtitle="SRS Section 3.11: Worker leave applications, manager approvals, leave quotas, and automated attendance-linked payroll"
+        title="Leave & Payslips"
+        subtitle="Employee leave requests and monthly payslips"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -264,7 +264,7 @@ export function LeavePayslipsPage() {
           }`}
         >
           <Icon name="calendar" size={14} />
-          <span>Leave Quotas & Balances (FR-HR-03)</span>
+          <span>Leave Quotas & Balances</span>
         </button>
 
         <button
@@ -277,28 +277,18 @@ export function LeavePayslipsPage() {
           }`}
         >
           <Icon name="receipt" size={14} />
-          <span>Monthly Payslips & Payroll (FR-HR-04/06)</span>
+          <span>Monthly Payslips & Payroll</span>
         </button>
       </div>
 
       {/* TAB 1: Leave Applications & Approvals */}
       {activeTab === 'applications' && (
         <Card className="space-y-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-text-main">Leave Applications</h3>
-              <p className="text-xs text-text-muted">
-                SRS FR-HR-01 & FR-HR-02: Employee leave submissions and manager decision workflows
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              leadingIcon="plus"
-              onClick={() => setIsApplyModalOpen(true)}
-            >
-              Apply Leave
-            </Button>
+          <div className="border-b pb-3">
+            <h3 className="text-sm font-bold text-text-main">Leave Applications</h3>
+            <p className="text-xs text-text-muted">
+              Employee leave submissions and manager decision workflows
+            </p>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-border/80">
@@ -427,14 +417,35 @@ export function LeavePayslipsPage() {
                 Calculated dynamically from attendance biometric punches and approved leave credits
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              leadingIcon="download"
-              onClick={() => toast.success('Batch payslip ZIP export initiated')}
-            >
-              Export Batch
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                leadingIcon="download"
+                onClick={() => toast.success('Batch payslip ZIP export initiated')}
+              >
+                Export Batch
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leadingIcon="upload"
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.csv,.xlsx,.xls,.zip';
+                  input.onchange = (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      toast.success(`Imported salary batch: ${file.name}`);
+                    }
+                  };
+                  input.click();
+                }}
+              >
+                Import Batch
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-border/80">
@@ -519,11 +530,11 @@ export function LeavePayslipsPage() {
         </Card>
       )}
 
-      {/* MODAL 1: Apply Leave (FR-HR-01) */}
+      {/* MODAL 1: Apply Leave */}
       <Modal
         isOpen={isApplyModalOpen}
         onClose={() => setIsApplyModalOpen(false)}
-        title="Apply for Employee Leave (FR-HR-01)"
+        title="Apply for Employee Leave"
       >
         <form onSubmit={handleApplyLeave} className="space-y-4 text-xs">
           <div className="space-y-1">
@@ -692,11 +703,11 @@ export function LeavePayslipsPage() {
         </Modal>
       )}
 
-      {/* MODAL 3: Generate Monthly Payslips (FR-HR-04) */}
+      {/* MODAL 3: Generate Monthly Payslips */}
       <Modal
         isOpen={isGenerateModalOpen}
         onClose={() => setIsGenerateModalOpen(false)}
-        title="Generate Monthly Staff Payslips (FR-HR-04 / FR-HR-05)"
+        title="Generate Monthly Staff Payslips"
       >
         <div className="space-y-4 text-xs">
           <p className="text-text-muted">
