@@ -293,6 +293,35 @@ const mockProjectService = {
       const projects = getStoredProjects();
       const filtered = projects.filter((p) => p.id !== projectId);
       saveProjects(filtered);
+
+      // Clean up linked tasks from local storage
+      try {
+        const rawTasks = localStorage.getItem('osm_tasks_store_v2');
+        if (rawTasks) {
+          const tasks = JSON.parse(rawTasks);
+          if (Array.isArray(tasks)) {
+            const filteredTasks = tasks.filter((t) => String(t.projectId) !== String(projectId));
+            localStorage.setItem('osm_tasks_store_v2', JSON.stringify(filteredTasks));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to clean up tasks for deleted project', e);
+      }
+
+      // Clean up linked DSR entries from local storage
+      try {
+        const rawDsr = localStorage.getItem('osm_dsr_entries_v2');
+        if (rawDsr) {
+          const dsrEntries = JSON.parse(rawDsr);
+          if (Array.isArray(dsrEntries)) {
+            const filteredDsr = dsrEntries.filter((d) => String(d.projectId) !== String(projectId));
+            localStorage.setItem('osm_dsr_entries_v2', JSON.stringify(filteredDsr));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to clean up DSR entries for deleted project', e);
+      }
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('osm_project_deleted', {

@@ -509,8 +509,8 @@ export function UsersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Settings > Users & Roles"
-        subtitle="Manage personnel records and site access credentials"
+        title="Users & Roles"
+        subtitle="Team members, roles, and system access"
         actions={
           (canChangeRoles || canManageUsers) && (
             <div className="flex items-center gap-2">

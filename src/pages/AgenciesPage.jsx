@@ -727,7 +727,7 @@ export function AgenciesPage() {
     return (
       <div className="w-full space-y-6 pb-12 animate-fadeIn">
         {/* Top Navigation & Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-1">
           <div>
             <button
               type="button"
@@ -1153,8 +1153,8 @@ export function AgenciesPage() {
     <div className="space-y-6 pb-12">
       {/* Page Header */}
       <PageHeader
-        title="Subcontractor & Trade Agencies"
-        subtitle="Master directory of specialist trade contractors, 12 sequential fit-out stages, supplied products, and site allocations"
+        title="Agencies"
+        subtitle="Trade contractors and site agencies"
         actions={
           <PermissionGate permission="agencies.manage">
             <Button

@@ -8,6 +8,8 @@ export interface KanbanColumn {
   title: string;
   /** Dot color next to the title. */
   tone?: 'default' | 'info' | 'warning' | 'success' | 'danger';
+  /** Custom text to display when the column has no items */
+  emptyText?: string;
 }
 
 const dot = { default: 'bg-muted-foreground', info: 'bg-info', warning: 'bg-warning', success: 'bg-success', danger: 'bg-destructive' };
@@ -26,6 +28,7 @@ export function Kanban<T extends { id: string }>({
   onAdd,
   className,
   columnClassName,
+  listClassName,
   density = 'compact',
   showCount = true,
 }: {
@@ -37,6 +40,7 @@ export function Kanban<T extends { id: string }>({
   onAdd?: (columnId: string) => void;
   className?: string;
   columnClassName?: string;
+  listClassName?: string;
   density?: 'compact' | 'comfortable';
   showCount?: boolean;
 }) {
@@ -126,7 +130,8 @@ export function Kanban<T extends { id: string }>({
               className={cn(
                 'flex flex-1 flex-col overflow-y-auto pr-1',
                 density === 'compact' ? 'gap-1.5 min-h-[300px]' : 'gap-2.5 min-h-[350px]',
-                'max-h-[calc(100vh-270px)]'
+                'max-h-[calc(100vh-270px)]',
+                listClassName
               )}
             >
               {items.map((it, ri) => {
@@ -156,7 +161,11 @@ export function Kanban<T extends { id: string }>({
                 );
               })}
               {showAt >= 0 && seen === showAt && line}
-              {items.length === 0 && showAt < 0 && <p className="grid flex-1 place-items-center rounded-lg border border-dashed py-4 text-xs text-muted-foreground">Drop cards here</p>}
+              {items.length === 0 && showAt < 0 && (
+                <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-card/40 py-5 px-3 text-xs text-muted-foreground text-center min-h-[96px]">
+                  <span>{c.emptyText || 'Drop cards here'}</span>
+                </div>
+              )}
             </div>
           </section>
         );

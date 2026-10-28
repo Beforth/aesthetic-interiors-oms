@@ -204,8 +204,8 @@ export function SidebarContent({ className, children, ...props }: SidebarContent
   return (
     <div
       className={cn(
-        'flex flex-1 flex-col overflow-y-auto overflow-x-hidden py-3 space-y-4',
-        isCollapsed ? 'px-2' : 'px-3',
+        'flex flex-1 flex-col py-3 space-y-4',
+        isCollapsed ? 'px-2 overflow-visible' : 'px-3 overflow-y-auto overflow-x-hidden',
         className
       )}
       {...props}
@@ -299,6 +299,7 @@ export function SidebarItem({
         type="button"
         onClick={handleClick}
         aria-label={label}
+        title={isCollapsed ? label : undefined}
         className={cn(
           'group flex w-full items-center gap-3 rounded-lg text-sm font-medium transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           isCollapsed ? 'h-10 justify-center px-0' : 'min-h-[38px] px-2.5 py-2',
@@ -349,11 +350,11 @@ export function SidebarItem({
       {isCollapsed && (
         <div
           role="tooltip"
-          className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 z-50 hidden rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white shadow-lg whitespace-nowrap group-hover/sidebar-item:block animate-fadeIn"
+          className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 z-50 hidden rounded-md bg-slate-900 text-white border border-slate-700/60 px-2.5 py-1 text-xs font-semibold shadow-xl whitespace-nowrap group-hover/sidebar-item:flex items-center gap-1.5 animate-fadeIn"
         >
-          {label}
+          <span>{label}</span>
           {badge !== undefined && (
-            <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.2 text-[9px] font-bold text-white">
+            <span className="rounded-full bg-primary px-1.5 py-0.2 text-[9px] font-bold text-primary-foreground">
               {badge}
             </span>
           )}

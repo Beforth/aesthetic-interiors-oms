@@ -17,9 +17,27 @@ import Input from '../components/ui/Input';
 import Textarea from '../components/ui/Textarea';
 import Select from '../components/ui/Select';
 import EmptyState from '../components/ui/EmptyState';
-import ProjectCard from '../components/domain/ProjectCard';
 import PermissionGate from '../components/ui/PermissionGate';
 import Icon from '../components/ui/Icon';
+import { Kanban } from '../components/ui/kanban';
+import StatusBadge from '../components/ui/StatusBadge';
+import { calculateProgress } from '../utils/progress';
+import { cn } from '../lib/utils';
+
+const CLIENT_PROJECT_KANBAN_COLUMNS = [
+  {
+    id: 'active',
+    title: 'Current Working Projects',
+    tone: 'success',
+    emptyText: 'No active projects currently running',
+  },
+  {
+    id: 'completed',
+    title: 'Previous & Completed Projects',
+    tone: 'info',
+    emptyText: 'No completed projects on record',
+  },
+];
 
 export function ClientDetailPage() {
   const { id } = useParams();
@@ -247,6 +265,125 @@ export function ClientDetailPage() {
     return allProjects.filter((p) => !linkedIds.has(p.id));
   }, [allProjects, clientProjects]);
 
+  // BefUI Kanban Board Data for Active Working vs Previous Completed fit-out sites
+  const kanbanBoardValue = useMemo(() => {
+    return {
+      active: activeWorkingProjects,
+      completed: previousCompletedProjects,
+    };
+  }, [activeWorkingProjects, previousCompletedProjects]);
+
+  // Handle stage/status progression when dragging across Kanban columns
+  const handleKanbanChange = async (nextBoard) => {
+    const nextActive = nextBoard.active || [];
+    const nextCompleted = nextBoard.completed || [];
+
+    // Detect if a project was moved into Completed column
+    const movedToCompleted = nextCompleted.find((p) =>
+      activeWorkingProjects.some((ap) => ap.id === p.id)
+    );
+    if (movedToCompleted) {
+      try {
+        await projectService.updateProject(movedToCompleted.id, {
+          status: 'completed',
+        });
+        toast.success(`Project "${movedToCompleted.name}" marked as completed`);
+        fetchData();
+        return;
+      } catch (err) {
+        toast.error('Failed to update project status');
+      }
+    }
+
+    // Detect if a project was moved back into Active column
+    const movedToActive = nextActive.find((p) =>
+      previousCompletedProjects.some((cp) => cp.id === p.id)
+    );
+    if (movedToActive) {
+      try {
+        await projectService.updateProject(movedToActive.id, {
+          status: 'in progress',
+        });
+        toast.success(`Project "${movedToActive.name}" moved to active execution`);
+        fetchData();
+        return;
+      } catch (err) {
+        toast.error('Failed to update project status');
+      }
+    }
+
+    // In-column reordering
+    setClientProjects([...nextActive, ...nextCompleted]);
+  };
+
+  /**
+   * Compact project card renderer for Client Overview Kanban.
+   * Displays strictly:
+   * 1. Project Name (with status badge)
+   * 2. Progress (current stage & progress track)
+   * 3. Total Cost
+   */
+  const renderCompactProjectCard = (project) => {
+    const isCompleted = project.status === 'completed' || project.status === 'done';
+    const progress = isCompleted
+      ? 100
+      : project.progress !== undefined && project.progress !== null
+      ? Number(project.progress)
+      : calculateProgress(project.stages || []);
+
+    const stageName = isCompleted
+      ? 'Delivered'
+      : (project.stages || []).find((s) => s.status === 'in progress')?.name ||
+        (project.stages || []).find((s) => s.status === 'not started')?.name ||
+        project.stages?.[project.stages.length - 1]?.name ||
+        'Execution';
+
+    return (
+      <div
+        onClick={() => navigate(`/projects/${project.id}`)}
+        className="space-y-2 select-none group cursor-pointer"
+        title={`Open project: ${project.name}`}
+      >
+        {/* 1. Project Name & Status Badge */}
+        <div className="flex items-start justify-between gap-2">
+          <h5 className="font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors truncate">
+            {project.name}
+          </h5>
+          <StatusBadge status={project.status || 'in progress'} size="sm" />
+        </div>
+
+        {/* 2. Progress */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span className="truncate">
+              Progress ({stageName})
+            </span>
+            <span className="font-semibold text-foreground font-mono">{progress}%</span>
+          </div>
+          <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all duration-300',
+                progress === 100 ? 'bg-success' : 'bg-primary'
+              )}
+              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+            />
+          </div>
+        </div>
+
+        {/* 3. Total Cost */}
+        <div className="flex items-center justify-between pt-1.5 border-t border-border/60 text-xs">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            Total Cost
+          </span>
+          <span className="font-bold text-foreground font-mono">
+            {formatCurrency(project.totalCost || project.budget || 0)}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   if (loading || !client) {
     return (
       <div className="p-8 text-center text-xs text-text-muted">
@@ -258,31 +395,10 @@ export function ClientDetailPage() {
   const isOld = client.type === 'old' || client.status === 'old';
 
   const detailItems = [
-    { label: 'Client Name', value: client.name, icon: 'user' },
-    {
-      label: 'Client Status',
-      value: (
-        <span
-          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${
-            isOld
-              ? 'bg-blue-50 text-blue-700 border-blue-200'
-              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-          }`}
-        >
-          <span
-            className={`w-2 h-2 rounded-full mr-1.5 ${
-              isOld ? 'bg-blue-600' : 'bg-emerald-600'
-            }`}
-          />
-          {isOld ? 'Existing (Old) Client' : 'New Client'}
-        </span>
-      ),
-      icon: 'sparkles',
-    },
-    { label: 'Phone Number', value: client.phone, icon: 'phone' },
+    { label: 'Phone Number', value: client.phone || 'None on record', icon: 'phone' },
     { label: 'Email Address', value: client.email || 'None on record', icon: 'mail' },
     {
-      label: 'Onboarding Date',
+      label: 'Registered On',
       value: formatDate(client.createdAt),
       icon: 'calendar',
     },
@@ -291,11 +407,13 @@ export function ClientDetailPage() {
       value: (
         <div className="flex items-center gap-2">
           <span className="font-semibold text-text-main">
-            {clientProjects.length} total
+            {clientProjects.length} {clientProjects.length === 1 ? 'Site' : 'Sites'}
           </span>
-          <span className="text-xs text-text-muted">
-            ({activeWorkingProjects.length} working • {previousCompletedProjects.length} completed)
-          </span>
+          {clientProjects.length > 0 && (
+            <span className="text-xs text-text-muted">
+              ({activeWorkingProjects.length} active • {previousCompletedProjects.length} completed)
+            </span>
+          )}
         </div>
       ),
       icon: 'projects',
@@ -309,7 +427,7 @@ export function ClientDetailPage() {
     {
       label: 'Architectural & Design Notes',
       value: (
-        <div className="p-3 rounded-lg bg-accent/40 border border-border text-xs text-foreground leading-relaxed">
+        <div className="p-2.5 rounded-lg bg-accent/30 border border-border text-xs text-foreground leading-relaxed max-w-md">
           {client.notes || 'No custom notes provided.'}
         </div>
       ),
@@ -319,7 +437,7 @@ export function ClientDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Left Navigation: Back to Directory button moved from right to left */}
+      {/* Top Left Navigation: Back to Directory button */}
       <div className="flex items-center justify-between">
         <Button
           variant="outline"
@@ -349,15 +467,11 @@ export function ClientDetailPage() {
                   isOld ? 'bg-blue-600' : 'bg-emerald-600'
                 }`}
               />
-              {isOld ? 'Existing (Old) Client' : 'New Client'}
+              {isOld ? 'Old Client' : 'New Client'}
             </span>
           </div>
         }
-        subtitle={`Client ID: ${client.id} • Registered ${formatDate(client.createdAt)}`}
-        breadcrumbs={[
-          { label: 'Clients', path: '/clients' },
-          { label: client.name },
-        ]}
+        subtitle={`Client ID: ${client.id}`}
         actions={
           canManageClients && (
             <Button
@@ -373,8 +487,8 @@ export function ClientDetailPage() {
       />
 
       {/* Client Overview Card */}
-      <Card title="Client Information & Preferences">
-        <DetailList items={detailItems} columns={3} />
+      <Card title="Client Information">
+        <DetailList items={detailItems} columns={4} />
       </Card>
 
       {/* Associated Projects Section: Working & Previous Projects */}
@@ -387,22 +501,10 @@ export function ClientDetailPage() {
                 {clientProjects.length}
               </span>
             </h3>
-            <p className="text-xs text-muted-foreground">
-              Active working fit-out sites & past completed contracts for {client.name}
-            </p>
           </div>
 
           <PermissionGate permission="projects.create">
             <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                leadingIcon="link"
-                onClick={() => setIsLinkModalOpen(true)}
-                title="Link an existing project to this client"
-              >
-                Link Project
-              </Button>
               <Button
                 variant="primary"
                 size="sm"
@@ -483,70 +585,20 @@ export function ClientDetailPage() {
             }
           />
         ) : (
-          <div className="space-y-6">
-            {/* 1. Current Working Projects */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-border pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <h4 className="text-sm font-bold text-text-main">
-                    Current Working Projects ({activeWorkingProjects.length})
-                  </h4>
-                </div>
-                <span className="text-xs text-text-muted">
-                  Live execution and in-progress milestones
-                </span>
-              </div>
-
-              {activeWorkingProjects.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-border bg-muted/30 text-xs text-muted-foreground text-center">
-                  No active in-progress projects currently running for this client. Click "Add Project" to initialize one.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activeWorkingProjects.map((project) => (
-                    <ProjectCard
-                      key={project.id}
-                      project={project}
-                      teamUsers={users}
-                      onClick={() => navigate(`/projects/${project.id}`)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 2. Previous & Completed Projects */}
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between border-b border-border pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                  <h4 className="text-sm font-bold text-foreground">
-                    Previous & Completed Projects ({previousCompletedProjects.length})
-                  </h4>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  Successfully delivered fit-out contracts
-                </span>
-              </div>
-
-              {previousCompletedProjects.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-border bg-muted/30 text-xs text-muted-foreground text-center">
-                  No previous completed contracts on record for this client.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {previousCompletedProjects.map((project) => (
-                    <ProjectCard
-                      key={project.id}
-                      project={project}
-                      teamUsers={users}
-                      onClick={() => navigate(`/projects/${project.id}`)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="pt-1">
+            <Kanban
+              columns={CLIENT_PROJECT_KANBAN_COLUMNS}
+              value={kanbanBoardValue}
+              onChange={handleKanbanChange}
+              onAdd={canManageClients ? () => handleOpenAddProject() : undefined}
+              columnClassName="bg-secondary/40 border border-border/70"
+              listClassName="min-h-[110px]"
+              getCardClassName={() =>
+                'hover:border-primary/50 hover:shadow-xs transition-all cursor-pointer'
+              }
+              density="compact"
+              renderCard={renderCompactProjectCard}
+            />
           </div>
         )}
       </div>

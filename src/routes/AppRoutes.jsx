@@ -20,6 +20,7 @@ import TasksPage from '../pages/TasksPage';
 import DailyReportsPage from '../pages/DailyReportsPage';
 import PaymentsPage from '../pages/PaymentsPage';
 import LeavePayslipsPage from '../pages/LeavePayslipsPage';
+import ReportsPage from '../pages/ReportsPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 
@@ -167,12 +168,7 @@ export function AppRoutes() {
           path="reports"
           element={
             <RoleRoute permission="reports.view">
-              <PlaceholderPage
-                title="Reports & Analytics"
-                subtitle="Operational velocity, stage delay metrics, vendor performance ratings, and financial margins"
-                icon="reports"
-                phase="Phase 4"
-              />
+              <ReportsPage />
             </RoleRoute>
           }
         />

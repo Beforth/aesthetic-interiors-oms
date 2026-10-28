@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { projectService } from '../services/projectService';
 import { clientService } from '../services/clientService';
 import { userService } from '../services/userService';
@@ -16,6 +16,7 @@ import Avatar from '../components/ui/avatar';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Textarea from '../components/ui/Textarea';
+import Modal from '../components/ui/Modal';
 import {
   ArrowLeftIcon,
   CalendarIcon,
@@ -44,8 +45,17 @@ const INITIAL_SRS_PHASES = [
 
 export default function NewProjectPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const editProjectId = searchParams.get('id') || searchParams.get('edit') || searchParams.get('projectId');
+
+  const { user, role, hasPermission } = useAuth();
   const toast = useToast();
+
+  const isManagerOrAdmin =
+    role === 'owner' ||
+    role === 'admin' ||
+    role === 'manager' ||
+    (hasPermission && hasPermission('projects.create'));
 
   // Form State
   const [formData, setFormData] = useState({
@@ -65,6 +75,13 @@ export default function NewProjectPage() {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Existing Project & Delete Modal States
+  const [existingProject, setExistingProject] = useState(null);
+  const [allProjects, setAllProjects] = useState([]);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedProjectIdToDelete, setSelectedProjectIdToDelete] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Data Options
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
@@ -74,13 +91,47 @@ export default function NewProjectPage() {
     let isMounted = true;
     async function loadData() {
       try {
-        const [loadedClients, loadedUsers] = await Promise.all([
+        const [loadedClients, loadedUsers, loadedProjects] = await Promise.all([
           clientService.getAllClients(user),
           userService.getAllUsers(user),
+          projectService.getAllProjects(user),
         ]);
         if (!isMounted) return;
         setClients(loadedClients || []);
         setUsers(loadedUsers || []);
+        setAllProjects(loadedProjects || []);
+
+        if (editProjectId) {
+          const found =
+            (loadedProjects || []).find((p) => p.id === editProjectId) ||
+            (await projectService.getProjectById(editProjectId));
+          if (found) {
+            setExistingProject(found);
+            setFormData({
+              name: found.name || '',
+              description: found.description || '',
+              contact: found.clientContact || found.clientId || '',
+              siteAddress: found.siteAddress || '',
+              totalCost: found.totalCost || found.budget || '',
+              startDate: found.startDate || '',
+              endDate: found.endDate || '',
+              projectLead: found.projectLead || '',
+            });
+            if (found.stages && found.stages.length > 0) {
+              setPhases(
+                found.stages.map((s, idx) => ({
+                  id: s.id || `stg_${idx + 1}`,
+                  name: s.name,
+                  startDate: s.startDate || '',
+                  endDate: s.endDate || '',
+                  plannedHours: s.plannedHours || 40,
+                }))
+              );
+            }
+            const members = [...(found.supervisors || []), ...(found.workers || [])];
+            setSelectedMemberIds(members);
+          }
+        }
       } catch (err) {
         console.error('Failed to load initial data for new project', err);
         toast.error('Could not load clients and team members.');
@@ -92,7 +143,48 @@ export default function NewProjectPage() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, editProjectId]);
+
+  const handleOpenDelete = () => {
+    if (!isManagerOrAdmin) {
+      toast.error('Only Managers and Admins have authority to delete projects.');
+      return;
+    }
+
+    if (existingProject) {
+      setSelectedProjectIdToDelete(existingProject.id);
+    } else {
+      const match = allProjects.find(
+        (p) => p.name?.trim().toLowerCase() === formData.name?.trim().toLowerCase()
+      );
+      setSelectedProjectIdToDelete(match ? match.id : allProjects[0]?.id || '');
+    }
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    const targetId = existingProject ? existingProject.id : selectedProjectIdToDelete;
+    if (!targetId) {
+      toast.error('Please select a project to delete.');
+      return;
+    }
+
+    const target = allProjects.find((p) => p.id === targetId) || existingProject;
+    const targetName = target?.name || 'Project';
+
+    setIsDeleting(true);
+    try {
+      await projectService.deleteProject(targetId);
+      toast.success(`Project "${targetName}" has been deleted from everywhere.`);
+      setIsDeleteModalOpen(false);
+      navigate('/projects?view=board');
+    } catch (err) {
+      console.error('Failed to delete project', err);
+      toast.error(err.message || 'Failed to delete project.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Toggle Team Member selection
   const handleToggleMember = (uid) => {
@@ -234,18 +326,18 @@ export default function NewProjectPage() {
         startDate: p.startDate || formData.startDate || '',
         endDate: p.endDate || formData.endDate || '',
         plannedHours: Number(p.plannedHours) || 0,
-        status: 'not started',
-        agencyId: null,
-        agencyName: 'Unallocated',
+        status: existingProject?.stages?.[idx]?.status || 'not started',
+        agencyId: existingProject?.stages?.[idx]?.agencyId || null,
+        agencyName: existingProject?.stages?.[idx]?.agencyName || 'Unallocated',
       }));
 
-      await projectService.createProject({
+      const payload = {
         name: formData.name.trim(),
         description: formData.description.trim(),
         clientId: formData.contact.trim(),
         clientName: formData.contact.trim(),
         clientContact: formData.contact.trim(),
-        clientEmail: '',
+        clientEmail: existingProject?.clientEmail || '',
         siteAddress: formData.siteAddress.trim(),
         startDate: formData.startDate || '2026-10-20',
         endDate: formData.endDate || formData.startDate || '2026-12-31',
@@ -254,13 +346,19 @@ export default function NewProjectPage() {
         supervisors,
         workers,
         stages: formattedStages,
-      });
+      };
 
-      toast.success(`Project "${formData.name.trim()}" has been created successfully.`);
+      if (existingProject) {
+        await projectService.updateProject(existingProject.id, payload);
+        toast.success(`Project "${formData.name.trim()}" updated successfully.`);
+      } else {
+        await projectService.createProject(payload);
+        toast.success(`Project "${formData.name.trim()}" has been created successfully.`);
+      }
       navigate('/projects?view=board');
     } catch (err) {
-      console.error('Failed to create project', err);
-      toast.error(err.message || 'An error occurred while creating the project.');
+      console.error('Failed to save project', err);
+      toast.error(err.message || 'An error occurred while saving the project.');
     } finally {
       setIsSubmitting(false);
     }
@@ -278,9 +376,13 @@ export default function NewProjectPage() {
           <ArrowLeftIcon className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
           <span>Projects</span>
         </button>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Add Project</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          {existingProject ? `Edit Project: ${existingProject.name}` : 'Add Project'}
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Create a project to track work, manage time, and keep your pod aligned.
+          {existingProject
+            ? 'Update project details, assign team members, and configure fit-out phases.'
+            : 'Create a project to track work, manage time, and keep your pod aligned.'}
         </p>
       </div>
 
@@ -673,11 +775,21 @@ export default function NewProjectPage() {
         </Card>
 
         {/* Bottom Actions Bar */}
-        <div className="flex items-center justify-end gap-3 pt-6 border-t border-border">
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-6 border-t border-border">
+          <Button
+            type="button"
+            variant="danger"
+            onClick={handleOpenDelete}
+            disabled={isSubmitting || isDeleting}
+          >
+            <TrashIcon className="size-4 mr-1.5" />
+            Delete Project
+          </Button>
           <Button
             type="button"
             variant="outline"
             onClick={() => navigate('/projects?view=board')}
+            disabled={isSubmitting || isDeleting}
           >
             Cancel
           </Button>
@@ -685,12 +797,106 @@ export default function NewProjectPage() {
             type="submit"
             variant="primary"
             loading={isSubmitting}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isDeleting}
           >
-            Add Project
+            {existingProject ? 'Save Changes' : 'Add Project'}
           </Button>
         </div>
       </form>
+
+      {/* Delete Project Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => !isDeleting && setIsDeleteModalOpen(false)}
+        title="Delete Project"
+        subtitle="Permanent deletion from all stages, tasks, DSR, and reports"
+        size="md"
+        footer={
+          <div className="flex items-center justify-end gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDeleteModalOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              loading={isDeleting}
+              disabled={isDeleting || (!existingProject && !selectedProjectIdToDelete)}
+              onClick={handleConfirmDelete}
+            >
+              <TrashIcon className="size-3.5 mr-1" />
+              Delete Permanently
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          {existingProject ? (
+            <div className="space-y-3">
+              <p className="text-xs text-foreground leading-relaxed">
+                Are you sure you want to permanently delete{' '}
+                <strong className="text-foreground font-bold">{existingProject.name}</strong>?
+              </p>
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive space-y-1">
+                <p className="font-semibold">⚠️ Irreversible System Deletion</p>
+                <p>
+                  This project will be deleted from everywhere — including all {existingProject.stages?.length || 12} fit-out stages,
+                  associated site tasks, worker punches, DSR daily reports, and client records.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {allProjects.length > 0 ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Select the project you wish to delete permanently from the system:
+                  </p>
+                  <Select
+                    label="Project to Delete"
+                    value={selectedProjectIdToDelete}
+                    onChange={(e) => setSelectedProjectIdToDelete(e.target ? e.target.value : e)}
+                    options={allProjects.map((p) => ({
+                      value: p.id,
+                      label: `${p.name} (${p.clientName || 'Private'})`,
+                    }))}
+                  />
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive space-y-1">
+                    <p className="font-semibold">⚠️ Irreversible System Deletion</p>
+                    <p>
+                      The selected project will be deleted from everywhere — including all fit-out stages, tasks,
+                      attendance assignments, and daily site reports.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    No saved projects currently exist in the system to delete.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsDeleteModalOpen(false);
+                      navigate('/projects?view=board');
+                    }}
+                  >
+                    Discard Form Draft
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
