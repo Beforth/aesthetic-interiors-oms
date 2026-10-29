@@ -1,12 +1,12 @@
 /**
- * Aesthetic Interiors OMS - Attendance & HRMS Geofence Data
- * Configured according to the HRMS Attendance & Office Location specifications.
+ * Aesthetic Interiors OMS - Attendance Geofence Data
+ * Configured according to the Attendance & Office Location specifications.
  */
 
 export const mockOfficeLocation = {
-  id: 'OFFICE_NEOMED',
-  name: 'Neomed Head Office',
-  address: 'Neomed Head Office, Main Ave',
+  id: 'OFFICE_HEAD',
+  name: 'Head Office',
+  address: 'Head Office, Main Ave',
   lat: 19.967048,
   lng: 73.754104,
   radiusMeters: 500,
@@ -15,9 +15,9 @@ export const mockOfficeLocation = {
 
 export const mockGeofenceSites = [
   {
-    id: 'OFFICE_NEOMED',
-    name: 'Neomed Head Office',
-    address: 'Neomed Head Office, Main Ave',
+    id: 'OFFICE_HEAD',
+    name: 'Head Office',
+    address: 'Head Office, Main Ave',
     lat: 19.967048,
     lng: 73.754104,
     radiusMeters: 500,
@@ -50,7 +50,7 @@ export const mockTodayAttendance = [
     userId: 'u1',
     userName: 'Rohit Kumar',
     role: 'Owner',
-    siteId: 'OFFICE_NEOMED',
+    siteId: 'OFFICE_HEAD',
     site: 'BeForth Nashik',
     date: new Date().toISOString().split('T')[0],
     checkInTime: '11:59',
@@ -68,7 +68,7 @@ export const mockTodayAttendance = [
     userId: 'u2',
     userName: 'Neha Kulkarni',
     role: 'Manager',
-    siteId: 'OFFICE_NEOMED',
+    siteId: 'OFFICE_HEAD',
     site: 'BeForth Nashik',
     date: new Date().toISOString().split('T')[0],
     checkInTime: '10:00 AM',
@@ -176,7 +176,7 @@ export const mockTodayAttendance = [
     userId: 'u8',
     userName: 'Sunita Rao',
     role: 'Supervisor',
-    siteId: 'OFFICE_NEOMED',
+    siteId: 'OFFICE_HEAD',
     site: 'BeForth Nashik',
     date: new Date().toISOString().split('T')[0],
     checkInTime: null,

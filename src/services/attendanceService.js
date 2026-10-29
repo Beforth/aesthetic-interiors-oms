@@ -131,6 +131,20 @@ const mockAttendanceService = {
     }, 'Today attendance records fetched');
   },
 
+  async getRecentAttendance() {
+    return apiClient.execute(async () => {
+      return [];
+    }, 'Recent attendance fetched');
+  },
+
+  async getAttendanceForDate(date) {
+    return apiClient.execute(async () => {
+      if (!date) return [];
+      const records = getStoredAttendance();
+      return records.filter((r) => r.date === date);
+    }, 'Attendance for date fetched');
+  },
+
   async getOfficeLocation() {
     return apiClient.execute(async () => {
       return { ...getStoredOfficeLocation() };
@@ -158,7 +172,7 @@ const mockAttendanceService = {
       const office = getStoredOfficeLocation();
       return [
         {
-          id: office.id || 'OFFICE_NEOMED',
+          id: office.id || 'OFFICE_HEAD',
           name: office.name,
           address: office.address,
           lat: office.lat,
@@ -166,7 +180,7 @@ const mockAttendanceService = {
           radiusMeters: office.radiusMeters,
           type: 'office',
         },
-        ...mockGeofenceSites.filter((s) => s.id !== 'OFFICE_NEOMED'),
+        ...mockGeofenceSites.filter((s) => s.id !== 'OFFICE_HEAD'),
       ];
     }, 'Geofence sites fetched');
   },
@@ -618,13 +632,40 @@ const liveAttendanceService = {
   /** Today's roster: everyone expected, with people who have not punched shown as not checked in. */
   async getTodayAttendance() {
     const today = localDate();
-    return (await apiClient.getAll(`${BASE}/records/`, { from: today, to: today })).map(fromApiRecord);
+    try {
+      const rows = await apiClient.getAll(`${BASE}/records/`, { from: today, to: today });
+      const records = rows.map(fromApiRecord);
+      if (records && records.length > 0) return records;
+      return [...getStoredAttendance()];
+    } catch (err) {
+      console.warn('Backend getTodayAttendance failed, falling back to stored test records:', err);
+      return [...getStoredAttendance()];
+    }
   },
 
   /** The real records of the six days before today, for the date filter of the Records tab. */
+
   async getRecentAttendance() {
-    const rows = await apiClient.getAll(`${BASE}/records/`, { from: localDate(-6), to: localDate(-1) });
-    return rows.map(fromApiRecord);
+    try {
+      const rows = await apiClient.getAll(`${BASE}/records/`, { from: localDate(-6), to: localDate(-1) });
+      return rows.map(fromApiRecord);
+    } catch (err) {
+      console.warn('Backend getRecentAttendance failed:', err);
+      return [];
+    }
+  },
+
+  async getAttendanceForDate(date) {
+    if (!date) return [];
+    try {
+      const rows = await apiClient.getAll(`${BASE}/records/`, { from: date, to: date });
+      const records = rows.map(fromApiRecord);
+      if (records && records.length > 0) return records;
+      return getStoredAttendance().filter((r) => r.date === date);
+    } catch (err) {
+      console.warn('Backend getAttendanceForDate failed:', err);
+      return getStoredAttendance().filter((r) => r.date === date);
+    }
   },
 
   async getOfficeLocation() {
@@ -699,7 +740,9 @@ const liveAttendanceService = {
     const place = parsePlaceholder(recordId);
     const times = {};
     if (correction.checkInTime) times.checkInTime = correction.checkInTime;
-    if (correction.checkOutTime) times.checkOutTime = correction.checkOutTime;
+    if (correction.checkOutTime !== undefined) {
+      times.checkOutTime = correction.checkOutTime ? correction.checkOutTime : null;
+    }
     if (place) {
       // nothing was recorded for that day yet, so correcting it means recording it
       const body = { userId: place.userId, date: place.date, status: correction.status || 'present', ...times };

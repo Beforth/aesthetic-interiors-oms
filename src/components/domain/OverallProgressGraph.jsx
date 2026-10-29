@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon from '../ui/Icon';
+import { cn } from '../../lib/utils';
 
 /**
  * Modern organic Overall Progress visualization card inspired by contemporary
@@ -15,6 +16,7 @@ import Icon from '../ui/Icon';
  */
 export function OverallProgressGraph({
   percentage = 0,
+  previewProjectName = null,
   activeCount = 0,
   completedCount = 0,
   totalMilestones = 0,
@@ -40,15 +42,17 @@ export function OverallProgressGraph({
       <div className="flex items-center justify-between pb-2 border-b border-border/80 relative z-10">
         <div>
           <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
-            <span>Overall Progress</span>
+            <span className={cn('w-2.5 h-2.5 rounded-full transition-all', previewProjectName ? 'bg-indigo-600 animate-ping' : 'bg-primary animate-pulse')} />
+            <span>{previewProjectName ? 'Project Progress Preview' : 'Overall Progress'}</span>
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Cross-project execution health & milestone fulfillment
+            {previewProjectName ? `Live execution for ${previewProjectName}` : 'Portfolio completion rate'}
           </p>
         </div>
-        <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-          Live Portfolio
+        <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border transition-colors',
+          previewProjectName ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-primary/10 text-primary border-primary/20'
+        )}>
+          {previewProjectName ? 'Project Preview' : 'Live Portfolio'}
         </span>
       </div>
 
@@ -138,8 +142,8 @@ export function OverallProgressGraph({
             <span className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground mt-1">
               Progress
             </span>
-            <span className="text-[9px] text-primary font-medium">
-              Overall Portfolio
+            <span className="text-[9px] text-primary font-medium truncate max-w-[105px]" title={previewProjectName || 'Overall Portfolio'}>
+              {previewProjectName ? previewProjectName : 'Overall Portfolio'}
             </span>
           </div>
         </div>
@@ -164,7 +168,7 @@ export function OverallProgressGraph({
         <div className="p-2.5 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase font-semibold text-muted-foreground">
-              Milestones Done
+              Completed Stages
             </div>
             <div className="text-sm font-bold text-foreground">
               {completedMilestones}
@@ -185,9 +189,7 @@ export function OverallProgressGraph({
           <Icon name="sparkles" size={13} className="text-primary" />
           <span>Delivered: <strong className="text-foreground">{completedCount} Completed</strong></span>
         </span>
-        <span className="text-[11px] font-bold text-success bg-success/15 border border-success/30 px-2 py-0.5 rounded-full">
-          {clampedProgress >= 75 ? 'Healthy Velocity' : clampedProgress >= 40 ? 'On Track' : 'Mobilizing'}
-        </span>
+        
       </div>
     </div>
   );

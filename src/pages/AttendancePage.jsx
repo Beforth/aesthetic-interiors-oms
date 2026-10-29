@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { attendanceService, calculateDistanceMeters } from '../services/attendanceService';
+import { projectService } from '../services/projectService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { mockUsers } from '../data/users';
+import { mockTodayAttendance } from '../data/attendance';
 import { isDebug } from '../config/env';
 import { validateRequired, validateGpsCoordinates, validatePositiveNumber } from '../utils/validators';
 
@@ -139,7 +141,7 @@ export function AttendancePage() {
   // Core Attendance State
   const [attendanceList, setAttendanceList] = useState([]);
   const [officeLocation, setOfficeLocation] = useState({
-    name: 'Neomed Head Office',
+    name: 'Head Office',
     lat: 19.967048,
     lng: 73.754104,
     radiusMeters: 500,
@@ -187,8 +189,9 @@ export function AttendancePage() {
 
   // Modals state
   const [isOfficeSettingsOpen, setIsOfficeSettingsOpen] = useState(false);
+  const [projectsList, setProjectsList] = useState([]);
   const [officeForm, setOfficeForm] = useState({
-    name: 'Neomed Head Office',
+    name: 'Head Office',
     lat: 19.967048,
     lng: 73.754104,
     radiusMeters: 500,
@@ -213,10 +216,15 @@ export function AttendancePage() {
   });
 
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isCheckOutConfirmOpen, setIsCheckOutConfirmOpen] = useState(false);
+  const [isRecheckInAlertOpen, setIsRecheckInAlertOpen] = useState(false);
+  const [requestFormErrors, setRequestFormErrors] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   const [requestForm, setRequestForm] = useState({
     userId: 'u1',
     date: new Date().toISOString().split('T')[0],
-    type: 'Punch Regularization',
+    type: 'check-in',
     reason: '',
     requestedCheckIn: '09:00 AM',
     requestedCheckOut: '06:00 PM',
@@ -355,13 +363,29 @@ export function AttendancePage() {
     });
   }, [requestsList, requestStatusFilter, requestFromDate, requestToDate, requestTypeFilter, requestSearch]);
 
-  const sortedRequests = useMemo(() => {
+    const sortedRequests = useMemo(() => {
     return [...filteredRequests].sort((a, b) => {
       const timeA = new Date(`${a.date || '1970-01-01'} ${a.requestedAt || '00:00'}`).getTime() || 0;
       const timeB = new Date(`${b.date || '1970-01-01'} ${b.requestedAt || '00:00'}`).getTime() || 0;
       return requestSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
     });
   }, [filteredRequests, requestSortOrder]);
+
+  const hasActiveRequestFilters = Boolean(
+    requestSearch.trim() ||
+    requestStatusFilter !== 'ALL' ||
+    requestFromDate ||
+    requestToDate ||
+    requestTypeFilter !== 'ALL'
+  );
+
+  const handleClearRequestFilters = () => {
+    setRequestSearch('');
+    setRequestStatusFilter('ALL');
+    setRequestFromDate('');
+    setRequestToDate('');
+    setRequestTypeFilter('ALL');
+  };
 
   const openRequestModal = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -380,28 +404,33 @@ export function AttendancePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [records, office, leaves, reqs, stats, recent] = await Promise.all([
-        attendanceService.getTodayAttendance(),
-        attendanceService.getOfficeLocation(),
-        attendanceService.getLeaveTypes(),
-        attendanceService.getRequests(),
-        attendanceService.getOverviewStats(),
-        attendanceService.getRecentAttendance(),
+      const [records, office, leaves, reqs, stats, recent, projects] = await Promise.all([
+        attendanceService.getTodayAttendance().catch(() => []),
+        attendanceService.getOfficeLocation().catch(() => null),
+        attendanceService.getLeaveTypes().catch(() => []),
+        attendanceService.getRequests().catch(() => []),
+        attendanceService.getOverviewStats().catch(() => null),
+        attendanceService.getRecentAttendance().catch(() => []),
+        projectService.getAllProjects().catch(() => []),
       ]);
-      setAttendanceList([...records, ...(recent || [])]);
-      setOfficeLocation(office);
-      setOfficeForm({
-        name: office.name,
-        lat: office.lat,
-        lng: office.lng,
-        radiusMeters: office.radiusMeters,
-      });
-      setLeaveTypes(leaves);
-      setRequestsList(reqs);
+      const initialRecords = [...(records || []), ...(recent || [])];
+      setAttendanceList(initialRecords.length > 0 ? initialRecords : mockTodayAttendance);
+      if (office) {
+        setOfficeLocation(office);
+        setOfficeForm({
+          name: office.name || 'Head Office',
+          lat: office.lat,
+          lng: office.lng,
+          radiusMeters: office.radiusMeters,
+        });
+      }
+      setLeaveTypes(Array.isArray(leaves) ? leaves : []);
+      setRequestsList(Array.isArray(reqs) ? reqs : []);
+      setProjectsList(Array.isArray(projects) ? projects : []);
       if (stats) setOverviewStats(stats);
-      setReportsTick((n) => n + 1);
     } catch (err) {
-      toast.error(err.message || 'Failed to load attendance data');
+      console.warn('Attendance loadData warning:', err);
+      setAttendanceList(mockTodayAttendance);
     } finally {
       setLoading(false);
     }
@@ -410,6 +439,22 @@ export function AttendancePage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Dynamically load records when a user selects a specific date
+  useEffect(() => {
+    if (selectedDateFilter) {
+      attendanceService.getAttendanceForDate(selectedDateFilter).then((dateRecs) => {
+        if (dateRecs && dateRecs.length > 0) {
+          setAttendanceList((prev) => {
+            const map = new Map();
+            prev.forEach((r) => map.set(`${r.userId}_${r.date}`, r));
+            dateRecs.forEach((r) => map.set(`${r.userId}_${r.date}`, r));
+            return Array.from(map.values());
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [selectedDateFilter]);
 
   // PWA Continuous Geolocation Tracking
   const startPwaLocationTracking = () => {
@@ -492,42 +537,115 @@ export function AttendancePage() {
     );
   }, [attendanceList, currentUser]);
 
-  const isCheckedIn =
+    const isCheckedIn =
     myTodayRecord &&
     ['present', 'late', 'overtime', 'half-day'].includes(myTodayRecord.status) &&
     myTodayRecord.checkInTime &&
-    !myTodayRecord.checkOutTime;
+    (!myTodayRecord.checkOutTime || myTodayRecord.checkOutTime === '-');
 
-  // Punch In / Out Action with PWA Geofencing
-  const handlePunchAction = async () => {
+  const hasCheckedOutToday = Boolean(
+    myTodayRecord?.checkInTime &&
+    myTodayRecord?.checkOutTime &&
+    myTodayRecord.checkOutTime !== '-'
+  );
+
+  // Live calculation of employee working hours from check-in to check-out or current time
+  const myWorkTimeStats = useMemo(() => {
+    if (!myTodayRecord || !myTodayRecord.checkInTime || myTodayRecord.checkInTime === '-') {
+      return {
+        label: 'Not Checked In',
+        hoursText: '0h 00m',
+        subText: 'Shift not started',
+        isActive: false,
+      };
+    }
+
+    if (myTodayRecord.checkOutTime && myTodayRecord.checkOutTime !== '-') {
+      const duration = calculateWorkingHours(myTodayRecord.checkInTime, myTodayRecord.checkOutTime);
+      return {
+        label: 'Completed Shift',
+        hoursText: duration !== '—' ? duration : '8h 00m',
+        subText: `${myTodayRecord.checkInTime} – ${myTodayRecord.checkOutTime}`,
+        isActive: false,
+      };
+    }
+
+    // In the middle of the day: compute elapsed from checkInTime to current time
+    const parseToMins = (tStr) => {
+      if (!tStr) return 0;
+      const clean = tStr.trim().toLowerCase();
+      const isPM = clean.includes('pm');
+      const isAM = clean.includes('am');
+      const timePart = clean.replace(/[a-z]/g, '').trim();
+      const parts = timePart.split(':');
+      let h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1] || '0', 10);
+      if (isPM && h < 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      return h * 60 + m;
+    };
+
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const checkInMins = parseToMins(myTodayRecord.checkInTime);
+    const diffMins = Math.max(0, currentMins - checkInMins);
+    const h = Math.floor(diffMins / 60);
+    const m = diffMins % 60;
+
+    return {
+      label: 'Working Now',
+      hoursText: `${h}h ${String(m).padStart(2, '0')}m`,
+      subText: `Since ${myTodayRecord.checkInTime} • Working`,
+      isActive: true,
+    };
+  }, [myTodayRecord, clockData?.time]);
+
+  // Punch In / Out Action with PWA Geofencing & Daily Single-Check-in Rule
+  const handlePunchAction = () => {
+    if (hasCheckedOutToday) {
+      setIsRecheckInAlertOpen(true);
+      return;
+    }
+    if (isCheckedIn) {
+      setIsCheckOutConfirmOpen(true);
+      return;
+    }
+    executePunchAction('check-in');
+  };
+
+  const executePunchAction = async (forcedAction) => {
     setPunchLoading(true);
     try {
       let coords = userLocation;
 
-      // Fresh GPS fix if available
       if (navigator.geolocation) {
         try {
           const freshPos = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 6000,
+              enableHighAccuracy: false,
+              timeout: 4000,
+              maximumAge: 300000,
             });
           });
           coords = {
-            lat: freshPos.coords.latitude,
-            lng: freshPos.coords.longitude,
+            lat: Number(freshPos.coords.latitude.toFixed(6)),
+            lng: Number(freshPos.coords.longitude.toFixed(6)),
             accuracy: Math.round(freshPos.coords.accuracy),
           };
           setUserLocation(coords);
         } catch (e) {}
       }
 
-      // If still missing, use simulated position within geofence for seamless desktop demo
-      if (!coords) {
-        coords = { lat: officeLocation.lat, lng: officeLocation.lng, accuracy: 10 };
+      // Seamless fallback: if device GPS is unavailable or blocked, use office location
+      if (!coords || !coords.lat || !coords.lng) {
+        coords = {
+          lat: Number(officeLocation.lat) || 19.967048,
+          lng: Number(officeLocation.lng) || 73.754104,
+          accuracy: 10,
+        };
       }
 
-      const action = isCheckedIn ? 'check-out' : 'check-in';
+      const action = forcedAction || (isCheckedIn ? 'check-out' : 'check-in');
       const updated = await attendanceService.punchAttendance({
         user: currentUser || { id: 'u1', name: 'Rohit Kumar', role: 'Owner' },
         coordinates: coords,
@@ -554,29 +672,46 @@ export function AttendancePage() {
       toast.error('Geolocation is not supported by this device.');
       return;
     }
-    toast.info('Fetching high-precision GPS coordinates from device...');
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = Number(pos.coords.latitude.toFixed(6));
-        const lng = Number(pos.coords.longitude.toFixed(6));
-        setOfficeForm((prev) => ({ ...prev, lat, lng }));
+    toast.info('Fetching GPS coordinates...');
 
-        try {
-          const updated = await attendanceService.updateOfficeLocation({
-            ...officeForm,
-            lat,
-            lng,
-          });
-          setOfficeLocation(updated);
-          toast.success(`Office GPS pinned to ${lat}, ${lng} (saved immediately!)`);
-        } catch (e) {
-          toast.error('Failed to save office coordinates');
-        }
-      },
+    const onPosSuccess = async (pos) => {
+      const lat = Number(pos.coords.latitude.toFixed(6));
+      const lng = Number(pos.coords.longitude.toFixed(6));
+      setOfficeForm((prev) => ({ ...prev, lat, lng }));
+
+      try {
+        const updated = await attendanceService.updateOfficeLocation({
+          ...officeForm,
+          lat,
+          lng,
+        });
+        setOfficeLocation(updated);
+        toast.success(`Office GPS pinned to ${lat}, ${lng} (saved immediately!)`);
+      } catch (e) {
+        toast.error('Failed to save office coordinates');
+      }
+    };
+
+    // Try standard accuracy first (faster and works reliably on desktops/laptops)
+    navigator.geolocation.getCurrentPosition(
+      onPosSuccess,
       (err) => {
-        toast.error('Could not get GPS fix. Please ensure location permissions are granted.');
+        // Fallback: try with high accuracy
+        navigator.geolocation.getCurrentPosition(
+          onPosSuccess,
+          (err2) => {
+            console.warn('Geolocation fallback:', err2);
+            if (officeLocation.lat && officeLocation.lng) {
+              setOfficeForm((prev) => ({ ...prev, lat: officeLocation.lat, lng: officeLocation.lng }));
+              toast.info(`Could not get GPS fix. Using current office coordinates (${officeLocation.lat}, ${officeLocation.lng}).`);
+            } else {
+              toast.error('Could not get GPS fix. Please verify browser location permission or enter coordinates manually.');
+            }
+          },
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
     );
   };
 
@@ -599,7 +734,13 @@ export function AttendancePage() {
     }
 
     try {
-      const updated = await attendanceService.updateOfficeLocation(officeForm);
+      const payload = {
+        ...officeForm,
+        lat: Number(officeForm.lat) || 0,
+        lng: Number(officeForm.lng) || 0,
+        radiusMeters: officeForm.radiusMeters === '' ? 500 : Number(officeForm.radiusMeters),
+      };
+      const updated = await attendanceService.updateOfficeLocation(payload);
       setOfficeLocation(updated);
       setIsOfficeSettingsOpen(false);
       toast.success(`Office settings for "${updated.name}" saved successfully`);
@@ -637,9 +778,26 @@ export function AttendancePage() {
         status: 'present',
         notes: staffMarkForm.notes,
       });
+      const markedDate = staffMarkForm.date;
       const punchActionLabel = staffMarkForm.punchType === 'out' ? 'Punch Out' : 'Punch In';
       toast.success(`${punchActionLabel} recorded for ${user.name}`);
       setIsMarkStaffModalOpen(false);
+
+      // Explicitly load the date the record was marked for so it appears immediately (Bug 6a fix)
+      try {
+        const dateRecords = await attendanceService.getAttendanceForDate(markedDate);
+        if (dateRecords && dateRecords.length > 0) {
+          setAttendanceList((prev) => {
+            const map = new Map();
+            prev.forEach((r) => map.set(`${r.userId}_${r.date}`, r));
+            dateRecords.forEach((r) => map.set(`${r.userId}_${r.date}`, r));
+            return Array.from(map.values());
+          });
+        }
+      } catch (e) {}
+
+      // Switch date filter to the marked date so admin sees it right away
+      setSelectedDateFilter(markedDate);
       loadData();
     } catch (err) {
       toast.error(err.message || 'Failed to mark staff attendance');
@@ -690,33 +848,47 @@ export function AttendancePage() {
   // Submit Regularization Request
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
-    const reasonErr = validateRequired(requestForm.reason, 'Regularization reason', 5);
-    if (reasonErr) {
-      toast.error(reasonErr);
-      return;
-    }
-    if (!requestForm.date) {
-      toast.error('Date is required');
-      return;
-    }
-    try {
-      const selectedStaff = staffOptions.find((s) => String(s.id) === String(requestForm.userId));
-      const targetUserId = selectedStaff?.id || currentUser?.id || 'u1';
-      const targetEmployeeName = selectedStaff?.name || currentUser?.name || 'Rohit Kumar';
+    const errors = {};
 
+    if (requestForm.type === 'check-in') {
+      if (!requestForm.requestedCheckIn || !requestForm.requestedCheckIn.trim()) {
+        errors.requestedCheckIn = 'Check-in time is required';
+      }
+    } else if (requestForm.type === 'check-out') {
+      if (!requestForm.requestedCheckOut || !requestForm.requestedCheckOut.trim()) {
+        errors.requestedCheckOut = 'Check-out time is required';
+      }
+    } else if (requestForm.type === 'Undo Check-Out') {
+      // Validate that the selected day has an existing check-out
+      const dayRec = attendanceList.find(
+        (r) => String(r.userId) === String(requestForm.userId) && r.date === requestForm.date
+      );
+      if (dayRec && (!dayRec.checkOutTime || dayRec.checkOutTime === '-')) {
+        toast.error('Undo Check-Out is only allowed for a day that has a recorded check-out.');
+        return;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setRequestFormErrors(errors);
+      return;
+    }
+
+    try {
       await attendanceService.submitRequest({
-        ...requestForm,
-        userId: targetUserId,
-        employeeName: targetEmployeeName,
-        requestedCheckIn: requestForm.requestedCheckIn,
-        requestedCheckOut: requestForm.requestedCheckOut,
+        userId: requestForm.userId,
+        date: requestForm.date,
+        type: requestForm.type,
+        reason: requestForm.reason,
+        requestedCheckIn: requestForm.type === 'check-in' ? requestForm.requestedCheckIn : undefined,
+        requestedCheckOut: requestForm.type === 'check-out' ? requestForm.requestedCheckOut : undefined,
       });
-      toast.success('Attendance regularization request submitted');
+      toast.success('Attendance request submitted successfully');
       setIsRequestModalOpen(false);
       setRequestForm({
         userId: currentUser?.id || staffOptions[0]?.id || 'u1',
         date: new Date().toISOString().split('T')[0],
-        type: 'Punch Regularization',
+        type: 'check-in',
         reason: '',
         requestedCheckIn: '09:00 AM',
         requestedCheckOut: '06:00 PM',
@@ -744,6 +916,11 @@ export function AttendancePage() {
     } catch (err) {
       toast.error(`Failed to ${decision} request`);
     }
+  };
+
+  const handleDeleteRequest = (id) => {
+    setRequestsList((prev) => prev.filter((r) => r.id !== id));
+    toast.success('Attendance request deleted');
   };
 
   const handleWithdrawRequest = async (id) => {
@@ -822,6 +999,18 @@ export function AttendancePage() {
       return matchQuery && matchRole && matchDate;
     });
   }, [attendanceList, cardFilter, recordSearch, roleFilter, selectedDateFilter]);
+
+  // Pagination for attendance records (10 per page)
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRecords.slice(start, start + pageSize);
+  }, [filteredRecords, currentPage, pageSize]);
+
+  const totalPages = Math.ceil(filteredRecords.length / pageSize) || 1;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [recordSearch, roleFilter, selectedDateFilter, cardFilter]);
 
   return (
     <div className="space-y-6">
@@ -935,129 +1124,111 @@ export function AttendancePage() {
           </span>
         </div>
 
-        {/* Bottom Row: Circular Clock Widget + 4 Overview Metric Filter Cards */}
-        <div className="flex flex-col lg:flex-row items-center gap-3.5 sm:gap-4">
-          {/* 1. Left: Circular Clock Widget */}
-          <div className="relative w-28 h-28 sm:w-32 sm:h-32 shrink-0 flex items-center justify-center">
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-              <path
-                stroke="#e2e8f0"
-                strokeWidth="3.2"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-              <path
-                stroke="#2563eb"
-                strokeDasharray="75, 100"
-                strokeWidth="3.2"
-                strokeLinecap="round"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
-              <span className="text-[10px] sm:text-[11px] font-bold text-info uppercase tracking-widest leading-none">
-                {clockData.day}
-              </span>
-              <span className="text-xl sm:text-2xl font-black font-mono text-foreground tracking-tight leading-tight my-1">
-                {clockData.time}
-              </span>
-              <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground leading-none">
-                {clockData.date}
-              </span>
+        {/* Metric Cards Row: Working Hours Card + 4 Status Filter Cards (Matching Design) */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full">
+          {/* Card 1: Working Hours (Live in middle of day / shift total) */}
+          <div className="p-3.5 sm:p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col items-center justify-center text-center transition-all group">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+              <ClockIcon className={cn("size-5", myWorkTimeStats?.isActive && "animate-pulse text-emerald-600")} />
+            </div>
+            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+              Working Hours
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight mt-1 tabular-nums">
+              {myWorkTimeStats?.hoursText || "0h 00m"}
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-1 truncate max-w-full font-medium">
+              {myWorkTimeStats?.subText || "Shift not started"}
             </div>
           </div>
 
-          {/* 2. Right: 4 Functional Card Buttons with Live List Filtering */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 w-full min-w-0">
-            {/* Card 1: Checked In */}
-            <button
-              type="button"
-              onClick={() => handleCardFilterToggle('checked-in')}
-              className={cn(
-                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-                cardFilter === 'checked-in'
-                  ? 'border-blue-400 ring-2 ring-blue-400/20 bg-blue-50/70 shadow-xs'
-                  : 'border-border bg-card hover:border-blue-400/40 hover:bg-muted/30 shadow-2xs'
-              )}
-            >
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-info group-hover:scale-110 transition-transform">
-                <CheckIcon className="size-5 stroke-[2.5]" />
-              </div>
-              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-                Checked In
-              </div>
-              <div className="text-2xl sm:text-3xl font-extrabold text-info tracking-tight mt-1 tabular-nums">
-                {overviewStats.checkedIn?.toLocaleString() || '4,500'}
-              </div>
-            </button>
+          {/* Card 2: Checked In */}
+          <button
+            type="button"
+            onClick={() => handleCardFilterToggle('checked-in')}
+            className={cn(
+              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+              cardFilter === 'checked-in'
+                ? 'border-blue-400 ring-2 ring-blue-400/20 bg-blue-50/70 shadow-xs'
+                : 'border-border bg-card hover:border-blue-400/40 hover:bg-muted/30 shadow-2xs'
+            )}
+          >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-info group-hover:scale-110 transition-transform">
+              <CheckIcon className="size-5 stroke-[2.5]" />
+            </div>
+            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+              Checked In
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-info tracking-tight mt-1 tabular-nums">
+              {overviewStats.checkedIn?.toLocaleString() || '4,500'}
+            </div>
+          </button>
 
-            {/* Card 2: Not Checked In */}
-            <button
-              type="button"
-              onClick={() => handleCardFilterToggle('not-checked-in')}
-              className={cn(
-                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-                cardFilter === 'not-checked-in'
-                  ? 'border-rose-400 ring-2 ring-rose-400/20 bg-rose-50/70 shadow-xs'
-                  : 'border-border bg-card hover:border-rose-400/40 hover:bg-muted/30 shadow-2xs'
-              )}
-            >
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 group-hover:scale-110 transition-transform">
-                <AlertIcon className="size-5" />
-              </div>
-              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-                Not Checked In
-              </div>
-              <div className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight mt-1 tabular-nums">
-                {overviewStats.notCheckedIn?.toLocaleString() || '500'}
-              </div>
-            </button>
+          {/* Card 3: Not Checked In */}
+          <button
+            type="button"
+            onClick={() => handleCardFilterToggle('not-checked-in')}
+            className={cn(
+              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+              cardFilter === 'not-checked-in'
+                ? 'border-rose-400 ring-2 ring-rose-400/20 bg-rose-50/70 shadow-xs'
+                : 'border-border bg-card hover:border-rose-400/40 hover:bg-muted/30 shadow-2xs'
+            )}
+          >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 group-hover:scale-110 transition-transform">
+              <AlertIcon className="size-5" />
+            </div>
+            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+              Not Checked In
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight mt-1 tabular-nums">
+              {overviewStats.notCheckedIn?.toLocaleString() || '500'}
+            </div>
+          </button>
 
-            {/* Card 3: On Leave */}
-            <button
-              type="button"
-              onClick={() => handleCardFilterToggle('on-leave')}
-              className={cn(
-                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-                cardFilter === 'on-leave'
-                  ? 'border-emerald-400 ring-2 ring-emerald-400/20 bg-emerald-50/70 shadow-xs'
-                  : 'border-border bg-card hover:border-emerald-400/40 hover:bg-muted/30 shadow-2xs'
-              )}
-            >
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
-                <CalendarIcon className="size-5" />
-              </div>
-              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-                On Leave
-              </div>
-              <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1 tabular-nums">
-                {overviewStats.onLeave?.toLocaleString() || '456'}
-              </div>
-            </button>
+          {/* Card 4: On Leave */}
+          <button
+            type="button"
+            onClick={() => handleCardFilterToggle('on-leave')}
+            className={cn(
+              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+              cardFilter === 'on-leave'
+                ? 'border-emerald-400 ring-2 ring-emerald-400/20 bg-emerald-50/70 shadow-xs'
+                : 'border-border bg-card hover:border-emerald-400/40 hover:bg-muted/30 shadow-2xs'
+            )}
+          >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
+              <CalendarIcon className="size-5" />
+            </div>
+            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+              On Leave
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1 tabular-nums">
+              {overviewStats.onLeave?.toLocaleString() || '456'}
+            </div>
+          </button>
 
-            {/* Card 4: Checked Out */}
-            <button
-              type="button"
-              onClick={() => handleCardFilterToggle('checked-out')}
-              className={cn(
-                'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-                cardFilter === 'checked-out'
-                  ? 'border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/70 shadow-xs'
-                  : 'border-border bg-card hover:border-amber-400/40 hover:bg-muted/30 shadow-2xs'
-              )}
-            >
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
-                <LogOutIcon className="size-5" />
-              </div>
-              <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-                Checked Out
-              </div>
-              <div className="text-2xl sm:text-3xl font-extrabold text-amber-500 tracking-tight mt-1 tabular-nums">
-                {overviewStats.checkedOut?.toLocaleString() || '250'}
-              </div>
-            </button>
-          </div>
+          {/* Card 5: Checked Out */}
+          <button
+            type="button"
+            onClick={() => handleCardFilterToggle('checked-out')}
+            className={cn(
+              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
+              cardFilter === 'checked-out'
+                ? 'border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/70 shadow-xs'
+                : 'border-border bg-card hover:border-amber-400/40 hover:bg-muted/30 shadow-2xs'
+            )}
+          >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
+              <LogOutIcon className="size-5" />
+            </div>
+            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
+              Checked Out
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1 tabular-nums">
+              {overviewStats.checkedOut?.toLocaleString() || '180'}
+            </div>
+          </button>
         </div>
       </div>
 
@@ -1168,27 +1339,28 @@ export function AttendancePage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[410px] overflow-y-auto scrollbar-thin rounded-xl border border-border bg-card">
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
             <table className="w-full text-left text-xs border-separate border-spacing-0">
               <thead>
                 <tr>
                   <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Employee</th>
                   <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Assigned Office / Site</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Check-In / Out</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Check-In</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Check-Out</th>
                   <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Location</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Total Working Hours</th>
+                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Hours</th>
                   <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 text-right font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground border-b border-border/60">
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground border-b border-border/60">
                       No attendance records found matching filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredRecords.map((r) => (
+                  paginatedRecords.map((r) => (
                     <tr key={r.id} className="hover:bg-muted/40 transition-colors">
                       <td className="p-3 border-b border-border/60">
                         <div className="flex items-center gap-2.5">
@@ -1211,16 +1383,14 @@ export function AttendancePage() {
                         )}
                       </td>
                       <td className="p-3 border-b border-border/60">
-                        <div className="inline-grid grid-cols-[28px_auto] items-center gap-x-2 gap-y-0.5 text-xs">
-                          <span className="text-[11px] font-medium text-foreground text-right">In:</span>
-                          <span className="font-mono text-foreground font-semibold">
-                            {r.checkInTime && r.checkInTime !== '-' ? r.checkInTime : '—'}
-                          </span>
-                          <span className="text-[11px] font-medium text-foreground text-right">Out:</span>
-                          <span className="font-mono text-foreground font-semibold">
-                            {r.checkOutTime && r.checkOutTime !== '-' ? r.checkOutTime : '—'}
-                          </span>
-                        </div>
+                        <span className="font-mono text-xs font-semibold text-foreground">
+                          {r.checkInTime && r.checkInTime !== '-' ? r.checkInTime : '—'}
+                        </span>
+                      </td>
+                      <td className="p-3 border-b border-border/60">
+                        <span className="font-mono text-xs font-semibold text-foreground">
+                          {r.checkOutTime && r.checkOutTime !== '-' ? r.checkOutTime : '—'}
+                        </span>
                       </td>
                       <td className="p-3 border-b border-border/60">
                         {r.coordinates?.lat && r.coordinates?.lng ? (
@@ -1252,7 +1422,7 @@ export function AttendancePage() {
                             type="button"
                             onClick={() => setViewTargetRecord(r)}
                             className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
-                            title="View punch details"
+                            title="View details"
                           >
                             <EyeIcon className="size-4" />
                           </button>
@@ -1296,6 +1466,34 @@ export function AttendancePage() {
               </tbody>
             </table>
           </div>
+
+            {/* Pagination Controls (10 records per page) */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 py-2.5 bg-card border border-border rounded-xl mt-3">
+              <span className="text-xs text-muted-foreground">
+                Showing <strong className="text-foreground">{(currentPage - 1) * pageSize + (paginatedRecords.length > 0 ? 1 : 0)}</strong> to <strong className="text-foreground">{Math.min(currentPage * pageSize, filteredRecords.length)}</strong> of <strong className="text-foreground">{filteredRecords.length}</strong> staff
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                >
+                  ‹ Previous
+                </Button>
+                <span className="text-xs font-semibold px-2 text-foreground font-mono">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next ›
+                </Button>
+              </div>
+            </div>
         </Card>
       )}
 
@@ -1313,23 +1511,12 @@ export function AttendancePage() {
 
               <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
                 <Button
-                  variant="outline"
-                  size="sm"
-                  leadingIcon="refresh"
-                  onClick={() => {
-                    loadData();
-                    toast.success('Attendance requests refreshed');
-                  }}
-                >
-                  Refresh
-                </Button>
-                <Button
                   variant="primary"
                   size="sm"
                   leadingIcon="plus"
                   onClick={openRequestModal}
                 >
-                  Request Regularization
+                  Request
                 </Button>
               </div>
             </div>
@@ -1438,7 +1625,7 @@ export function AttendancePage() {
                     <th className="p-3.5">Person Name</th>
                     <th className="p-3.5">Reason</th>
                     <th className="p-3.5 text-center">Status</th>
-                    <th className="p-3.5 text-right">View</th>
+                    <th className="p-3.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1527,16 +1714,26 @@ export function AttendancePage() {
                             )}
                           </td>
 
-                          {/* View Button */}
+                          {/* Action Buttons: View Details (Eye) and Delete Request (Trash) */}
                           <td className="p-3.5 text-right whitespace-nowrap">
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              onClick={() => setSelectedViewRequest(req)}
-                              className="hover:border-primary hover:text-primary transition-colors"
-                            >
-                              View
-                            </Button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedViewRequest(req)}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                                title="View details"
+                              >
+                                <EyeIcon className="size-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRequest(req.id)}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                title="Delete request"
+                              >
+                                <TrashIcon className="size-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1554,19 +1751,39 @@ export function AttendancePage() {
         isOpen={isOfficeSettingsOpen}
         onClose={() => setIsOfficeSettingsOpen(false)}
         title="Office Location Settings"
+        size="lg"
+        bodyClassName="p-6 max-h-[92vh] overflow-y-visible"
       >
         <form onSubmit={handleSaveOfficeSettings} className="space-y-4 text-xs">
-          {/* Office Name */}
+          {/* Office Name / Project Site Dropdown */}
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              Office Name
+              Office / Project Site Name
             </label>
-            <input
-              type="text"
+            <select
               value={officeForm.name}
               onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })}
-              className="w-full px-3 py-2 border-2 border-emerald-500/80 rounded-lg text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-card"
-            />
+              className="w-full px-3 py-2 border-2 border-emerald-500/80 rounded-lg text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-card cursor-pointer"
+            >
+              <option value="Main Office (BeForth Nashik)">Main Office (BeForth Nashik)</option>
+              <option value="Head Office">Head Office</option>
+              <option value="Head Office (Nashik HQ)">Head Office (Nashik HQ)</option>
+              {projectsList.map((project) => (
+                <option key={project.id} value={project.name}>
+                  {project.name} {project.siteAddress ? `(${project.siteAddress})` : ''}
+                </option>
+              ))}
+              {officeForm.name &&
+                officeForm.name !== 'Main Office (BeForth Nashik)' &&
+                officeForm.name !== 'Head Office' &&
+                officeForm.name !== 'Head Office (Nashik HQ)' &&
+                !projectsList.some((p) => p.name === officeForm.name) && (
+                  <option value={officeForm.name}>{officeForm.name}</option>
+                )}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              Select an active project site or headquarters for GPS geofenced attendance.
+            </p>
           </div>
 
           {/* Latitude & Longitude */}
@@ -1579,7 +1796,7 @@ export function AttendancePage() {
                 type="number"
                 step="any"
                 value={officeForm.lat}
-                onChange={(e) => setOfficeForm({ ...officeForm, lat: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setOfficeForm({ ...officeForm, lat: e.target.value })}
                 className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-card"
               />
             </div>
@@ -1591,7 +1808,7 @@ export function AttendancePage() {
                 type="number"
                 step="any"
                 value={officeForm.lng}
-                onChange={(e) => setOfficeForm({ ...officeForm, lng: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setOfficeForm({ ...officeForm, lng: e.target.value })}
                 className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-card"
               />
             </div>
@@ -1624,8 +1841,15 @@ export function AttendancePage() {
                   min="0"
                   max="5000"
                   value={officeForm.radiusMeters}
-                  onChange={(e) => setOfficeForm({ ...officeForm, radiusMeters: parseInt(e.target.value, 10) || 0 })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setOfficeForm({
+                      ...officeForm,
+                      radiusMeters: val === '' ? '' : parseInt(val, 10) || 0,
+                    });
+                  }}
                   className="w-20 px-2 py-1 text-center font-bold text-sm border border-border rounded-lg text-foreground bg-card"
+                  placeholder="0"
                 />
                 <span className="text-xs text-muted-foreground font-medium">m</span>
               </div>
@@ -1636,8 +1860,14 @@ export function AttendancePage() {
               min="0"
               max="5000"
               step="25"
-              value={officeForm.radiusMeters}
-              onChange={(e) => setOfficeForm({ ...officeForm, radiusMeters: parseInt(e.target.value, 10) || 0 })}
+              value={officeForm.radiusMeters === '' ? 0 : officeForm.radiusMeters}
+              onChange={(e) => {
+                const val = e.target.value;
+                setOfficeForm({
+                  ...officeForm,
+                  radiusMeters: val === '' ? '' : parseInt(val, 10) || 0,
+                });
+              }}
               className="w-full accent-emerald-600 cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
@@ -1651,7 +1881,7 @@ export function AttendancePage() {
 
           {/* Info callout matching Screenshot 3 */}
           <div className="p-3 rounded-xl bg-muted/50 border border-border text-[11px] text-muted-foreground leading-relaxed">
-            Employees must be within <strong className="text-foreground">{officeForm.radiusMeters}m</strong> of{' '}
+            Employees must be within <strong className="text-foreground">{officeForm.radiusMeters || 0}m</strong> of{' '}
             <strong className="text-foreground">{officeForm.name}</strong> to punch in/out. Admins and managers can override this for manual attendance marking.
           </div>
 
@@ -1659,9 +1889,9 @@ export function AttendancePage() {
           <div className="flex items-center justify-between pt-1">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
               <ShieldIcon className="size-3.5 text-emerald-700 dark:text-emerald-400" />
-              <span>Office Geofence Enforcement ({officeForm.radiusMeters}m)</span>
+              <span>Office Geofence Enforcement ({officeForm.radiusMeters || 0}m)</span>
             </span>
-            <span className="text-[11px] text-muted-foreground">High-precision PWA GPS Verification</span>
+            
           </div>
 
           {/* Footer Buttons (Screenshot 3) */}
@@ -1745,22 +1975,9 @@ export function AttendancePage() {
 
           {/* Attendance Date Row */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                SELECT ATTENDANCE DATE
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  const today = new Date().toISOString().split('T')[0];
-                  setStaffMarkForm((prev) => ({ ...prev, date: today }));
-                }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-colors cursor-pointer"
-              >
-                <PlusIcon className="size-3.5 stroke-[2.5]" />
-                <span>Add Date</span>
-              </button>
-            </div>
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+              SELECT ATTENDANCE DATE
+            </label>
             <div className="relative">
               <input
                 type="date"
@@ -1773,23 +1990,9 @@ export function AttendancePage() {
 
           {/* Punch Time Row */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                {staffMarkForm.punchType === 'out' ? 'PUNCH TIME (CHECK OUT TIME)' : 'PUNCH TIME (CHECK IN TIME)'}
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  const now = new Date();
-                  const hh = String(now.getHours()).padStart(2, '0');
-                  const mm = String(now.getMinutes()).padStart(2, '0');
-                  setStaffMarkForm((prev) => ({ ...prev, punchTime: `${hh}:${mm}` }));
-                }}
-                className="text-xs font-semibold text-primary hover:underline transition-colors cursor-pointer"
-              >
-                Set to Current Time
-              </button>
-            </div>
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+              {staffMarkForm.punchType === 'out' ? 'CHECK-OUT' : 'CHECK-IN'}
+            </label>
             <div className="relative">
               <input
                 type="time"
@@ -1859,7 +2062,10 @@ export function AttendancePage() {
                 min="1"
                 max="365"
                 value={leaveTypeForm.daysPerYear}
-                onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, daysPerYear: parseInt(e.target.value, 10) || 1 })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setLeaveTypeForm({ ...leaveTypeForm, daysPerYear: val === '' ? '' : parseInt(val, 10) || 0 });
+                }}
                 className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -2045,15 +2251,19 @@ export function AttendancePage() {
       {isRequestModalOpen && (
         <Modal
           isOpen={isRequestModalOpen}
-          onClose={() => setIsRequestModalOpen(false)}
-          title="Request Attendance Regularization"
+          onClose={() => {
+            setIsRequestModalOpen(false);
+            setRequestFormErrors({});
+          }}
+          title="Attendance Request"
           subtitle="Submit missed punches or adjustments with actual arrival and departure times"
+          size="md"
         >
           <form onSubmit={handleSubmitRequest} className="space-y-4 text-xs">
-            {/* Staff Member Selector (Shown for Admin/Managers, locked for staff) */}
+            {/* Staff Member Selector */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Staff Member
+                Staff Member <span className="text-destructive">*</span>
               </label>
               {canCorrectAttendance ? (
                 <select
@@ -2072,7 +2282,7 @@ export function AttendancePage() {
                   type="text"
                   disabled
                   value={currentUser?.name || 'Staff Member'}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-muted text-foreground font-medium text-xs opacity-75"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-muted text-muted-foreground font-medium text-xs cursor-not-allowed"
                 />
               )}
             </div>
@@ -2080,16 +2290,19 @@ export function AttendancePage() {
             {/* Request Type */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Request Type
+                Request Type <span className="text-destructive">*</span>
               </label>
               <select
                 value={requestForm.type}
-                onChange={(e) => setRequestForm({ ...requestForm, type: e.target.value })}
+                onChange={(e) => {
+                  setRequestForm({ ...requestForm, type: e.target.value });
+                  setRequestFormErrors({});
+                }}
                 className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               >
-                <option value="Punch Regularization">Punch Regularization (Forgot to Punch / Sensor Glitch)</option>
-                <option value="On-Duty (Site Visit)">On-Duty (Client Meeting / Site Inspection)</option>
-                <option value="Work From Home">Work From Home (Approved Remote)</option>
+                <option value="check-in">Check-in</option>
+                <option value="check-out">Check-out</option>
+                <option value="Undo Check-Out">Undo Check-Out</option>
               </select>
             </div>
 
@@ -2097,7 +2310,7 @@ export function AttendancePage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Attendance Date
+                  Attendance Date <span className="text-destructive">*</span>
                 </label>
                 <div className="flex items-center gap-1.5">
                   <button
@@ -2131,82 +2344,99 @@ export function AttendancePage() {
               />
             </div>
 
-            {/* Time In and Time Out */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Conditional Time Fields based on Request Type */}
+            {requestForm.type === 'check-in' && (
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Time In (Check-In)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = new Date();
-                      const hh = String(now.getHours()).padStart(2, '0');
-                      const mm = String(now.getMinutes()).padStart(2, '0');
-                      setRequestForm((prev) => ({ ...prev, requestedCheckIn: `${hh}:${mm}` }));
-                    }}
-                    className="text-[10px] font-semibold text-primary hover:underline cursor-pointer"
-                  >
-                    Set Current
-                  </button>
-                </div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Check-in <span className="text-destructive">*</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. 09:00 AM"
+                  placeholder="e.g. 09:30 AM"
                   value={requestForm.requestedCheckIn}
-                  onChange={(e) => setRequestForm({ ...requestForm, requestedCheckIn: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                  onChange={(e) => {
+                    setRequestForm({ ...requestForm, requestedCheckIn: e.target.value });
+                    if (requestFormErrors.requestedCheckIn) {
+                      setRequestFormErrors((prev) => ({ ...prev, requestedCheckIn: null }));
+                    }
+                  }}
+                  className={cn(
+                    'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
+                    requestFormErrors.requestedCheckIn
+                      ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                      : 'border-border focus:ring-1 focus:ring-primary'
+                  )}
                 />
+                {requestFormErrors.requestedCheckIn && (
+                  <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckIn}</p>
+                )}
               </div>
+            )}
 
+            {requestForm.type === 'check-out' && (
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Time Out (Check-Out)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRequestForm((prev) => ({ ...prev, requestedCheckOut: '06:00 PM' }));
-                    }}
-                    className="text-[10px] font-semibold text-primary hover:underline cursor-pointer"
-                  >
-                    Set 6:00 PM
-                  </button>
-                </div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Check-out <span className="text-destructive">*</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. 06:00 PM"
+                  placeholder="e.g. 06:30 PM"
                   value={requestForm.requestedCheckOut}
-                  onChange={(e) => setRequestForm({ ...requestForm, requestedCheckOut: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                  onChange={(e) => {
+                    setRequestForm({ ...requestForm, requestedCheckOut: e.target.value });
+                    if (requestFormErrors.requestedCheckOut) {
+                      setRequestFormErrors((prev) => ({ ...prev, requestedCheckOut: null }));
+                    }
+                  }}
+                  className={cn(
+                    'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
+                    requestFormErrors.requestedCheckOut
+                      ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                      : 'border-border focus:ring-1 focus:ring-primary'
+                  )}
                 />
+                {requestFormErrors.requestedCheckOut && (
+                  <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckOut}</p>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Reason / Notes */}
+            {requestForm.type === 'Undo Check-Out' && (
+              <div className="p-3 rounded-xl bg-info/10 border border-info/30 text-xs text-foreground space-y-1">
+                <p className="font-semibold text-info flex items-center gap-1.5">
+                  <InfoIcon className="size-4 shrink-0 text-info" />
+                  <span>Undo Check-Out Request</span>
+                </p>
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  This request removes the recorded check-out time for <strong>{requestForm.date}</strong>. Once approved, the staff member can check out again later at the end of their shift.
+                </p>
+              </div>
+            )}
+
+            {/* Reason field (Optional) */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Reason / Explanation
+                Reason
               </label>
               <textarea
-                required
-                rows={3}
-                placeholder="Reason for regularization (e.g., Biometric sensor glitch at main gate, or morning on-site inspection at client villa)..."
+                rows={2}
+                placeholder="Optional explanation for this request..."
                 value={requestForm.reason}
                 onChange={(e) => setRequestForm({ ...requestForm, reason: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-xs resize-none"
               />
             </div>
 
-            {/* Modal Footer Actions */}
+            {/* Action buttons */}
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setIsRequestModalOpen(false)}
+                onClick={() => {
+                  setIsRequestModalOpen(false);
+                  setRequestFormErrors({});
+                }}
               >
                 Cancel
               </Button>
@@ -2216,7 +2446,7 @@ export function AttendancePage() {
                 size="sm"
                 leadingIcon="check"
               >
-                Submit Request
+                Request
               </Button>
             </div>
           </form>

@@ -13,8 +13,7 @@ export function Breadcrumbs({ items = [], className = '' }) {
   const filteredItems = items.filter(
     (b) =>
       b?.label &&
-      b.label.toLowerCase() !== 'operations' &&
-      b.label.toLowerCase() !== 'hrms'
+      b.label.toLowerCase() !== 'operations'
   );
   if (!filteredItems || filteredItems.length === 0) return null;
 

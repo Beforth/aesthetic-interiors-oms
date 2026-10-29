@@ -32,6 +32,7 @@ export function DashboardPage() {
   const [users, setUsers] = useState(mockUsers);
   const [loading, setLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [hoveredProject, setHoveredProject] = useState(null);
 
   const loadDashboardData = async () => {
     try {
@@ -153,6 +154,8 @@ export function DashboardPage() {
         delta: completedCount > 0 ? completedCount : undefined,
         subtitle: `Stage ${currentStage.order || '1'}: ${currentStage.name} • Client: ${proj.clientName || 'Private'} • Val: ${formatCurrency(proj.totalCost || proj.budget || 0)}`,
         onClick: () => navigate(`/projects/${proj.id}`),
+        onMouseEnter: () => setHoveredProject({ name: proj.name, progress: projProgress }),
+        onMouseLeave: () => setHoveredProject(null),
       };
     });
   }, [activeProjects, navigate]);
@@ -208,7 +211,7 @@ export function DashboardPage() {
             Welcome back, {userFirstName}!
           </h1>
           <p className="text-xs sm:text-sm text-brand-200 mt-1">
-            Live Operations & Execution Dashboard • Aesthetic Interiors OMS
+            Daily operations, projects, and workforce overview
           </p>
         </div>
 
@@ -247,7 +250,7 @@ export function DashboardPage() {
         <div className="p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Active Fit-out Sites
+              Active Projects
             </span>
             <div className="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center">
               <Icon name="projects" size={16} />
@@ -270,6 +273,9 @@ export function DashboardPage() {
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
               Today's Attendance
             </span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center">
+              <Icon name="attendance" size={16} />
+            </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black text-text-main">{presentCount} Present</span>
@@ -335,7 +341,7 @@ export function DashboardPage() {
               <div>
                 <h3 className="text-base font-bold text-text-main flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
-                  <span>Project Execution & Process Tracker</span>
+                  <span>Project Tracker</span>
                   <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
                     {activeProjects.length} Live Sites
                   </span>
@@ -363,7 +369,7 @@ export function DashboardPage() {
               <div className="max-h-[385px] overflow-y-auto pr-1 scrollbar-thin">
                 <Leaderboard
                   items={projectLeaderboardItems}
-                  format={(val) => `${val}% Done`}
+                  format={(val) => `${val}%`}
                   maxValue={100}
                   className="gap-2.5"
                 />
@@ -376,7 +382,8 @@ export function DashboardPage() {
         <div className="space-y-6">
           {/* OVERALL PORTFOLIO PROGRESS: Fluid Organic Progress Visualizer */}
           <OverallProgressGraph
-            percentage={overallPortfolioStats.percentage}
+            percentage={hoveredProject ? hoveredProject.progress : overallPortfolioStats.percentage}
+            previewProjectName={hoveredProject ? hoveredProject.name : null}
             activeCount={overallPortfolioStats.activeCount}
             completedCount={overallPortfolioStats.completedCount}
             totalMilestones={overallPortfolioStats.totalMilestones}

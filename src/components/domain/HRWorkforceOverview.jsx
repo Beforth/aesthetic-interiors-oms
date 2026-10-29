@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useToast } from '../../context/ToastContext';
+import { cn } from '../../lib/utils';
 import { Link } from 'react-router-dom';
 import Icon from '../ui/Icon';
 import Avatar from '../ui/Avatar';
 
 export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = null, recentLeaves = null }) {
+  const toast = useToast();
   const defaultRecentEmployees = [
     {
       id: 'emp-1',
@@ -128,7 +131,21 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
   ];
 
   const employeesList = recentEmployees || defaultRecentEmployees;
-  const leavesList = recentLeaves || defaultLeaveApplications;
+  const [leavesList, setLeavesList] = useState(recentLeaves || defaultLeaveApplications);
+
+  const handleApproveLeave = (id) => {
+    setLeavesList((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status: 'approved', statusLabel: 'Approved' } : l))
+    );
+    toast.success('Leave request approved');
+  };
+
+  const handleRejectLeave = (id) => {
+    setLeavesList((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status: 'rejected', statusLabel: 'Rejected' } : l))
+    );
+    toast.success('Leave request rejected');
+  };
   const pendingLeavesCount = leavesList.filter((l) => l.status === 'pending_hr' || l.status === 'pending').length;
 
   return (
@@ -193,7 +210,7 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
 
         {/* Card Footer */}
         <div className="pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-text-muted mt-auto shrink-0">
-          <span>Active induction pipeline</span>
+          <span>New team members</span>
           <Link to="/users" className="font-semibold text-brand-600 hover:underline">
             Directory ({employeesList.length})
           </Link>
@@ -250,22 +267,59 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
                 </div>
 
                 <div className="shrink-0 ml-2">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                      leave.status === 'approved'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : leave.status === 'rejected'
-                        ? 'bg-rose-50 text-rose-700 border-rose-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}
-                  >
-                    {leave.status === 'approved' && <Icon name="check" size={11} className="stroke-[2.5]" />}
-                    {leave.status === 'rejected' && <Icon name="x" size={11} className="stroke-[2.5]" />}
-                    {leave.status !== 'approved' && leave.status !== 'rejected' && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                    )}
-                    <span>{leave.statusLabel.replace(/^[✕✓]\s*/, '')}</span>
-                  </span>
+                  {leave.status === 'pending_hr' || leave.status === 'pending' ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleApproveLeave(leave.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors cursor-pointer shadow-2xs"
+                        title="Approve Leave"
+                      >
+                        <Icon name="check" size={11} className="stroke-[2.5]" />
+                        <span>Approve</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRejectLeave(leave.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer shadow-2xs"
+                        title="Reject Leave"
+                      >
+                        <Icon name="x" size={11} className="stroke-[2.5]" />
+                        <span>Reject</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleApproveLeave(leave.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all cursor-pointer",
+                          leave.status === 'approved'
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-300 ring-1 ring-emerald-400/30"
+                            : "bg-muted/40 text-muted-foreground border-border hover:bg-emerald-50 hover:text-emerald-700"
+                        )}
+                        title="Mark Approved"
+                      >
+                        <Icon name="check" size={11} className="stroke-[2.5]" />
+                        <span>{leave.status === 'approved' ? 'Approved' : 'Approve'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRejectLeave(leave.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all cursor-pointer",
+                          leave.status === 'rejected'
+                            ? "bg-rose-50 text-rose-700 border-rose-300 ring-1 ring-rose-400/30"
+                            : "bg-muted/40 text-muted-foreground border-border hover:bg-rose-50 hover:text-rose-700"
+                        )}
+                        title="Mark Rejected"
+                      >
+                        <Icon name="x" size={11} className="stroke-[2.5]" />
+                        <span>{leave.status === 'rejected' ? 'Rejected' : 'Reject'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -274,7 +328,7 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
 
         {/* Card Footer */}
         <div className="pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-text-muted mt-auto shrink-0">
-          <span>Leave approvals policy active</span>
+          <span>Leave requests</span>
           <Link to="/attendance" className="font-semibold text-brand-600 hover:underline">
             Manage Attendance
           </Link>
@@ -368,7 +422,7 @@ export function HRWorkforceOverview({ totalEmployees = 30, recentEmployees = nul
 
           {/* Footer note */}
           <div className="pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-text-muted mt-auto shrink-0">
-            <span>Muster schedule synced</span>
+            <span>Holiday schedule</span>
             <Link to="/attendance" className="font-semibold text-brand-600 hover:underline">
               Full Year Roster
             </Link>

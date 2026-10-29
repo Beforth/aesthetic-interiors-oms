@@ -680,7 +680,7 @@ export function PaymentsPage() {
                 min="5"
                 max="50"
                 value={costForm.advancePercentage}
-                onChange={(e) => setCostForm({ ...costForm, advancePercentage: Number(e.target.value) })}
+                onChange={(e) => setCostForm({ ...costForm, advancePercentage: e.target.value === '' ? '' : Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
               />
             </div>
@@ -694,7 +694,7 @@ export function PaymentsPage() {
                 min="2"
                 max="8"
                 value={costForm.milestoneCount}
-                onChange={(e) => setCostForm({ ...costForm, milestoneCount: Number(e.target.value) })}
+                onChange={(e) => setCostForm({ ...costForm, milestoneCount: e.target.value === '' ? '' : Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-border rounded-lg text-text-main font-mono"
               />
             </div>
