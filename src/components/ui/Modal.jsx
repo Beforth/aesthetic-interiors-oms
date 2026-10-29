@@ -13,6 +13,7 @@ export function Modal({
   children,
   footer,
   className = '',
+  bodyClassName = '',
 }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -83,7 +84,7 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className="p-5 max-h-[calc(85vh-120px)] overflow-y-auto">{children}</div>
+        <div className={`p-5 max-h-[calc(90vh-70px)] overflow-y-auto ${bodyClassName}`}>{children}</div>
 
         {/* Footer */}
         {footer && (
