@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8E6750" />
+      <stop offset="100%" stop-color="#674735" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDFBF7" />
+      <stop offset="100%" stop-color="#EADBCC" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Background with smooth rounded corners -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+
+  <!-- Subtle inner border -->
+  <rect x="16" y="16" width="480" height="480" rx="98" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4" />
+
+  <!-- Architectural Emblem -->
+  <g filter="url(#shadow)" stroke="url(#gold)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Outer Arch Structure -->
+    <path d="M 156 380 L 156 230 A 100 100 0 0 1 356 230 L 356 380" />
+    <!-- Keystone / Roof Accent -->
+    <path d="M 256 120 L 256 150" stroke-width="14" />
+    <path d="M 120 380 L 392 380" stroke-width="18" />
+    
+    <!-- Stylized "A" Triangle & Crossbar -->
+    <polygon points="256,170 196,330 316,330" fill="rgba(253, 251, 247, 0.15)" stroke="url(#gold)" stroke-width="14" />
+    <line x1="218" y1="280" x2="294" y2="280" stroke="url(#gold)" stroke-width="12" />
+    
+    <!-- Central Plumb-line / "I" -->
+    <line x1="256" y1="200" x2="256" y2="350" stroke="url(#gold)" stroke-width="12" />
+  </g>
+  
+  <!-- Foundation Baseline Accent -->
+  <line x1="176" y1="410" x2="336" y2="410" stroke="#EADBCC" stroke-width="8" stroke-linecap="round" opacity="0.6" />
+</svg>

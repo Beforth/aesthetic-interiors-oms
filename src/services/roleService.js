@@ -46,7 +46,7 @@ export const roleService = {
     if (isDebug()) {
       return getMockRoles();
     }
-    return apiClient.getAll('/accounts/roles/');
+    return apiClient.getAllCached('/accounts/roles/');
   },
 
   /** Every permission codename a role may hold. */
@@ -54,7 +54,7 @@ export const roleService = {
     if (isDebug()) {
       return SYSTEM_PERMISSIONS;
     }
-    return apiClient.get('/accounts/permissions/catalog/');
+    return apiClient.getCached('/accounts/permissions/catalog/');
   },
 
   /** Creates a custom role. `key` is optional (the server derives it from the label). */

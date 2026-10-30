@@ -78,12 +78,34 @@ export const navigationItems = [
     bottomNavPriority: 4,
   },
   {
-    id: 'leave-payslips',
-    label: 'Leave & Payslips',
-    path: '/leave-payslips',
+    id: 'leave',
+    label: 'Leave',
+    path: '/leave',
+    icon: 'leave',
+    permissions: ['leave.apply', 'leave.approve', 'attendance.viewBoard'],
+    roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
+    items: [
+      {
+        label: 'Requests',
+        path: '/leave/requests',
+      },
+      {
+        label: 'Type',
+        path: '/leave/types',
+      },
+      {
+        label: 'Holiday List',
+        path: '/leave/holidays',
+      },
+    ],
+  },
+  {
+    id: 'payslips',
+    label: 'Payslips',
+    path: '/payslips',
     icon: 'leave-payslips',
-    permissions: ['leave.apply', 'leave.approve', 'payslips.viewOwn'],
-    roles: permissionMatrix['leave.apply'],
+    permissions: ['payslips.viewOwn', 'leave.approve'],
+    roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
     bottomNavPriority: 5,
   },
   {

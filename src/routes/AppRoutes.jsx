@@ -9,6 +9,7 @@ import AppShell from '../components/layout/AppShell';
 import LoginPage from '../pages/LoginPage';
 import DashboardPage from '../pages/DashboardPage';
 import UsersPage from '../pages/UsersPage';
+import NewRolePage from '../pages/NewRolePage';
 import ClientsPage from '../pages/ClientsPage';
 import ClientDetailPage from '../pages/ClientDetailPage';
 import ProjectsPage from '../pages/ProjectsPage';
@@ -20,6 +21,10 @@ import TasksPage from '../pages/TasksPage';
 import DailyReportsPage from '../pages/DailyReportsPage';
 import PaymentsPage from '../pages/PaymentsPage';
 import LeavePayslipsPage from '../pages/LeavePayslipsPage';
+import LeaveRequestsPage from '../pages/LeaveRequestsPage';
+import LeaveTypesPage from '../pages/LeaveTypesPage';
+import HolidayListsPage from '../pages/HolidayListsPage';
+import PayslipsPage from '../pages/PayslipsPage';
 import ReportsPage from '../pages/ReportsPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
@@ -153,7 +158,60 @@ export function AppRoutes() {
           }
         />
 
-        {/* 9. Leave & Payslips (Admin, Manager, Supervisor, Worker) */}
+        {/* Leave Routes */}
+        <Route path="leave" element={<Navigate to="/leave/requests" replace />} />
+        <Route
+          path="leave/requests"
+          element={
+            <RoleRoute permissions={['attendance.markOwn', 'attendance.viewBoard', 'leave.apply', 'leave.approve']}>
+              <LeaveRequestsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="leave/types"
+          element={
+            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+              <LeaveTypesPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="leave/holidays"
+          element={
+            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+              <HolidayListsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="leave/holidays/new"
+          element={
+            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+              <HolidayListsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="leave-types"
+          element={
+            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+              <LeaveTypesPage />
+            </RoleRoute>
+          }
+        />
+
+        {/* Payslips Route */}
+        <Route
+          path="payslips"
+          element={
+            <RoleRoute permissions={['payslips.viewOwn', 'leave.approve']}>
+              <PayslipsPage />
+            </RoleRoute>
+          }
+        />
+
+        {/* 9. Leave & Payslips Legacy Fallback */}
         <Route
           path="leave-payslips"
           element={
@@ -182,6 +240,14 @@ export function AppRoutes() {
           element={
             <RoleRoute permissions={['users.manage', 'roles.change']}>
               <UsersPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="settings/roles/new"
+          element={
+            <RoleRoute permission="roles.change">
+              <NewRolePage />
             </RoleRoute>
           }
         />

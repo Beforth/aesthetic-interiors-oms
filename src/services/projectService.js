@@ -72,11 +72,21 @@ function getStoredProjects() {
   return [];
 }
 
-function saveProjects(projects) {
+function announceProjectsChanged(detail = {}) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('osm_projects_changed', { detail }));
+    window.dispatchEvent(new CustomEvent('osm_project_updated', { detail }));
+  }
+}
+
+function saveProjects(projects, notify = true) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
   } catch (e) {
     console.error('Failed to save projects to localStorage', e);
+  }
+  if (notify) {
+    announceProjectsChanged({ count: projects.length });
   }
 }
 
@@ -165,8 +175,14 @@ const mockProjectService = {
         };
       });
 
+      const maxNum = projects.reduce((max, p) => {
+        const match = String(p.id).match(/^P(\d+)$/i);
+        return match ? Math.max(max, parseInt(match[1], 10)) : max;
+      }, 0);
+      const nextId = `P${Math.max(maxNum, 9) + 1}`;
+
       const newProject = {
-        id: `P${projects.length + 1}`,
+        id: projectData.id || nextId,
         name: projectData.name,
         clientId: projectData.clientId,
         clientName: projectData.clientName || 'Client',
@@ -175,7 +191,7 @@ const mockProjectService = {
         startDate: projectData.startDate || '2026-10-20',
         targetDate: projectData.endDate || projectData.targetDate || runningDate.toISOString().split('T')[0],
         totalCost: Number(projectData.totalCost) || 0,
-        status: 'in progress',
+        status: projectData.status || 'in progress',
         supervisors: projectData.supervisors || [],
         workers: projectData.workers || [],
         description: projectData.description || '',
@@ -185,6 +201,9 @@ const mockProjectService = {
 
       const updated = [newProject, ...projects];
       saveProjects(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_project_created', { detail: newProject }));
+      }
       return newProject;
     }, 'Project created successfully');
   },
@@ -339,7 +358,10 @@ const isRealId = (value) => /^\d+$/.test(String(value ?? ''));
 const toIds = (list) => (Array.isArray(list) ? list.map(Number).filter(Number.isFinite) : undefined);
 
 function announce(name, detail) {
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name, { detail }));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(name, { detail }));
+    window.dispatchEvent(new CustomEvent('osm_projects_changed', { detail }));
+  }
 }
 
 /** One stage as the API takes it. The page gives new stages a temporary id; the server hands out the real one. */
@@ -413,7 +435,9 @@ const liveProjectService = {
   },
 
   async updateProject(id, updateData) {
-    return apiClient.patch(`${PROJECT_URL}${id}/`, toApiProject(updateData));
+    const updated = await apiClient.patch(`${PROJECT_URL}${id}/`, toApiProject(updateData));
+    announce('osm_project_updated', { projectId: id });
+    return updated;
   },
 
   async linkProjectToClient(projectId, client) {

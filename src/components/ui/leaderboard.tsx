@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { useChartIn } from './charts';
 
 export interface LeaderboardItem {
+  id?: string | number;
   name: string;
   value: number;
   /** Place change since the last period: positive moved up, negative moved down. */
@@ -47,7 +48,7 @@ export function Leaderboard({
     <ol ref={ref} className={cn('grid gap-2.5', className)}>
       {sorted.map((it, i) => (
         <li
-          key={it.name}
+          key={it.id || `${it.name}-${i}`}
           onClick={it.onClick}
           className={cn(
             'relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-3 shadow-2xs transition-all',

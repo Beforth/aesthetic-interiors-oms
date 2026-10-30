@@ -89,6 +89,8 @@ export const iconMap = {
   'daily-reports': ScrollText,
   payments: IndianRupee,
   'leave-payslips': Wallet,
+  leave: CalendarDays,
+  payslips: Wallet,
   reports: BarChart3,
   settings: Settings,
   'website-leads': Globe,

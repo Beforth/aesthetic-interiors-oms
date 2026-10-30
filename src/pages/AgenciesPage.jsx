@@ -142,6 +142,8 @@ export function AgenciesPage() {
   const [tradeFilter, setTradeFilter] = useState('ALL');
   const [stageFilter, setStageFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10); // options: 10, 25, 30
 
   // Custom trade state & options
   const [customTrades, setCustomTrades] = useState(() => getStoredCustomTrades());
@@ -259,6 +261,40 @@ export function AgenciesPage() {
       return matchesSearch && matchesTrade && matchesStatus && matchesStage;
     });
   }, [agencies, search, tradeFilter, statusFilter, stageFilter]);
+
+  // Requirement: Newly created records should be shown on the top
+  const sortedAgencies = useMemo(() => {
+    return [...filteredAgencies].sort((a, b) => {
+      // 1. Primary: Compare createdAt or created_at descending if present
+      const dateA = a.createdAt || a.created_at;
+      const dateB = b.createdAt || b.created_at;
+      if (dateA && dateB && dateA !== dateB) {
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      }
+      if (dateB && !dateA) return 1;
+      if (dateA && !dateB) return -1;
+
+      // 2. Secondary fallback: numeric timestamp / ID descending
+      const numA = Number(String(a.id).replace(/\D/g, ''));
+      const numB = Number(String(b.id).replace(/\D/g, ''));
+      if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) {
+        return numB - numA;
+      }
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [filteredAgencies]);
+
+  const totalPages = Math.ceil(sortedAgencies.length / pageSize) || 1;
+
+  const paginatedAgencies = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedAgencies.slice(start, start + pageSize);
+  }, [sortedAgencies, currentPage, pageSize]);
+
+  // Reset pagination when any filter or page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, tradeFilter, stageFilter, statusFilter, pageSize]);
 
   const handleOpenAdd = () => {
     setEditingAgency(null);
@@ -485,7 +521,7 @@ export function AgenciesPage() {
     {
       key: 'name',
       header: 'Agency & Owner',
-      width: '24%',
+      width: '26%',
       render: (a) => {
         return (
           <div className="space-y-1">
@@ -513,7 +549,7 @@ export function AgenciesPage() {
     {
       key: 'stages',
       header: 'Work Stages',
-      width: '20%',
+      width: '24%',
       render: (a) => {
         const stagesList = [...(Array.isArray(a.stages) ? a.stages : [])].sort(
           (x, y) => (x.stageOrder || 0) - (y.stageOrder || 0)
@@ -598,24 +634,19 @@ export function AgenciesPage() {
     },
     {
       key: 'address',
-      header: 'Location / Address',
-      width: '16%',
+      header: 'Location',
+      width: '18%',
       render: (a) => (
         <div className="space-y-1 text-xs">
-          {/* City & Pin */}
+          {/* City */}
           <div className="flex items-center gap-1.5 font-semibold text-foreground">
             <span>{a.city || 'Bangalore'}</span>
-            {a.pincode && (
-              <span className="text-muted-foreground text-[11px] font-mono font-normal">
-                ({a.pincode})
-              </span>
-            )}
           </div>
 
           {/* Street Address */}
           {a.address && (
             <div
-              className="text-[11px] text-muted-foreground truncate max-w-[170px]"
+              className="text-[11px] text-muted-foreground truncate max-w-[200px]"
               title={a.address}
             >
               {a.address}
@@ -625,31 +656,9 @@ export function AgenciesPage() {
       ),
     },
     {
-      key: 'commercials',
-      header: 'Workers & Rate',
-      width: '12%',
-      render: (a) => (
-        <div className="space-y-1 text-xs">
-          {/* Team Size without icon */}
-          <div className="flex items-center gap-1 font-medium text-foreground">
-            <span className="font-semibold">{a.teamSize || 8}</span>
-            <span className="text-muted-foreground text-[11px]">workers</span>
-          </div>
-
-          {/* Commercial Rate */}
-          {a.baseRate > 0 && (
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
-              <span className="font-bold text-foreground">₹{a.baseRate}</span>
-              <span className="text-[10px] text-muted-foreground/80">/ {a.rateUnit || 'sqft'}</span>
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
       key: 'activeProjects',
       header: 'Active Sites',
-      width: '10%',
+      width: '8%',
       align: 'center',
       render: (a) => {
         const count = a.activeProjects?.length || 0;
@@ -683,7 +692,7 @@ export function AgenciesPage() {
     {
       key: 'actions',
       header: 'Actions',
-      width: '8%',
+      width: '6%',
       align: 'right',
       render: (a) => (
         <div className="flex items-center justify-end gap-1.5">
@@ -740,9 +749,6 @@ export function AgenciesPage() {
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               {editingAgency ? `Edit Agency: ${editingAgency.name}` : 'Register New Agency'}
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Enter contractor details, assigned work stages, materials, team size, and commercial terms.
-            </p>
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -766,13 +772,12 @@ export function AgenciesPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <Card>
+          <Card className="rounded-xl border border-muted-foreground/35 dark:border-muted-foreground/30 bg-card shadow-2xs">
             <div className="space-y-8 p-1 sm:p-2">
-              {/* 1. Agency & Contact Details */}
+              {/* 1. Agency Information */}
               <div className="space-y-4">
-                <div className="border-b border-border/70 pb-2">
-                  <h3 className="text-sm font-bold text-foreground">Agency & Contact Details</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Company name, contractor owner, trade category, and status</p>
+                <div>
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Agency Information</h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -840,16 +845,15 @@ export function AgenciesPage() {
                 </div>
               </div>
 
-              {/* 2. Contact & Workshop Address */}
-              <div className="space-y-4 pt-4 border-t border-border">
-                <div className="border-b border-border/70 pb-2">
-                  <h3 className="text-sm font-bold text-foreground">Contact Numbers & Workshop Location</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Phone numbers, email, and workshop location</p>
+              {/* 2. Contact Details */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Contact Details</h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <Input
-                    label="Phone Number (10 digits)"
+                    label="Phone Number"
                     required
                     type="tel"
                     maxLength={10}
@@ -944,10 +948,9 @@ export function AgenciesPage() {
               </div>
 
               {/* 3. Worker Skills */}
-              <div className="space-y-3 pt-4 border-t border-border">
-                <div className="border-b border-border/70 pb-2">
-                  <h3 className="text-sm font-bold text-foreground">Worker Skills</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Add artisan specializations and craft capabilities</p>
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Worker Skills</h3>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -970,9 +973,9 @@ export function AgenciesPage() {
                   </Button>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2.5 rounded-lg bg-card border border-border/70">
-                  {formData.skills.length > 0 ? (
-                    formData.skills.map((skill, idx) => (
+                {formData.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2.5 rounded-lg bg-card border border-border/80">
+                    {formData.skills.map((skill, idx) => (
                       <span
                         key={idx}
                         className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium bg-muted text-foreground border border-border shadow-2xs"
@@ -987,16 +990,15 @@ export function AgenciesPage() {
                           <XIcon className="size-3" />
                         </button>
                       </span>
-                    ))
-                  ) : null}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 4. Team Size & Payment Terms */}
-              <div className="space-y-3 pt-4 border-t border-border">
-                <div className="border-b border-border/70 pb-2">
-                  <h3 className="text-sm font-bold text-foreground">Team Size & Payment Terms</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Workforce capacity, billing basis, rate, and milestone terms</p>
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Team Size & Payment Terms</h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -1036,10 +1038,9 @@ export function AgenciesPage() {
               </div>
 
               {/* 5. Tax & Bank Details */}
-              <div className="space-y-4 pt-4 border-t border-border">
-                <div className="border-b border-border/70 pb-2">
-                  <h3 className="text-sm font-bold text-foreground">Tax & Bank Details</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Tax registration numbers and bank transfer coordinates</p>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Tax & Bank Details</h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1082,8 +1083,7 @@ export function AgenciesPage() {
               </div>
             </div>
           </Card>
-
-          {/* Bottom Actions Bar */}
+        {/* Bottom Actions Bar */}
           <div className="flex items-center justify-end gap-3 pt-6 border-t border-border">
             <Button
               type="button"
@@ -1140,9 +1140,7 @@ export function AgenciesPage() {
                 }
               }}
             />
-            <p className="text-xs text-muted-foreground">
-              This will add a new craftsmanship trade category that can be assigned to agencies.
-            </p>
+            
           </div>
         </Modal>
       </div>
@@ -1282,6 +1280,19 @@ export function AgenciesPage() {
                   ]}
                 />
               </div>
+
+              {/* Pagination Size Selector (10, 25, 30 per records) */}
+              <div className="w-28">
+                <Select
+                  value={String(pageSize)}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  options={[
+                    { value: '10', label: '10 / page' },
+                    { value: '25', label: '25 / page' },
+                    { value: '30', label: '30 / page' },
+                  ]}
+                />
+              </div>
             </div>
           }
         />
@@ -1290,8 +1301,15 @@ export function AgenciesPage() {
       {/* Agencies Data Table */}
       <Table
         columns={columns}
-        data={filteredAgencies}
+        data={paginatedAgencies}
         loading={loading}
+        pagination={{
+          currentPage,
+          totalPages,
+          totalItems: sortedAgencies.length,
+          pageSize,
+          onPageChange: setCurrentPage,
+        }}
         emptyTitle={
           search || tradeFilter !== 'ALL' || statusFilter !== 'ALL' || stageFilter !== 'ALL'
             ? 'No agencies match your criteria'
@@ -1771,7 +1789,7 @@ export function AgenciesPage() {
                     size="xs"
                     className="shrink-0 group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors pointer-events-none"
                   >
-                    View Project →
+                    View Project â†’
                   </Button>
                 </div>
               );

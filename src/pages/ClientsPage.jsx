@@ -159,27 +159,32 @@ export function ClientsPage() {
 
       // Date filter
       let matchesDate = true;
-      if (c.createdAt) {
-        const itemDate = new Date(c.createdAt);
-        if (dateFilter === 'THIS_MONTH') {
-          matchesDate =
-            itemDate.getFullYear() === now.getFullYear() &&
-            itemDate.getMonth() === now.getMonth();
-        } else if (dateFilter === 'LAST_30') {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          matchesDate = itemDate >= thirtyDaysAgo;
-        } else if (dateFilter === 'THIS_YEAR') {
-          matchesDate = itemDate.getFullYear() === now.getFullYear();
-        } else if (dateFilter === 'CUSTOM') {
-          if (customFromDate && itemDate < new Date(customFromDate)) {
-            matchesDate = false;
-          }
-          if (customToDate) {
-            const endOfDay = new Date(customToDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            if (itemDate > endOfDay) {
+      const rawDate = c.createdAt || c.created_at;
+      if (dateFilter !== 'ALL') {
+        if (!rawDate) {
+          matchesDate = false;
+        } else {
+          const itemDate = new Date(rawDate);
+          if (dateFilter === 'THIS_MONTH') {
+            matchesDate =
+              itemDate.getFullYear() === now.getFullYear() &&
+              itemDate.getMonth() === now.getMonth();
+          } else if (dateFilter === 'LAST_30') {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            matchesDate = itemDate >= thirtyDaysAgo;
+          } else if (dateFilter === 'THIS_YEAR') {
+            matchesDate = itemDate.getFullYear() === now.getFullYear();
+          } else if (dateFilter === 'CUSTOM') {
+            if (customFromDate && itemDate < new Date(customFromDate)) {
               matchesDate = false;
+            }
+            if (customToDate) {
+              const endOfDay = new Date(customToDate);
+              endOfDay.setHours(23, 59, 59, 999);
+              if (itemDate > endOfDay) {
+                matchesDate = false;
+              }
             }
           }
         }
@@ -294,6 +299,12 @@ export function ClientsPage() {
       address: '',
       notes: '',
       type: 'new',
+      projectOption: 'none', // 'none' | 'link' | 'create'
+      existingProjectId: '',
+      newProjectName: '',
+      quotation: '',
+      startDate: new Date().toISOString().split('T')[0],
+      targetDate: '',
     });
     setFormErrors({});
     setIsModalOpen(true);
@@ -310,6 +321,12 @@ export function ClientsPage() {
       address: client.address || '',
       notes: client.notes || '',
       type: clientType,
+      projectOption: 'none',
+      existingProjectId: '',
+      newProjectName: '',
+      quotation: '',
+      startDate: new Date().toISOString().split('T')[0],
+      targetDate: '',
     });
     setFormErrors({});
     setIsModalOpen(true);
@@ -326,6 +343,15 @@ export function ClientsPage() {
     const emailErr = validateEmail(formData.email, { required: false, fieldLabel: 'Email address' });
     if (emailErr) errs.email = emailErr;
 
+    if (!editingClient) {
+      if (formData.projectOption === 'link' && !formData.existingProjectId) {
+        errs.existingProjectId = 'Please select an existing project to link';
+      }
+      if (formData.projectOption === 'create' && !formData.newProjectName?.trim()) {
+        errs.newProjectName = 'Project name is required';
+      }
+    }
+
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -336,18 +362,54 @@ export function ClientsPage() {
 
     try {
       const type = formData.type || 'new';
-      const payload = {
-        ...formData,
+      const clientPayload = {
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email,
+        address: formData.address,
+        notes: formData.notes,
         type,
         status: type,
       };
 
       if (editingClient) {
-        await clientService.updateClient(editingClient.id, payload);
+        await clientService.updateClient(editingClient.id, clientPayload);
         toast.success(`Client ${formData.name} updated successfully`);
       } else {
-        await clientService.createClient(payload);
-        toast.success(`Client ${formData.name} added successfully`);
+        const createdClient = await clientService.createClient(clientPayload);
+
+        // Project Linking / Creation
+        if (formData.projectOption === 'link' && formData.existingProjectId) {
+          try {
+            await projectService.linkProjectToClient(formData.existingProjectId, createdClient);
+            if (formData.quotation && !Number.isNaN(Number(formData.quotation))) {
+              await projectService.updateProject(formData.existingProjectId, {
+                totalCost: Number(formData.quotation),
+              });
+            }
+          } catch (projErr) {
+            console.error('Failed to link project to client', projErr);
+          }
+        } else if (formData.projectOption === 'create' && formData.newProjectName?.trim()) {
+          try {
+            await projectService.createProject({
+              name: formData.newProjectName.trim(),
+              clientId: createdClient.id,
+              clientName: createdClient.name,
+              clientPhone: createdClient.phone,
+              clientEmail: createdClient.email,
+              siteAddress: formData.address || '',
+              totalCost: Number(formData.quotation) || 0,
+              startDate: formData.startDate || new Date().toISOString().split('T')[0],
+              targetDate: formData.targetDate || '',
+              status: 'planning',
+            });
+          } catch (projErr) {
+            console.error('Failed to create project for client', projErr);
+          }
+        }
+
+        toast.success(`Client ${formData.name} created successfully`);
       }
       setIsModalOpen(false);
       fetchClientsAndProjects();
@@ -673,8 +735,8 @@ export function ClientsPage() {
               >
                 <option value="date_desc">Newest Registered</option>
                 <option value="date_asc">Oldest Registered</option>
-                <option value="name_asc">Name (A → Z)</option>
-                <option value="name_desc">Name (Z → A)</option>
+                <option value="name_asc">Name (A â†’ Z)</option>
+                <option value="name_desc">Name (Z â†’ A)</option>
               </select>
             </div>
 
@@ -874,6 +936,138 @@ export function ClientsPage() {
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Special client preferences, design themes, material choices..."
           />
+
+          {!editingClient && (
+            <div className="pt-3 border-t border-border space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">Project & Quotation Details</span>
+                <span className="text-[11px] text-muted-foreground font-normal">Optional</span>
+              </div>
+
+              {/* Project Choice Pills */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, projectOption: 'none' })}
+                  className={cn(
+                    'p-2 text-xs font-medium rounded-lg border text-center transition-all cursor-pointer',
+                    formData.projectOption === 'none'
+                      ? 'border-primary bg-primary/10 text-primary font-semibold'
+                      : 'border-border bg-card text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  No Project
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, projectOption: 'link' })}
+                  className={cn(
+                    'p-2 text-xs font-medium rounded-lg border text-center transition-all cursor-pointer',
+                    formData.projectOption === 'link'
+                      ? 'border-primary bg-primary/10 text-primary font-semibold'
+                      : 'border-border bg-card text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  Link Existing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, projectOption: 'create' })}
+                  className={cn(
+                    'p-2 text-xs font-medium rounded-lg border text-center transition-all cursor-pointer',
+                    formData.projectOption === 'create'
+                      ? 'border-primary bg-primary/10 text-primary font-semibold'
+                      : 'border-border bg-card text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  Create New
+                </button>
+              </div>
+
+              {/* Link Existing Project */}
+              {formData.projectOption === 'link' && (
+                <div className="p-3 bg-muted/30 rounded-lg border border-border space-y-3">
+                  <Select
+                    label="Select Existing Project to Link"
+                    required
+                    value={formData.existingProjectId}
+                    onChange={(e) => {
+                      const pId = e.target.value;
+                      const chosen = projects.find((p) => String(p.id) === String(pId));
+                      setFormData({
+                        ...formData,
+                        existingProjectId: pId,
+                        quotation: chosen?.totalCost || chosen?.budget || formData.quotation,
+                      });
+                      if (formErrors.existingProjectId) {
+                        setFormErrors((prev) => ({ ...prev, existingProjectId: null }));
+                      }
+                    }}
+                    options={[
+                      { value: '', label: '-- Choose a project to link --' },
+                      ...projects.map((p) => ({
+                        value: String(p.id),
+                        label: `${p.name} (${p.status || 'Active'})`,
+                      })),
+                    ]}
+                    error={formErrors.existingProjectId}
+                  />
+
+                  <Input
+                    label="Quotation Amount (₹)"
+                    type="number"
+                    placeholder="e.g. 1500000"
+                    value={formData.quotation}
+                    onChange={(e) => setFormData({ ...formData, quotation: e.target.value })}
+                    helperText="Contract value or approved quotation"
+                  />
+                </div>
+              )}
+
+              {/* Create New Project */}
+              {formData.projectOption === 'create' && (
+                <div className="p-3 bg-muted/30 rounded-lg border border-border space-y-3">
+                  <Input
+                    label="Project Name"
+                    required
+                    placeholder="e.g. Indiranagar 4BHK Luxury Villa"
+                    value={formData.newProjectName}
+                    onChange={(e) => {
+                      setFormData({ ...formData, newProjectName: e.target.value });
+                      if (formErrors.newProjectName) {
+                        setFormErrors((prev) => ({ ...prev, newProjectName: null }));
+                      }
+                    }}
+                    error={formErrors.newProjectName}
+                  />
+
+                  <Input
+                    label="Quotation / Total Cost (₹)"
+                    type="number"
+                    placeholder="e.g. 2500000"
+                    value={formData.quotation}
+                    onChange={(e) => setFormData({ ...formData, quotation: e.target.value })}
+                    helperText="Project budget or finalized quotation value"
+                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Input
+                      label="Start Date"
+                      type="date"
+                      value={formData.startDate}
+                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    />
+                    <Input
+                      label="Target Completion Date"
+                      type="date"
+                      value={formData.targetDate}
+                      onChange={(e) => setFormData({ ...formData, targetDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </form>
       </Modal>
 

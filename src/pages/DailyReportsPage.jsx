@@ -264,6 +264,16 @@ export function DailyReportsPage() {
   const [deleting, setDeleting] = useState(null);
   const [viewing, setViewing] = useState(null);
 
+  const isDescriptionRequired = useMemo(() => {
+    const isNoProj =
+      !form.project ||
+      form.project === NO_PROJECT ||
+      form.project === 'No project' ||
+      String(form.project).trim().toLowerCase() === 'no project';
+    const isOther = String(form.category || '').trim().toLowerCase() === 'other';
+    return Boolean(isNoProj && isOther);
+  }, [form.project, form.category]);
+
   // Photo management state
   const [lightbox, setLightbox] = useState({
     isOpen: false,
@@ -450,8 +460,14 @@ export function DailyReportsPage() {
     const minutes = parseDuration(form.time);
     if (minutes === null) found.time = 'Enter the time like 45m, 1h 30m or 2h';
     else if (minutes > 24 * 60) found.time = 'A single entry cannot be more than 24 hours';
+    if (isDescriptionRequired && (!form.note || !form.note.trim())) {
+      found.note = 'Description is required when selecting No project and Other category';
+    }
     setErrors(found);
-    if (Object.keys(found).length) return;
+    if (Object.keys(found).length) {
+      if (found.note) toast.error('Description is required when selecting No project and Other category');
+      return;
+    }
 
     const values = {
       task: form.task.trim(),
@@ -1240,14 +1256,48 @@ export function DailyReportsPage() {
               label="Project"
               placeholder={null}
               value={form.project}
-              onChange={(e) => setForm({ ...form, project: e.target.value })}
+              onChange={(e) => {
+                const nextProject = e.target.value;
+                setForm((prev) => ({ ...prev, project: nextProject }));
+                const isNoProj =
+                  !nextProject ||
+                  nextProject === NO_PROJECT ||
+                  nextProject === 'No project' ||
+                  String(nextProject).trim().toLowerCase() === 'no project';
+                const isOther = String(form.category || '').trim().toLowerCase() === 'other';
+                if (!(isNoProj && isOther)) {
+                  setErrors((prev) => {
+                    if (!prev.note) return prev;
+                    const next = { ...prev };
+                    delete next.note;
+                    return next;
+                  });
+                }
+              }}
               options={projects}
             />
             <Select
               label="Category"
               placeholder={null}
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              onChange={(e) => {
+                const nextCategory = e.target.value;
+                setForm((prev) => ({ ...prev, category: nextCategory }));
+                const isNoProj =
+                  !form.project ||
+                  form.project === NO_PROJECT ||
+                  form.project === 'No project' ||
+                  String(form.project).trim().toLowerCase() === 'no project';
+                const isOther = String(nextCategory || '').trim().toLowerCase() === 'other';
+                if (!(isNoProj && isOther)) {
+                  setErrors((prev) => {
+                    if (!prev.note) return prev;
+                    const next = { ...prev };
+                    delete next.note;
+                    return next;
+                  });
+                }
+              }}
               options={DSR_CATEGORIES}
             />
             <Input
@@ -1268,9 +1318,26 @@ export function DailyReportsPage() {
           </div>
           <Input
             label="Notes / Description"
+            required={isDescriptionRequired}
+            asteriskOnly={isDescriptionRequired}
             value={form.note}
-            onChange={(e) => setForm({ ...form, note: e.target.value })}
-            placeholder="Optional additional notes or milestone details"
+            onChange={(e) => {
+              const val = e.target.value;
+              setForm((prev) => ({ ...prev, note: val }));
+              if (errors.note) {
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.note;
+                  return next;
+                });
+              }
+            }}
+            placeholder={
+              isDescriptionRequired
+                ? 'Description is required when No project and Other are selected'
+                : 'Optional additional notes or milestone details'
+            }
+            error={errors.note}
           />
 
           {/* User Photo & Document Upload Option */}

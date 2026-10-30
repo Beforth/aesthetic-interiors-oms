@@ -112,14 +112,16 @@ export function ProjectDetailPage() {
     return board;
   }, [projectTasks]);
 
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [proj, allUsers, allAgencies, allTasks] = await Promise.all([
+      const [proj, allUsers, allAgencies] = await Promise.all([
         projectService.getProjectById(id, currentUser),
         userService.getAllUsers(),
         agencyService.getAllAgencies(),
-        taskService.getAllTasks().catch(() => []),
       ]);
 
       if (!proj) {
@@ -135,22 +137,33 @@ export function ProjectDetailPage() {
         supervisors: proj.supervisors || [],
         workers: proj.workers || [],
       });
+    } catch (err) {
+      toast.error('Failed to load project details');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const fetchProjectTasks = async () => {
+    if (!project) return;
+    setTasksLoading(true);
+    try {
+      const allTasks = await taskService.getAllTasks().catch(() => []);
       const matched = (allTasks || []).filter(
-        (t) => String(t.projectId) === String(id) || t.projectName === proj.name
+        (t) => String(t.projectId) === String(id) || t.projectName === project.name
       );
       if (matched.length > 0) {
         setProjectTasks(matched);
       } else {
-        const stagesList = proj.stages || [];
+        const stagesList = project.stages || [];
         setProjectTasks([
           {
             id: `tsk-${id}-01`,
             projectId: id,
-            projectName: proj.name,
+            projectName: project.name,
             stageName: stagesList[0]?.name || 'Site Prep',
             title: `${stagesList[0]?.name || 'Site Prep'} inspection & layout verification`,
-            assignedToName: proj.supervisors?.[0]?.name || allUsers[0]?.name || 'Supervisor',
+            assignedToName: project.supervisors?.[0]?.name || users[0]?.name || 'Supervisor',
             status: 'done',
             priority: 'high',
             dueDate: '2026-10-18',
@@ -158,10 +171,10 @@ export function ProjectDetailPage() {
           {
             id: `tsk-${id}-02`,
             projectId: id,
-            projectName: proj.name,
+            projectName: project.name,
             stageName: stagesList[1]?.name || 'False Ceiling',
             title: `${stagesList[1]?.name || 'False Ceiling'} materials dispatch and frame alignment`,
-            assignedToName: proj.workers?.[0]?.name || allUsers[1]?.name || 'Artisan',
+            assignedToName: project.workers?.[0]?.name || users[1]?.name || 'Artisan',
             status: 'in progress',
             priority: 'high',
             dueDate: '2026-10-25',
@@ -169,22 +182,30 @@ export function ProjectDetailPage() {
           {
             id: `tsk-${id}-03`,
             projectId: id,
-            projectName: proj.name,
+            projectName: project.name,
             stageName: stagesList[2]?.name || 'Electrical & Wiring',
             title: `${stagesList[2]?.name || 'Electrical'} conduit checking and circuit load testing`,
-            assignedToName: proj.workers?.[1]?.name || allUsers[2]?.name || 'Electrician',
+            assignedToName: project.workers?.[1]?.name || users[2]?.name || 'Electrician',
             status: 'todo',
             priority: 'medium',
             dueDate: '2026-10-28',
           },
         ]);
       }
+      setTasksLoaded(true);
     } catch (err) {
-      toast.error('Failed to load project details');
+      console.warn('Failed to load project tasks:', err);
     } finally {
-      setLoading(false);
+      setTasksLoading(false);
     }
   };
+
+  // Secondary sub-tab data: load project tasks ONLY when the 'tasks' tab is opened
+  useEffect(() => {
+    if (activeTab === 'tasks' && !tasksLoaded && project) {
+      fetchProjectTasks();
+    }
+  }, [activeTab, tasksLoaded, project]);
 
   useEffect(() => {
     fetchData();
@@ -1046,7 +1067,7 @@ export function ProjectDetailPage() {
       <TaskAllocationModal
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
-        onTaskAllocated={() => fetchData()}
+        onTaskAllocated={() => fetchProjectTasks()}
       />
     </div>
   );

@@ -28,7 +28,7 @@ export const stageService = {
     if (isDebug()) {
       return [...getStoredTemplate()];
     }
-    return apiClient.get('/projects/stage-template/');
+    return apiClient.getCached('/projects/stage-template/');
   },
 
   async updateStageTemplate(template) {

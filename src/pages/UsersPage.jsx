@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
 import { userService } from '../services/userService';
 import { roleService } from '../services/roleService';
@@ -46,6 +47,7 @@ function firstErrors(errors) {
 }
 
 export function UsersPage() {
+  const navigate = useNavigate();
   const toast = useToast();
   const { currentUser, hasPermission } = useAuth();
   const isOwner =
@@ -78,6 +80,7 @@ export function UsersPage() {
     name: '',
     email: '',
     phone: '',
+    birthday: '',
     title: '',
     notes: '',
     role: ROLES.WORKER,
@@ -139,15 +142,21 @@ export function UsersPage() {
     }
   };
 
-  // Each part of the page loads only what the signed-in user is allowed to read
+  // Primary directory data: loads on mount if authorized
   useEffect(() => {
     if (canManageUsers) {
       fetchUsers();
     } else {
       setLoading(false);
     }
-    if (canManageUsers || canChangeRoles) loadRoles();
-  }, []);
+  }, [canManageUsers]);
+
+  // Secondary sub-tab data: load roles ONLY when the 'roles' tab is opened or when the user modal is opened
+  useEffect(() => {
+    if ((activeTab === 'roles' || isModalOpen) && (canManageUsers || canChangeRoles)) {
+      loadRoles();
+    }
+  }, [activeTab, isModalOpen, canManageUsers, canChangeRoles]);
 
   // The role dropdown lists the roles the server has (built-in and custom), by their display names only
   const roleSelectOptions = useMemo(
@@ -199,6 +208,7 @@ export function UsersPage() {
       name: '',
       email: '',
       phone: '',
+      birthday: '',
       title: '',
       notes: '',
       role: ROLES.WORKER,
@@ -215,6 +225,7 @@ export function UsersPage() {
       name: user.name,
       email: user.email,
       phone: user.phone || '',
+      birthday: user.birthday || user.birthdate || '',
       title: user.title || '',
       notes: user.notes || '',
       role: user.role === 'admin' ? ROLES.ADMIN : user.role,
@@ -235,6 +246,10 @@ export function UsersPage() {
 
     const phoneErr = validatePhone(formData.phone, { required: true, fieldLabel: 'Phone number' });
     if (phoneErr) errors.phone = phoneErr;
+
+    if (!formData.birthday || !String(formData.birthday).trim()) {
+      errors.birthday = 'Birthdate is required';
+    }
 
     // The server enforces the same rule (and rejects very common or all-number passwords)
     if (!editingUser || formData.password) {
@@ -456,19 +471,27 @@ export function UsersPage() {
       key: 'actions',
       header: 'Actions',
       align: 'right',
+      width: '150px',
       render: (u) => (
-        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          <IconButton
-            icon="eye"
-            size="sm"
-            ariaLabel={`View ${u.name}`}
-            title="View User Details"
-            onClick={() => setViewingUser(u)}
-            className="hover:bg-muted text-muted-foreground hover:text-foreground"
-          />
+        <div
+          className="grid grid-cols-4 gap-1 w-[136px] justify-items-center ml-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Slot 1: View */}
+          <div className="w-8 h-8 flex items-center justify-center">
+            <IconButton
+              icon="eye"
+              size="sm"
+              ariaLabel={`View ${u.name}`}
+              title="View User Details"
+              onClick={() => setViewingUser(u)}
+              className="hover:bg-muted text-muted-foreground hover:text-foreground"
+            />
+          </div>
 
-          {isAdmin && (
-            <>
+          {/* Slot 2: Edit */}
+          <div className="w-8 h-8 flex items-center justify-center">
+            {isAdmin ? (
               <IconButton
                 icon="edit"
                 size="sm"
@@ -477,30 +500,42 @@ export function UsersPage() {
                 onClick={() => handleOpenEdit(u)}
                 className="hover:bg-muted text-muted-foreground hover:text-foreground"
               />
+            ) : (
+              <span className="w-8 h-8 block" aria-hidden="true" />
+            )}
+          </div>
 
-              {u.id !== currentUser?.id && (
-                <IconButton
-                  icon={u.status === 'active' ? 'user-x' : 'user-check'}
-                  size="sm"
-                  ariaLabel={`${u.status === 'active' ? 'Deactivate' : 'Reactivate'} ${u.name}`}
-                  title={u.status === 'active' ? 'Deactivate User' : 'Reactivate User'}
-                  onClick={() => setConfirmTarget(u)}
-                  className="hover:bg-muted text-muted-foreground hover:text-foreground"
-                />
-              )}
+          {/* Slot 3: Deactivate / Reactivate */}
+          <div className="w-8 h-8 flex items-center justify-center">
+            {isAdmin && u.id !== currentUser?.id ? (
+              <IconButton
+                icon={u.status === 'active' ? 'user-x' : 'user-check'}
+                size="sm"
+                ariaLabel={`${u.status === 'active' ? 'Deactivate' : 'Reactivate'} ${u.name}`}
+                title={u.status === 'active' ? 'Deactivate User' : 'Reactivate User'}
+                onClick={() => setConfirmTarget(u)}
+                className="hover:bg-muted text-muted-foreground hover:text-foreground"
+              />
+            ) : (
+              <span className="w-8 h-8 block" aria-hidden="true" />
+            )}
+          </div>
 
-              {u.role !== ROLES.ADMIN && u.id !== currentUser?.id && (
-                <IconButton
-                  icon="trash"
-                  size="sm"
-                  ariaLabel={`Delete ${u.name}`}
-                  title="Delete User"
-                  onClick={() => setDeleteUserTarget(u)}
-                  className="hover:bg-danger-light text-danger"
-                />
-              )}
-            </>
-          )}
+          {/* Slot 4: Delete */}
+          <div className="w-8 h-8 flex items-center justify-center">
+            {isAdmin && u.role !== ROLES.ADMIN && u.id !== currentUser?.id ? (
+              <IconButton
+                icon="trash"
+                size="sm"
+                ariaLabel={`Delete ${u.name}`}
+                title="Delete User"
+                onClick={() => setDeleteUserTarget(u)}
+                className="hover:bg-danger-light text-danger"
+              />
+            ) : (
+              <span className="w-8 h-8 block" aria-hidden="true" />
+            )}
+          </div>
         </div>
       ),
     },
@@ -519,7 +554,7 @@ export function UsersPage() {
                   variant="outline"
                   size="sm"
                   leadingIcon="shield"
-                  onClick={handleOpenCreateRole}
+                  onClick={() => navigate('/settings/roles/new')}
                 >
                   Create New Role
                 </Button>
@@ -639,25 +674,31 @@ export function UsersPage() {
                     <td className="py-3 pr-4 text-right font-mono">{role.userCount}</td>
                     <td className="py-3 text-right">
                       {canChangeRoles && (
-                        <div className="flex items-center justify-end gap-1">
-                          <IconButton
-                            icon="edit"
-                            size="sm"
-                            ariaLabel={`Edit role ${role.label}`}
-                            title="Edit Role"
-                            onClick={() => handleOpenEditRole(role)}
-                            className="hover:bg-primary/10 text-primary"
-                          />
-                          {!role.isSystem && (
+                        <div className="grid grid-cols-2 gap-1 w-[68px] items-center justify-items-center ml-auto">
+                          <div className="w-8 h-8 flex items-center justify-center">
                             <IconButton
-                              icon="trash"
+                              icon="edit"
                               size="sm"
-                              ariaLabel={`Delete role ${role.label}`}
-                              title="Delete Role"
-                              onClick={() => setDeleteRoleTarget(role)}
-                              className="hover:bg-destructive/10 text-destructive"
+                              ariaLabel={`Edit role ${role.label}`}
+                              title="Edit Role"
+                              onClick={() => navigate(`/settings/roles/new?edit=${role.key}`)}
+                              className="hover:bg-primary/10 text-primary"
                             />
-                          )}
+                          </div>
+                          <div className="w-8 h-8 flex items-center justify-center">
+                            {!role.isSystem ? (
+                              <IconButton
+                                icon="trash"
+                                size="sm"
+                                ariaLabel={`Delete role ${role.label}`}
+                                title="Delete Role"
+                                onClick={() => setDeleteRoleTarget(role)}
+                                className="hover:bg-destructive/10 text-destructive"
+                              />
+                            ) : (
+                              <span className="w-8 h-8 block" aria-hidden="true" />
+                            )}
+                          </div>
                         </div>
                       )}
                     </td>
@@ -797,7 +838,7 @@ export function UsersPage() {
             />
 
             <Input
-              label="Phone Number (10 digits)"
+              label="Phone Number"
               required
               leadingIcon="phone"
               type="tel"
@@ -815,9 +856,22 @@ export function UsersPage() {
               }}
               placeholder="9845012345"
               error={formErrors.phone}
-              helperText="Only 10 digits allowed"
             />
           </div>
+
+          <Input
+            label="Birthdate"
+            required
+            leadingIcon="cake"
+            type="date"
+            value={formData.birthday}
+            onChange={(e) => {
+              setFormData({ ...formData, birthday: e.target.value });
+              if (formErrors.birthday) setFormErrors((prev) => ({ ...prev, birthday: undefined }));
+            }}
+            placeholder="YYYY-MM-DD"
+            error={formErrors.birthday}
+          />
 
           <Select
             label="Assigned System Role"
@@ -842,7 +896,7 @@ export function UsersPage() {
           />
 
           <Input
-            label="Job Title / Trade Designation"
+            label="Job Title"
             leadingIcon="briefcase"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -856,102 +910,6 @@ export function UsersPage() {
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Skills, assigned properties, certifications..."
           />
-        </form>
-      </Modal>
-
-      {/* Role Creation Modal */}
-      <Modal
-        isOpen={isRoleModalOpen}
-        onClose={() => setIsRoleModalOpen(false)}
-        title={editingRole ? `Edit Role: ${editingRole.label}` : 'Create Custom System Role'}
-        subtitle={
-          editingRole?.key === ROLES.ADMIN
-            ? 'The Owner always keeps every permission; only the name and description can change'
-            : 'Define a custom operational title and assign granular permissions'
-        }
-        size="lg"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setIsRoleModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleRoleSubmit}>
-              {editingRole ? 'Save Changes' : 'Save & Register Role'}
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleRoleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Role Display Name"
-              required
-              placeholder="e.g. Quality Inspector"
-              value={roleFormData.name}
-              onChange={(e) => {
-                const name = e.target.value;
-                // keys are lowercase words joined by single hyphens, as the server requires
-                const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-                setRoleFormData({ ...roleFormData, name, key: editingRole ? roleFormData.key : key });
-              }}
-              error={roleFormErrors.name}
-            />
-
-            <Input
-              label="Role Key / Identifier"
-              required
-              placeholder="e.g. quality-inspector"
-              value={roleFormData.key}
-              disabled={Boolean(editingRole)}
-              helperText={editingRole ? 'A role key cannot be changed' : 'Lowercase letters, numbers and hyphens'}
-              onChange={(e) => setRoleFormData({ ...roleFormData, key: e.target.value })}
-              error={roleFormErrors.key}
-            />
-          </div>
-
-          <Input
-            label="Role Description"
-            placeholder="Brief summary of duties and responsibilities"
-            value={roleFormData.description}
-            onChange={(e) => setRoleFormData({ ...roleFormData, description: e.target.value })}
-          />
-
-          <div className="border-t pt-3">
-            <div className="text-xs font-bold text-text-main mb-2">
-              Assign Module Permissions ({roleFormData.selectedPermissions.length} selected):
-            </div>
-            <div className="space-y-3 max-h-60 overflow-y-auto p-2 bg-muted/50 rounded border border-border">
-              {PERMISSION_GROUPS.map((grp) => (
-                <div key={grp.category} className="space-y-1">
-                  <div className="text-[11px] font-bold text-primary uppercase tracking-wider">
-                    {grp.category}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-2">
-                    {grp.items.map((permission) => (
-                      <label
-                        key={permission.id}
-                        className="flex items-center gap-2 text-xs text-text-main cursor-pointer"
-                        data-tooltip={permission.hint}
-                      >
-                        <Checkbox
-                          checked={
-                            editingRole?.key === ROLES.ADMIN ||
-                            roleFormData.selectedPermissions.includes(permission.id)
-                          }
-                          disabled={editingRole?.key === ROLES.ADMIN}
-                          onChange={() => handleTogglePermission(permission.id)}
-                        />
-                        <span>
-                          {permission.label}
-                          <span className="block font-mono text-[10px] text-text-muted">{permission.id}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </form>
       </Modal>
 

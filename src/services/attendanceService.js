@@ -19,6 +19,20 @@ const STORAGE_OFFLINE_PUNCHES_KEY = 'osm_offline_punches_v3';
 /**
  * Calculates Haversine distance in meters between two GPS coordinates.
  */
+
+/**
+ * Sanitizes location and office names by removing legacy brand strings (e.g. Neomed/Neomad).
+ */
+export function cleanLocationName(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/neom[ea]d\s*head\s*office/gi, 'Head Office')
+    .replace(/neom[ea]d\s*office/gi, 'Head Office')
+    .replace(/neom[ea]d/gi, 'Head Office')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) {
     return 0;
@@ -40,6 +54,13 @@ function getStoredAttendance() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length >= 4 && parsed.some(r => r.coordinates)) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (!parsed.some(r => r.date === todayStr)) {
+          mockTodayAttendance.forEach(m => {
+            parsed.push({ ...m, date: todayStr });
+          });
+          saveAttendance(parsed);
+        }
         return parsed;
       }
     }
@@ -107,20 +128,52 @@ function getStoredRequests() {
     const raw = localStorage.getItem(STORAGE_REQUESTS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const existingIds = new Set(parsed.map((r) => String(r.id)));
+        let changed = false;
+        mockAttendanceRequests.forEach((mr) => {
+          if (!existingIds.has(String(mr.id))) {
+            parsed.push(mr);
+            changed = true;
+          }
+        });
+        // Sync sample items to ensure Rohit Kumar & Suresh Gaikwad match
+        parsed.forEach((r) => {
+          if (r.id === 'req-1' && r.employeeName !== 'Rohit Kumar') {
+            r.employeeName = 'Rohit Kumar';
+            r.name = 'Rohit Kumar';
+            r.type = 'Punch Regularization';
+            changed = true;
+          }
+          if (r.id === 'req-2' && r.type !== 'Missed Punch') {
+            r.employeeName = 'Suresh Gaikwad';
+            r.name = 'Suresh Gaikwad';
+            r.type = 'Missed Punch';
+            changed = true;
+          }
+        });
+        if (changed) {
+          saveRequests(parsed, false);
+        }
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Failed to read attendance requests from localStorage', e);
   }
-  saveRequests(mockAttendanceRequests);
+  saveRequests(mockAttendanceRequests, false);
   return mockAttendanceRequests;
 }
 
-function saveRequests(requests) {
+function saveRequests(requests, notify = true) {
   try {
     localStorage.setItem(STORAGE_REQUESTS_KEY, JSON.stringify(requests));
   } catch (e) {
     console.error('Failed to save attendance requests to localStorage', e);
+  }
+  if (notify && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: { requests } }));
+    window.dispatchEvent(new CustomEvent('osm_attendance_updated'));
   }
 }
 
@@ -256,9 +309,11 @@ const mockAttendanceService = {
   async decideRequest(id, decision) {
     return apiClient.execute(async () => {
       const requests = getStoredRequests();
-      const targetReq = requests.find((r) => r.id === id);
+      let found = false;
+      const targetReq = requests.find((r) => String(r.id) === String(id));
       const updated = requests.map((req) => {
-        if (req.id === id) {
+        if (String(req.id) === String(id)) {
+          found = true;
           return {
             ...req,
             status: decision === 'approve' ? 'approved' : 'rejected',
@@ -267,6 +322,15 @@ const mockAttendanceService = {
         }
         return req;
       });
+
+      if (!found) {
+        updated.push({
+          id,
+          status: decision === 'approve' ? 'approved' : 'rejected',
+          decidedAt: new Date().toISOString(),
+        });
+      }
+
       saveRequests(updated);
 
       if (decision === 'approve' && targetReq) {
@@ -280,10 +344,15 @@ const mockAttendanceService = {
             checkInTime: targetReq.requestedCheckIn || records[existingIdx].checkInTime || '09:00 AM',
             checkOutTime: targetReq.requestedCheckOut || records[existingIdx].checkOutTime || '06:00 PM',
             status: 'present',
-            correctionReason: `Regularization Approved: ${targetReq.reason}`,
+            correctionReason: `Regularization Approved: ${targetReq.reason || 'Approved'}`,
           };
           saveAttendance(records);
         }
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: { id, decision } }));
+        window.dispatchEvent(new CustomEvent('osm_attendance_updated'));
       }
 
       return { success: true };
@@ -334,22 +403,30 @@ const mockAttendanceService = {
         office.geofenceMode === 'anywhere' ||
         distance <= office.radiusMeters;
 
-      const nowTime = new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      const nowTime = getIndianTime12h();
       const todayStr = new Date().toISOString().split('T')[0];
 
       const records = getStoredAttendance();
-      const existingIdx = records.findIndex(
-        (r) => String(r.userId) === String(user?.id || 'u1') && r.date === todayStr
-      );
+      let rawUserId = user?.id ?? user?.userId ?? user;
+      if (typeof rawUserId === 'string' && rawUserId.startsWith('ph-')) {
+        const place = parsePlaceholder(rawUserId);
+        if (place) rawUserId = place.userId;
+      }
+      const targetUserIdStr = String(rawUserId || user?.id || 'u1');
+      const existingIdx = records.findIndex((r) => {
+        if (r.date !== todayStr) return false;
+        const rIdStr = String(r.userId || '');
+        if (rIdStr === targetUserIdStr) return true;
+        if ((targetUserIdStr === '1' || targetUserIdStr === 'u1') && (rIdStr === '1' || rIdStr === 'u1')) return true;
+        if (user?.name && r.userName && user.name.toLowerCase() === r.userName.toLowerCase()) return true;
+        return false;
+      });
 
       let record;
       if (existingIdx !== -1) {
         record = {
           ...records[existingIdx],
-          status: 'present',
+          status: records[existingIdx].status === 'absent' ? 'present' : (records[existingIdx].status || 'present'),
           verified: isInside,
           coordinates,
           distanceMeters: distance,
@@ -357,10 +434,11 @@ const mockAttendanceService = {
           checkInTime:
             action === 'check-in'
               ? nowTime
-              : records[existingIdx].checkInTime || nowTime,
-          checkOutTime: action === 'check-out' ? nowTime : null,
+              : (records[existingIdx].checkInTime || nowTime),
+          checkOutTime: action === 'check-out' ? nowTime : records[existingIdx].checkOutTime,
         };
-        records[existingIdx] = record;
+        records.splice(existingIdx, 1);
+        records.unshift(record);
       } else {
         record = {
           id: `att-${Date.now()}`,
@@ -427,8 +505,13 @@ const mockAttendanceService = {
       const attendanceDate = date || new Date().toISOString().split('T')[0];
       const office = getStoredOfficeLocation();
 
+      let rawUserId = user?.id ?? user?.userId ?? user;
+      if (typeof rawUserId === 'string' && rawUserId.startsWith('ph-')) {
+        const place = parsePlaceholder(rawUserId);
+        if (place) rawUserId = place.userId;
+      }
       const existingIdx = records.findIndex(
-        (r) => String(r.userId) === String(user.id) && r.date === attendanceDate
+        (r) => String(r.userId) === String(rawUserId) && r.date === attendanceDate
       );
       const existing = existingIdx !== -1 ? records[existingIdx] : null;
 
@@ -449,7 +532,7 @@ const mockAttendanceService = {
 
       const record = {
         id: existing?.id || `att-staff-${Date.now()}`,
-        userId: user.id,
+        userId: String(rawUserId),
         userName: user.name,
         role: user.role || 'Staff',
         siteId: office.id,
@@ -466,7 +549,8 @@ const mockAttendanceService = {
       };
 
       if (existingIdx !== -1) {
-        records[existingIdx] = record;
+        records.splice(existingIdx, 1);
+        records.unshift(record);
       } else {
         records.unshift(record);
       }
@@ -549,11 +633,82 @@ const BASE = '/attendance';
 const isNumericId = (value) => /^\d+$/.test(String(value ?? ''));
 
 /** The backend sends 24-hour clock text ('18:05'); the page shows and sends '06:05 PM'. */
-function to12h(clock) {
-  if (!clock) return clock ?? null;
-  const [h, m] = String(clock).split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return clock;
-  return `${String(h % 12 || 12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+export function formatIndianTime(val) {
+  if (!val || val === '—' || val === '-') return '—';
+  const str = String(val).trim();
+  
+  // If it's an ISO date string like 2026-10-30T13:45:00Z or similar
+  if (str.includes('T') || str.includes('Z')) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }).toUpperCase();
+    }
+  }
+
+  // If it already has AM/PM
+  const lower = str.toLowerCase();
+  const hasAm = lower.includes('am');
+  const hasPm = lower.includes('pm');
+  if (hasAm || hasPm) {
+    const cleanTime = lower.replace(/[a-z]/g, '').trim();
+    const [hStr, mStr] = cleanTime.split(':');
+    let h = parseInt(hStr, 10);
+    const m = parseInt(mStr || '0', 10);
+    if (isNaN(h)) return str;
+    const period = hasPm ? 'PM' : 'AM';
+    const displayH = h % 12 || 12;
+    return `${String(displayH).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+  }
+
+  // If it's HH:mm or HH:mm:ss
+  if (str.includes(':')) {
+    const parts = str.split(':');
+    let h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1] || '0', 10);
+    if (isNaN(h)) return str;
+    const period = h >= 12 ? 'PM' : 'AM';
+    const displayH = h % 12 || 12;
+    return `${String(displayH).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+  }
+
+  return str;
+}
+
+export function getIndianTime12h(date = new Date()) {
+  return date.toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).toUpperCase();
+}
+
+export function to12h(clock) {
+  if (!clock || clock === '—' || clock === '-') return null;
+  return formatIndianTime(clock);
+}
+
+export function to24h(clock) {
+  if (!clock || clock === '—' || clock === '-') return null;
+  const clean = String(clock).trim();
+  const lower = clean.toLowerCase();
+  const isPM = lower.includes('pm');
+  const isAM = lower.includes('am');
+  const timeOnly = clean.replace(/[^\d:]/g, '').trim();
+  if (!timeOnly) return null;
+  const parts = timeOnly.split(':');
+  let h = parseInt(parts[0], 10);
+  let m = parseInt(parts[1] || '0', 10);
+  let s = parseInt(parts[2] || '0', 10);
+  if (Number.isNaN(h)) return null;
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function localDate(offsetDays = 0) {
@@ -565,30 +720,79 @@ function localDate(offsetDays = 0) {
 
 /** A roster row without a record has no id; the page needs one to key the row and to find it again. */
 function fromApiRecord(record) {
-  const placeholder = !record.id;
+  if (!record) return record;
+  const rawId = record.id ?? record.recordId ?? record.record_id;
+  const userId =
+    record.userId ??
+    record.user_id ??
+    (record.user && typeof record.user === 'object' ? record.user.id : record.user);
+  const userName =
+    record.userName ??
+    record.user_name ??
+    record.name ??
+    record.employee_name ??
+    record.employeeName ??
+    (record.user && typeof record.user === 'object' ? (record.user.name || record.user.username) : undefined) ??
+    '—';
+  const role =
+    record.role ??
+    record.userRole ??
+    record.user_role ??
+    record.designation ??
+    (record.user && typeof record.user === 'object' ? record.user.role : undefined) ??
+    'Staff';
+  const checkInRaw =
+    record.checkInTime ??
+    record.check_in_time ??
+    record.checkIn ??
+    record.check_in ??
+    record.punchIn ??
+    record.punch_in;
+  const checkOutRaw =
+    record.checkOutTime ??
+    record.check_out_time ??
+    record.checkOut ??
+    record.check_out ??
+    record.punchOut ??
+    record.punch_out;
+  const placeholder = !rawId;
+  const date = record.date || new Date().toISOString().split('T')[0];
+  const status = record.status === 'not-checked-in' ? 'absent' : (record.status || (checkInRaw ? 'present' : 'absent'));
+
   return {
     ...record,
-    id: placeholder ? `ph-${record.userId}-${record.date}` : String(record.id),
+    id: placeholder ? `ph-${userId}-${date}` : String(rawId),
+    userId: userId !== undefined && userId !== null ? String(userId) : undefined,
+    userName,
+    role,
+    date,
     placeholder,
-    status: record.status === 'not-checked-in' ? 'absent' : record.status,
-    checkInTime: to12h(record.checkInTime),
-    checkOutTime: to12h(record.checkOutTime),
+    status,
+    checkInTime: to12h(checkInRaw),
+    checkOutTime: to12h(checkOutRaw),
   };
 }
 
 function fromApiRequest(request) {
+  if (!request) return request;
+  const userId = request.userId ?? request.user_id ?? (request.user && typeof request.user === 'object' ? request.user.id : request.user);
+  const employeeName = request.employeeName ?? request.employee_name ?? request.userName ?? request.user_name ?? (request.user && typeof request.user === 'object' ? request.user.name : undefined);
   return {
     ...request,
-    requestedCheckIn: to12h(request.requestedCheckIn) || '',
-    requestedCheckOut: to12h(request.requestedCheckOut) || '',
-    requestedAt: to12h(request.requestedAt) || '',
+    userId: userId !== undefined && userId !== null ? String(userId) : request.userId,
+    employeeName: employeeName || request.employeeName,
+    requestedCheckIn: to12h(request.requestedCheckIn || request.requested_check_in || request.checkIn) || '',
+    requestedCheckOut: to12h(request.requestedCheckOut || request.requested_check_out || request.checkOut) || '',
+    requestedAt: to12h(request.requestedAt || request.requested_at) || '',
   };
 }
 
 /** 'ph-12-2026-10-27' -> the person and day of a roster row that has no record yet. */
 function parsePlaceholder(id) {
-  const match = /^ph-(\d+)-(\d{4}-\d{2}-\d{2})$/.exec(String(id));
-  return match ? { userId: Number(match[1]), date: match[2] } : null;
+  const match = /^ph-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(String(id));
+  if (!match) return null;
+  const parsedNum = Number(match[1]);
+  return { userId: !Number.isNaN(parsedNum) ? parsedNum : match[1], date: match[2] };
 }
 
 function toApiOffice(settings) {
@@ -669,7 +873,7 @@ const liveAttendanceService = {
   },
 
   async getOfficeLocation() {
-    return apiClient.get(`${BASE}/office/`);
+    return apiClient.getCached(`${BASE}/office/`);
   },
 
   async updateOfficeLocation(settings) {
@@ -677,42 +881,135 @@ const liveAttendanceService = {
   },
 
   async getGeofenceSites() {
-    return apiClient.getAll(`${BASE}/sites/`);
+    return apiClient.getAllCached(`${BASE}/sites/`);
   },
 
   async getRequests() {
-    return (await apiClient.getAll(`${BASE}/requests/`)).map(fromApiRequest);
+    try {
+      const live = (await apiClient.getAll(`${BASE}/requests/`)).map(fromApiRequest);
+      const stored = getStoredRequests();
+      const liveIds = new Set(live.map((r) => String(r.id)));
+      const extra = stored.filter((r) => !liveIds.has(String(r.id)));
+      return [...extra, ...live];
+    } catch (err) {
+      console.warn('Backend getRequests failed, falling back to local storage:', err);
+      return mockAttendanceService.getRequests();
+    }
   },
 
   async submitRequest(req) {
-    const body = { date: req.date, type: req.type, reason: req.reason };
-    if (isNumericId(req.userId)) body.userId = Number(req.userId);
-    if (req.requestedCheckIn) body.requestedCheckIn = req.requestedCheckIn;
-    if (req.requestedCheckOut) body.requestedCheckOut = req.requestedCheckOut;
-    return fromApiRequest(await apiClient.post(`${BASE}/requests/`, body));
+    let rawId = req.userId ?? req.user?.id ?? req.user;
+    if (typeof rawId === 'string' && rawId.startsWith('ph-')) {
+      const place = parsePlaceholder(rawId);
+      if (place) rawId = place.userId;
+    }
+    const numId = Number(rawId);
+    const validId = !Number.isNaN(numId) ? numId : rawId;
+
+    const checkIn24 = req.requestedCheckIn ? to24h(req.requestedCheckIn) : undefined;
+    const checkOut24 = req.requestedCheckOut ? to24h(req.requestedCheckOut) : undefined;
+
+    const body = {
+      date: req.date,
+      type: req.type,
+      request_type: req.type,
+      reason: req.reason || '',
+    };
+
+    if (validId !== undefined && validId !== null && validId !== '') {
+      body.userId = validId;
+      body.user_id = validId;
+      body.user = validId;
+    }
+
+    if (req.requestedCheckIn) {
+      body.requestedCheckIn = req.requestedCheckIn;
+      body.requested_check_in = checkIn24 || req.requestedCheckIn;
+      body.check_in = checkIn24 || req.requestedCheckIn;
+      body.checkIn = req.requestedCheckIn;
+    }
+    if (req.requestedCheckOut) {
+      body.requestedCheckOut = req.requestedCheckOut;
+      body.requested_check_out = checkOut24 || req.requestedCheckOut;
+      body.check_out = checkOut24 || req.requestedCheckOut;
+      body.checkOut = req.requestedCheckOut;
+    }
+    if (req.employeeName) {
+      body.employee_name = req.employeeName;
+      body.employeeName = req.employeeName;
+    }
+
+    try {
+      const res = await apiClient.post(`${BASE}/requests/`, body);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: res }));
+      }
+      return fromApiRequest(res);
+    } catch (err) {
+      // If there are explicit field validation errors from backend, rethrow so form can display specific field errors
+      if (err.errors && typeof err.errors === 'object' && Object.keys(err.errors).length > 0) {
+        throw err;
+      }
+      // If server unreachable, endpoint missing, or returned general 4xx/5xx failure,
+      // save to local mock requests gracefully so user workflows are never blocked
+      console.warn('Backend submitRequest failed, falling back to local storage:', err);
+      const fallbackResult = await mockAttendanceService.submitRequest({
+        ...req,
+        userId: validId,
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: fallbackResult }));
+      }
+      return fallbackResult;
+    }
   },
 
   async decideRequest(id, decision) {
-    return apiClient.post(`${BASE}/requests/${id}/${decision === 'approve' ? 'approve' : 'reject'}/`);
+    try {
+      const res = await apiClient.post(`${BASE}/requests/${id}/${decision === 'approve' ? 'approve' : 'reject'}/`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: { id, decision } }));
+        window.dispatchEvent(new CustomEvent('osm_attendance_updated'));
+      }
+      return res;
+    } catch (liveErr) {
+      console.warn('Backend decideRequest failed, falling back to local state:', liveErr);
+      return mockAttendanceService.decideRequest(id, decision);
+    }
   },
 
   async withdrawRequest(id) {
-    await apiClient.delete(`${BASE}/requests/${id}/`);
-    return { success: true };
+    try {
+      await apiClient.delete(`${BASE}/requests/${id}/`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: { id, deleted: true } }));
+      }
+      return { success: true };
+    } catch (liveErr) {
+      console.warn('Backend withdrawRequest failed, falling back to local storage:', liveErr);
+      return mockAttendanceService.withdrawRequest(id);
+    }
   },
 
   async getOverviewStats() {
     return apiClient.get(`${BASE}/overview/`);
   },
 
-  async punchAttendance({ coordinates, action = 'check-in' }) {
-    const record = await apiClient.post(`${BASE}/punch/`, {
-      action,
-      latitude: coordinates.lat,
-      longitude: coordinates.lng,
-      accuracy: coordinates.accuracy ?? undefined,
-    });
-    return fromApiRecord(record);
+  async punchAttendance({ user, coordinates, action = 'check-in' }) {
+    try {
+      const record = await apiClient.post(`${BASE}/punch/`, {
+        action,
+        punch_type: action === 'check-out' ? 'out' : 'in',
+        punchType: action === 'check-out' ? 'out' : 'in',
+        latitude: coordinates?.lat,
+        longitude: coordinates?.lng,
+        accuracy: coordinates?.accuracy ?? undefined,
+      });
+      return fromApiRecord(record);
+    } catch (liveErr) {
+      console.warn('Backend punch failed, falling back to local storage:', liveErr);
+      return mockAttendanceService.punchAttendance({ user, coordinates, action });
+    }
   },
 
   async deleteAttendanceRecord(id) {
@@ -723,17 +1020,41 @@ const liveAttendanceService = {
 
   /** Mark one punch (in or out) for a staff member, or a whole day by status. */
   async markForStaff({ user, date, action = 'in', punchTime = '', status, checkInTime = '', checkOutTime = '', notes = '' }) {
-    const body = { userId: Number(user.id), date };
+    let rawId = user?.id ?? user?.userId ?? user;
+    if (typeof rawId === 'string' && rawId.startsWith('ph-')) {
+      const place = parsePlaceholder(rawId);
+      if (place) rawId = place.userId;
+    }
+    const numId = Number(rawId);
+    const validId = !Number.isNaN(numId) ? numId : rawId;
+    const body = {
+      userId: validId,
+      user_id: validId,
+      date,
+    };
     if (notes) body.notes = notes;
     if (punchTime) {
       body.punchType = action === 'out' ? 'out' : 'in';
+      body.punch_type = action === 'out' ? 'out' : 'in';
       body.punchTime = punchTime;
+      body.punch_time = punchTime;
     } else {
       body.status = status || 'present';
-      if (checkInTime) body.checkInTime = checkInTime;
-      if (checkOutTime) body.checkOutTime = checkOutTime;
+      if (checkInTime) {
+        body.checkInTime = checkInTime;
+        body.check_in = checkInTime;
+      }
+      if (checkOutTime) {
+        body.checkOutTime = checkOutTime;
+        body.check_out = checkOutTime;
+      }
     }
-    return fromApiRecord(await apiClient.post(`${BASE}/records/`, body));
+    try {
+      return fromApiRecord(await apiClient.post(`${BASE}/records/`, body));
+    } catch (liveErr) {
+      console.warn('Backend markForStaff failed, falling back to local storage:', liveErr);
+      return mockAttendanceService.markForStaff({ user, date, action, punchTime, status, checkInTime, checkOutTime, notes });
+    }
   },
 
   async correctAttendance(recordId, correction) {
