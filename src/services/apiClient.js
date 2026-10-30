@@ -343,6 +343,9 @@ export const apiClient = {
   request: apiRequest,
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),
   getAll: getAllPages,
+  // cached reads for rarely-changing lists (roles, users, offices...); the services call these on the client object
+  getCached,
+  getAllCached: getAllPagesCached,
   post: (endpoint, body, options) =>
     apiRequest(endpoint, {
       method: 'POST',

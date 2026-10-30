@@ -39,7 +39,7 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
           setFormData({
             title: '',
             description: '',
-            projectId: validProjects[0]?.id ? String(validProjects[0].id) : 'P1',
+            projectId: validProjects[0]?.id ? String(validProjects[0].id) : '',
             assignedToIds: [],
             type: 'on-site',
             priority: 'medium',
