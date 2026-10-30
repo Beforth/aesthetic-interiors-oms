@@ -1,3 +1,4 @@
+import { queryCache, DEFAULT_CACHE_TTL } from './cache';
 /**
  * Centralized API client conforming to Project Standards.
  * Handles:
@@ -41,6 +42,7 @@ export function clearAuthSession() {
     }
   }
   keysToRemove.forEach((key) => localStorage.removeItem(key));
+  queryCache.clear();
 }
 
 export function getAuthToken() {
@@ -127,11 +129,21 @@ export function refreshSession() {
  * 2. Refreshes the token once on 401 and retries; ends the session if that fails.
  * 3. Normalizes errors and unwraps response envelopes.
  */
-export async function apiRequest(endpoint, options = {}) {
-  const { _retried, ...fetchOptions } = options;
-  const url = resolveUrl(endpoint);
 
-  // A file upload (FormData) sets its own Content-Type, with the multipart boundary.
+function invalidateRelatedCache(endpoint) {
+  if (!endpoint) return;
+  const path = endpoint.split('?')[0];
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length >= 2) {
+    queryCache.invalidate('/' + segments[0] + '/' + segments[1]);
+    queryCache.invalidate(segments[1]);
+  } else if (segments.length === 1) {
+    queryCache.invalidate('/' + segments[0]);
+  }
+}
+
+async function performFetch(url, endpoint, fetchOptions, options) {
+  const { _retried } = options;
   const isUpload = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
   const headers = {
     ...(isUpload ? {} : { 'Content-Type': 'application/json' }),
@@ -178,6 +190,14 @@ export async function apiRequest(endpoint, options = {}) {
       if (payload && typeof payload === 'object') {
         message = payload.message || payload.detail || payload.error || message;
         errors = payload.errors || null;
+        if (!errors && !payload.message && !payload.detail && !payload.error) {
+          errors = payload;
+          const firstKey = Object.keys(payload)[0];
+          if (firstKey) {
+            const firstErr = Array.isArray(payload[firstKey]) ? payload[firstKey][0] : payload[firstKey];
+            message = `${firstKey}: ${firstErr}`;
+          }
+        }
       } else if (typeof payload === 'string' && payload.length > 0) {
         if (
           payload.includes('ECONNREFUSED') ||
@@ -190,14 +210,12 @@ export async function apiRequest(endpoint, options = {}) {
           message = payload;
         }
       } else if (res.status >= 500) {
-        // An empty 5xx is what the dev proxy returns when nothing answers on the backend port
         message = 'Unable to reach the backend server. Please make sure it is running.';
       }
 
       throw new ApiError(message, res.status, errors);
     }
 
-    // Unwrap envelope { success, message, data, errors } if present
     if (payload && typeof payload === 'object' && 'success' in payload && 'data' in payload) {
       return payload.data;
     }
@@ -212,6 +230,39 @@ export async function apiRequest(endpoint, options = {}) {
   }
 }
 
+export async function apiRequest(endpoint, options = {}) {
+  const { _retried, ...fetchOptions } = options;
+  const url = resolveUrl(endpoint);
+  const method = (fetchOptions.method || 'GET').toUpperCase();
+  const isGet = method === 'GET';
+
+  // In-flight deduplication for concurrent GET requests (React 18 dev mode StrictMode double calls)
+  if (isGet && !_retried) {
+    const inFlightKey = `API_GET_${url}`;
+    if (queryCache.inFlight.has(inFlightKey)) {
+      return queryCache.inFlight.get(inFlightKey);
+    }
+    const promise = (async () => {
+      try {
+        return await performFetch(url, endpoint, fetchOptions, options);
+      } finally {
+        queryCache.inFlight.delete(inFlightKey);
+      }
+    })();
+    queryCache.inFlight.set(inFlightKey, promise);
+    return promise;
+  }
+
+  const result = await performFetch(url, endpoint, fetchOptions, options);
+
+  // Invalidate cache on mutations
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    invalidateRelatedCache(endpoint);
+  }
+
+  return result;
+}
+
 function withQuery(endpoint, params) {
   const entries = Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== '');
   if (entries.length === 0) return endpoint;
@@ -222,6 +273,31 @@ function withQuery(endpoint, params) {
 /**
  * Fetches every page of a paginated list endpoint and returns the combined results array.
  */
+
+/**
+ * Cached GET request for rarely-changing lists (default 2-minute TTL).
+ */
+export function getCached(endpoint, options = {}, ttl = DEFAULT_CACHE_TTL) {
+  const url = resolveUrl(endpoint);
+  return queryCache.fetchWithCache(
+    url,
+    () => apiRequest(endpoint, { method: 'GET', ...options }),
+    { ttl }
+  );
+}
+
+/**
+ * Cached paginated fetch for rarely-changing collections.
+ */
+export async function getAllPagesCached(endpoint, params = {}, ttl = DEFAULT_CACHE_TTL) {
+  const url = withQuery(resolveUrl(endpoint), params);
+  return queryCache.fetchWithCache(
+    `ALL_${url}`,
+    () => getAllPages(endpoint, params),
+    { ttl }
+  );
+}
+
 export async function getAllPages(endpoint, params = {}) {
   const results = [];
   let page = 1;

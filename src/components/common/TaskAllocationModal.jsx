@@ -3,122 +3,103 @@ import { projectService } from '../../services/projectService';
 import { userService } from '../../services/userService';
 import { taskService } from '../../services/taskService';
 import { useToast } from '../../context/ToastContext';
-import { BASE_ROLE_LABELS } from '../../config/roles';
-import { defaultStageTemplate } from '../../data/stageTemplate';
+import { validateRequired } from '../../utils/validators';
+import { cn } from '../../lib/utils';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
-import Icon from '../ui/Icon';
-
-const STAGES = defaultStageTemplate.map((s) => s.name);
-
-const PRIORITIES = [
-  { value: 'low', label: 'Low Priority' },
-  { value: 'medium', label: 'Medium Priority' },
-  { value: 'high', label: 'High Priority' },
-  { value: 'urgent', label: 'Urgent' },
-];
-
-const TYPES = [
-  { value: 'site', label: 'Site Execution' },
-  { value: 'office', label: 'Office / Design' },
-];
+import FormMultiAssigneeSelect from './FormMultiAssigneeSelect';
 
 export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
   const toast = useToast();
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     projectId: '',
-    assignedToId: '',
-    stageName: 'Cleaning',
+    assignedToIds: [],
+    type: 'on-site',
     priority: 'medium',
-    type: 'site',
-    dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+    dueDate: new Date().toISOString().split('T')[0],
   });
-
-  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (isOpen) {
+      setFormErrors({});
       Promise.all([projectService.getAllProjects(), userService.getAllUsers()]).then(
         ([projList, userList]) => {
-          setProjects(projList || []);
+          const validProjects = projList || [];
+          setProjects(validProjects);
           setUsers(userList || []);
-          if (projList && projList.length > 0 && !formData.projectId) {
-            setFormData((prev) => ({ ...prev, projectId: projList[0].id }));
-          }
-          if (userList && userList.length > 0 && !formData.assignedToId) {
-            // Find worker or supervisor default
-            const defaultUser = userList.find((u) => u.role === 'site_worker' || u.role === 'site_supervisor') || userList[0];
-            setFormData((prev) => ({ ...prev, assignedToId: defaultUser.id }));
-          }
+          setFormData({
+            title: '',
+            description: '',
+            projectId: validProjects[0]?.id ? String(validProjects[0].id) : 'P1',
+            assignedToIds: [],
+            type: 'on-site',
+            priority: 'medium',
+            dueDate: new Date().toISOString().split('T')[0],
+          });
         }
       );
     }
   }, [isOpen]);
 
-  // Keep milestone stage aligned with project's sequence
-  useEffect(() => {
-    if (formData.projectId && projects.length > 0) {
-      const selectedProj = projects.find((p) => p.id === formData.projectId);
-      if (selectedProj?.stages?.length > 0) {
-        const hasStage = selectedProj.stages.some((s) => s.name === formData.stageName);
-        if (!hasStage) {
-          setFormData((prev) => ({ ...prev, stageName: selectedProj.stages[0].name }));
-        }
-      }
+    const handleSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const titleErr = validateRequired(formData.title, 'Task Title', 2);
+    const projErr = validateRequired(formData.projectId, 'Assigned Project');
+    const assigneesErr =
+      !formData.assignedToIds || formData.assignedToIds.length === 0
+        ? 'Please select at least one assignee'
+        : null;
+
+    if (titleErr || projErr || assigneesErr) {
+      setFormErrors({
+        title: titleErr,
+        projectId: projErr,
+        assignedToIds: assigneesErr,
+      });
+      toast.error(titleErr || projErr || assigneesErr);
+      return;
     }
-  }, [formData.projectId, projects]);
-
-  const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const validate = () => {
-    const err = {};
-    if (!formData.title.trim()) err.title = 'Task title is required';
-    if (!formData.projectId) err.projectId = 'Please select a project';
-    if (!formData.assignedToId) err.assignedToId = 'Please assign an artisan or supervisor';
-    if (!formData.dueDate) err.dueDate = 'Due date is required';
-    setErrors(err);
-    return Object.keys(err).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-
+    setFormErrors({});
     setSubmitting(true);
+
     try {
-      const selectedProject = projects.find((p) => String(p.id) === String(formData.projectId));
-      const selectedAssignee = users.find((u) => String(u.id) === String(formData.assignedToId));
+      const todayStr = new Date().toISOString().split('T')[0];
+      const finalDueDate = formData.dueDate && formData.dueDate.trim() ? formData.dueDate.trim() : todayStr;
+      const targetProj = projects.find((p) => String(p.id) === String(formData.projectId));
+      const selectedUsers = users.filter((u) => formData.assignedToIds.includes(String(u.id)));
+      const assignedToNames = selectedUsers.map((u) => {
+        const roleLower = String(u.role || '').toLowerCase();
+        const isOwner = roleLower === 'owner' || roleLower === 'admin' || (u.name && u.name.toLowerCase().includes('rohit'));
+        return isOwner ? `${u.name} (Admin)` : u.name;
+      });
+      const primaryName = assignedToNames.join(', ') || 'Unassigned';
 
       const payload = {
         title: formData.title.trim(),
         description: formData.description.trim(),
         projectId: formData.projectId,
-        projectName: selectedProject ? selectedProject.name : 'Site Project',
-        assignedToId: formData.assignedToId,
-        assignedToName: selectedAssignee ? selectedAssignee.name : 'Assigned Staff',
-        assignedToRole: selectedAssignee ? selectedAssignee.role : 'Worker',
-        stageName: formData.stageName,
-        priority: formData.priority,
+        projectName: targetProj?.name || 'Interior Site Fit-Out',
         type: formData.type,
-        dueDate: formData.dueDate,
+        priority: formData.priority || 'medium',
+        dueDate: finalDueDate,
+        assignedToIds: formData.assignedToIds,
+        assignedToNames,
+        assignedToId: formData.assignedToIds[0] || '',
+        assignedToName: primaryName,
         status: 'todo',
       };
 
       const created = await taskService.createTask(payload);
-      toast.success(`Task allocated to ${selectedAssignee?.name || 'team member'}!`);
+      toast.success(`Task "${formData.title}" created successfully`);
 
       // Dispatch global event for live reactivity across all views
       window.dispatchEvent(new CustomEvent('task-allocated', { detail: created }));
@@ -127,153 +108,166 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
         onTaskAllocated(created);
       }
       onClose();
-      // Reset form
-      setFormData((prev) => ({
-        ...prev,
-        title: '',
-        description: '',
-      }));
     } catch (err) {
       console.error(err);
-      toast.error('Failed to allocate task. Please try again.');
+      toast.error('Failed to create task. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const projectOptions = projects.map((p) => ({
-    value: p.id,
-    label: `${p.name} (${p.city || p.clientName || 'Site'})`,
-  }));
-
-  // Show only user role (Owner, Manager, Supervisor, Worker, Client) without names as requested
-  const userOptions = users.map((u) => {
-    const roleLabel = (BASE_ROLE_LABELS[u.role] || u.role?.replace('_', ' ')).toUpperCase();
-    return {
-      value: u.id,
-      label: roleLabel,
-    };
-  });
-
-  // Stages displayed in strict sequential order from master template / project execution stages
-  const selectedProject = projects.find((p) => p.id === formData.projectId);
-  const stageOptions = (
-    selectedProject?.stages && selectedProject.stages.length > 0
-      ? selectedProject.stages.map((s, idx) => ({
-          value: s.name,
-          label: `${s.order || idx + 1}. ${s.name}`,
-        }))
-      : defaultStageTemplate.map((s) => ({
-          value: s.name,
-          label: `${s.order}. ${s.name}`,
-        }))
-  );
-
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
-      title="Task Allocation"
-      description="Allocate operational tasks, quality checks, or daily deliverables to on-duty team members."
+      onClose={() => {
+        onClose();
+        setFormErrors({});
+      }}
+      title="Create Task"
+      subtitle="Allocate task to projects, set locations and assign staff"
       size="lg"
-    >
-      <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-        {/* Task Title */}
-        <Input
-          label="Task Title"
-          value={formData.title}
-          onChange={(e) => handleChange('title', e.target.value)}
-          placeholder="e.g. Align kitchen carcass frames and check drawer runners"
-          error={errors.title}
-          autoFocus
-          required
-        />
-
-        {/* Project & Assignee */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Select
-            label="Assigned Project / Site"
-            options={projectOptions}
-            value={formData.projectId}
-            onChange={(e) => handleChange('projectId', e.target.value)}
-            error={errors.projectId}
-            required
-          />
-
-          <Select
-            label="Assignee (Artisan / Supervisor)"
-            options={userOptions}
-            value={formData.assignedToId}
-            onChange={(e) => handleChange('assignedToId', e.target.value)}
-            error={errors.assignedToId}
-            required
-          />
-        </div>
-
-        {/* Milestone Stage & Task Type */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Select
-            label="Execution Milestone Stage"
-            options={stageOptions}
-            value={formData.stageName}
-            onChange={(e) => handleChange('stageName', e.target.value)}
-          />
-
-          <Select
-            label="Task Type"
-            options={TYPES}
-            value={formData.type}
-            onChange={(e) => handleChange('type', e.target.value)}
-          />
-        </div>
-
-        {/* Priority & Due Date */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Select
-            label="Priority Level"
-            options={PRIORITIES}
-            value={formData.priority}
-            onChange={(e) => handleChange('priority', e.target.value)}
-          />
-
-          <Input
-            type="date"
-            label="Due Date"
-            value={formData.dueDate}
-            onChange={(e) => handleChange('dueDate', e.target.value)}
-            error={errors.dueDate}
-            required
-          />
-        </div>
-
-        {/* Detailed Instructions */}
-        <div>
-          <label className="block text-xs font-semibold text-foreground mb-1.5">
-            Detailed Work Instructions / Notes (Optional)
-          </label>
-          <textarea
-            value={formData.description}
-            onChange={(e) => handleChange('description', e.target.value)}
-            rows={3}
-            placeholder="Specify architectural tolerances, vendor coordination details, or material specifications..."
-            className="w-full text-xs sm:text-sm px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground resize-none"
-          />
-        </div>
-
-        {/* Modal Actions */}
-        <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border">
-          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={submitting}>
+      footer={
+        <div className="flex items-center justify-end gap-2 w-full">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onClose();
+              setFormErrors({});
+            }}
+          >
             Cancel
           </Button>
           <Button
             type="submit"
+            form="dashboard-task-allocation-form"
             variant="primary"
             size="sm"
             loading={submitting}
-            leftIcon={<Icon name="check" size={14} />}
+            leadingIcon="plus"
           >
-            Allocate Task
+            Create Task
           </Button>
+        </div>
+      }
+    >
+      <form
+        id="dashboard-task-allocation-form"
+        onSubmit={handleSubmit}
+        noValidate
+        className="space-y-4 text-xs"
+      >
+        {/* Row 1: Task Title */}
+        <div>
+          <label className="block text-xs font-medium text-foreground mb-1.5">
+            Task Title <span className="text-destructive">*</span>
+          </label>
+          <input
+            type="text"
+            required
+            value={formData.title}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, title: e.target.value }));
+              if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: '' }));
+            }}
+            placeholder="e.g. Master bedroom veneer grain continuity inspection"
+            className={cn(
+              'w-full h-9 rounded-lg border bg-background px-3 text-xs text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs',
+              formErrors.title ? 'border-destructive ring-1 ring-destructive' : 'border-border'
+            )}
+            autoFocus
+          />
+          {formErrors.title && (
+            <p className="mt-1 text-[11px] text-destructive">{formErrors.title}</p>
+          )}
+        </div>
+
+        {/* Row 2: Description */}
+        <div>
+          <label className="block text-xs font-medium text-foreground mb-1.5">
+            Description
+          </label>
+          <textarea
+            rows={2}
+            value={formData.description}
+            onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+            placeholder="Add specific execution details, material references, or notes..."
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground resize-none transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs"
+          />
+        </div>
+
+        {/* Row 3: Assigned Project & Location */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <Select
+            label="Assigned Project"
+            required
+            error={formErrors.projectId}
+            value={formData.projectId}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, projectId: e.target.value }));
+              if (formErrors.projectId) setFormErrors((prev) => ({ ...prev, projectId: '' }));
+            }}
+            options={projects.map((p) => ({
+              value: String(p.id),
+              label: p.name,
+            }))}
+          />
+
+          <Select
+            label="Location"
+            value={formData.type}
+            onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
+            options={[
+              { value: 'on-site', label: 'On-Site' },
+              { value: 'office', label: 'Office' },
+              { value: 'meeting', label: 'Meeting' },
+              { value: 'other', label: 'Other' },
+            ]}
+          />
+        </div>
+
+        {/* Row 4: Multiple Assignees Selector */}
+        <div>
+          <FormMultiAssigneeSelect
+            users={users}
+            required
+            label="Assign"
+            error={formErrors.assignedToIds}
+            selectedIds={formData.assignedToIds}
+            onChange={(ids) => {
+              setFormData((prev) => ({ ...prev, assignedToIds: ids }));
+              if (formErrors.assignedToIds) {
+                setFormErrors((prev) => ({ ...prev, assignedToIds: '' }));
+              }
+            }}
+          />
+        </div>
+
+        {/* Row 5: Due Date & Priority Level */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <Input
+            label="Due Date"
+            type="date"
+            helperText="Defaults to today if omitted"
+            error={formErrors.dueDate}
+            value={formData.dueDate}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, dueDate: e.target.value }));
+              if (formErrors.dueDate) setFormErrors((prev) => ({ ...prev, dueDate: '' }));
+            }}
+          />
+
+          <Select
+            label="Priority Level"
+            value={formData.priority}
+            onChange={(e) => setFormData((prev) => ({ ...prev, priority: e.target.value }))}
+            options={[
+              { value: 'low', label: 'Low Priority' },
+              { value: 'medium', label: 'Medium Priority' },
+              { value: 'high', label: 'High Priority' },
+            ]}
+          />
         </div>
       </form>
     </Modal>

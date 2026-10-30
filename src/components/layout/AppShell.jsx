@@ -5,6 +5,8 @@ import Topbar from './Topbar';
 import BottomNav from './BottomNav';
 import { SidebarProvider } from '../ui/sidebar';
 import ErrorBoundary from '../common/ErrorBoundary';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { WifiOffIcon } from '../ui/icons';
 
 /**
  * Main application shell wrapping all authenticated screens.
@@ -13,6 +15,7 @@ import ErrorBoundary from '../common/ErrorBoundary';
  * and fixed bottom navigation for quick mobile actions.
  */
 export function AppShell() {
+  const isOnline = useOnlineStatus();
   // Lock the document to the viewport while the shell is mounted, so the
   // browser window itself can never scroll (only the content pane scrolls).
   // Any absolutely positioned stray element (e.g. an `sr-only` file input)
@@ -33,6 +36,12 @@ export function AppShell() {
           {/* Main Content Area: Topbar permanently sticky at top, only page body scrolls */}
           <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
             <Topbar />
+            {!isOnline && (
+              <div className="bg-warning/15 border-b border-warning/30 px-3 sm:px-4 py-1.5 flex items-center justify-center gap-2 text-xs text-warning-foreground font-medium shrink-0 animate-in fade-in duration-300">
+                <WifiOffIcon className="size-3.5 text-warning shrink-0" />
+                <span>Working offline — cached records and features remain accessible.</span>
+              </div>
+            )}
 
             <div className="flex-1 min-w-0 overflow-y-auto">
               <main className="px-3 sm:px-5 lg:px-6 py-3 sm:py-4 w-full pb-16 lg:pb-6">

@@ -168,28 +168,16 @@ export function OverallProgressGraph({
         <div className="p-2.5 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase font-semibold text-muted-foreground">
-              Completed Stages
+              Delivered
             </div>
             <div className="text-sm font-bold text-foreground">
-              {completedMilestones}
-              {totalMilestones > 0 && (
-                <span className="text-xs font-normal text-muted-foreground">/{totalMilestones}</span>
-              )}
+              {completedCount} Completed
             </div>
           </div>
           <div className="w-6 h-6 rounded-lg bg-success text-white flex items-center justify-center shrink-0">
             <Icon name="check" size={13} />
           </div>
         </div>
-      </div>
-
-      {/* Footer Milestone Health Status Pill */}
-      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5 font-medium">
-          <Icon name="sparkles" size={13} className="text-primary" />
-          <span>Delivered: <strong className="text-foreground">{completedCount} Completed</strong></span>
-        </span>
-        
       </div>
     </div>
   );

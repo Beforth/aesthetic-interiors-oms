@@ -14,7 +14,8 @@ import {
 } from '../ui/sidebar';
 import { cn } from '../../lib/utils';
 import Icon from '../ui/Icon';
-import { LogOutIcon } from '../ui/icons';
+import { LogOutIcon, DownloadIcon } from '../ui/icons';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 /**
  * Modern responsive application sidebar for Aesthetic Interiors OSM.
@@ -27,6 +28,7 @@ import { LogOutIcon } from '../ui/icons';
  */
 export function Sidebar({ onNavigate, className = '' }) {
   const { hasPermission, logout } = useAuth();
+  const { isInstallable, installApp } = usePWAInstall();
   const { collapsed, isMobile } = useSidebar();
   const isCollapsed = !isMobile && collapsed;
   const navigate = useNavigate();
@@ -53,7 +55,7 @@ export function Sidebar({ onNavigate, className = '' }) {
     ['clients', 'projects', 'agencies', 'website-leads'].includes(i.id)
   );
   const financeItems = navItems.filter((i) =>
-    ['payments', 'leave-payslips', 'reports'].includes(i.id)
+    ['payments', 'leave', 'payslips', 'leave-payslips', 'reports'].includes(i.id)
   );
   const settingsItems = navItems.filter((i) =>
     ['settings'].includes(i.id)
@@ -64,10 +66,41 @@ export function Sidebar({ onNavigate, className = '' }) {
     return (
       <SidebarGroup label={label}>
         {items.map((item) => {
-          const isActive =
+          const hasSubItems = item.items && item.items.length > 0;
+          const isItemPathActive =
             item.path === '/'
               ? location.pathname === '/'
               : location.pathname.startsWith(item.path);
+
+          const isAnySubActive =
+            hasSubItems &&
+            item.items.some((sub) => {
+              if (sub.path.includes('?')) {
+                return (
+                  location.pathname + location.search === sub.path ||
+                  (location.pathname === '/attendance' && location.search.includes('tab=requests'))
+                );
+              }
+              return location.pathname === sub.path || location.pathname.startsWith(sub.path);
+            });
+
+          const subItemsList = hasSubItems
+            ? item.items.map((sub) => {
+                const isSubActive = sub.path.includes('?')
+                  ? location.pathname + location.search === sub.path ||
+                    (location.pathname === '/attendance' && location.search.includes('tab=requests'))
+                  : location.pathname === sub.path || location.pathname.startsWith(sub.path);
+
+                return {
+                  label: sub.label,
+                  active: isSubActive,
+                  onClick: () => {
+                    navigate(sub.path);
+                    if (onNavigate) onNavigate();
+                  },
+                };
+              })
+            : undefined;
 
           return (
             <SidebarItem
@@ -75,11 +108,16 @@ export function Sidebar({ onNavigate, className = '' }) {
               icon={<Icon name={item.icon} size={18} />}
               label={item.label}
               badge={item.badge}
-              active={isActive}
-              onClick={() => {
-                navigate(item.path);
-                if (onNavigate) onNavigate();
-              }}
+              active={isItemPathActive || isAnySubActive}
+              items={subItemsList}
+              onClick={
+                hasSubItems
+                  ? undefined
+                  : () => {
+                      navigate(item.path);
+                      if (onNavigate) onNavigate();
+                    }
+              }
             />
           );
         })}
@@ -119,8 +157,16 @@ export function Sidebar({ onNavigate, className = '' }) {
         {renderGroup('Administration', settingsItems)}
       </SidebarContent>
 
-      {/* Logout Footer */}
+      {/* Footer Actions: Install App (PWA) & Logout */}
       <SidebarFooter>
+        {isInstallable && (
+          <SidebarItem
+            icon={<DownloadIcon className="size-4 text-primary" />}
+            label="Install App"
+            onClick={installApp}
+            className="text-primary hover:bg-primary/10 hover:text-primary font-medium cursor-pointer"
+          />
+        )}
         <SidebarItem
           icon={<LogOutIcon className="size-4 text-destructive" />}
           label="Logout"

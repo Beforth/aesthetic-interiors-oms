@@ -10,14 +10,18 @@ import { dashboardService } from '../services/dashboardService';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { calculateProgress } from '../utils/progress';
 import { useToast } from '../context/ToastContext';
+import { cn } from '../lib/utils';
 import { mockUsers } from '../data/users';
 
 import ProgressBar from '../components/ui/ProgressBar';
 import Icon from '../components/ui/Icon';
 import StatusBadge from '../components/ui/StatusBadge';
 import Button from '../components/ui/Button';
+import { Avatar } from '../components/ui/avatar';
+import Modal from '../components/ui/Modal';
 import TaskAllocationModal from '../components/common/TaskAllocationModal';
 import { Leaderboard } from '../components/ui/leaderboard';
+import { Building2Icon, CalendarCheckIcon, CakeIcon } from '../components/ui/icons';
 import OverallProgressGraph from '../components/domain/OverallProgressGraph';
 import HRWorkforceOverview from '../components/domain/HRWorkforceOverview';
 
@@ -32,6 +36,7 @@ export function DashboardPage() {
   const [users, setUsers] = useState(mockUsers);
   const [loading, setLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isBirthdaysModalOpen, setIsBirthdaysModalOpen] = useState(false);
   const [hoveredProject, setHoveredProject] = useState(null);
 
   const loadDashboardData = async () => {
@@ -46,9 +51,14 @@ export function DashboardPage() {
       setProjects(projList || []);
       setTasks(taskList || []);
       setAttendance(attList || []);
-      // The team directory has no birthdays; the backend's dashboard numbers carry them for this month.
+      // Merge birthdays from summary or user profile
       const birthdays = new Map((summary?.birthdays || []).map((b) => [String(b.userId), b.birthday]));
-      setUsers((userList || []).map((u) => (u.birthday ? u : { ...u, birthday: birthdays.get(String(u.id)) })));
+      setUsers(
+        (userList || []).map((u) => {
+          const b = u.birthday || u.birthdate || birthdays.get(String(u.id));
+          return b ? { ...u, birthday: b, birthdate: b } : u;
+        })
+      );
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {
@@ -60,13 +70,35 @@ export function DashboardPage() {
     loadDashboardData();
   }, [currentUser]);
 
-  // Real-time synchronization when a task is allocated anywhere in the system
+  // Real-time synchronization when tasks, projects, or attendance are created or updated
   useEffect(() => {
-    const handleTaskAllocated = () => {
+    const handleDataUpdate = () => {
       loadDashboardData();
     };
-    window.addEventListener('task-allocated', handleTaskAllocated);
-    return () => window.removeEventListener('task-allocated', handleTaskAllocated);
+    window.addEventListener('task-allocated', handleDataUpdate);
+    window.addEventListener('osm_attendance_updated', handleDataUpdate);
+    window.addEventListener('osm_attendance_requests_updated', handleDataUpdate);
+    window.addEventListener('osm_project_created', handleDataUpdate);
+    window.addEventListener('osm_project_updated', handleDataUpdate);
+    window.addEventListener('osm_project_deleted', handleDataUpdate);
+    window.addEventListener('osm_projects_changed', handleDataUpdate);
+    window.addEventListener('osm_users_updated', handleDataUpdate);
+    window.addEventListener('osm_user_created', handleDataUpdate);
+    window.addEventListener('storage', handleDataUpdate);
+    window.addEventListener('focus', handleDataUpdate);
+    return () => {
+      window.removeEventListener('task-allocated', handleDataUpdate);
+      window.removeEventListener('osm_attendance_updated', handleDataUpdate);
+      window.removeEventListener('osm_attendance_requests_updated', handleDataUpdate);
+      window.removeEventListener('osm_project_created', handleDataUpdate);
+      window.removeEventListener('osm_project_updated', handleDataUpdate);
+      window.removeEventListener('osm_project_deleted', handleDataUpdate);
+      window.removeEventListener('osm_projects_changed', handleDataUpdate);
+      window.removeEventListener('osm_users_updated', handleDataUpdate);
+      window.removeEventListener('osm_user_created', handleDataUpdate);
+      window.removeEventListener('storage', handleDataUpdate);
+      window.removeEventListener('focus', handleDataUpdate);
+    };
   }, []);
 
   // Quick toggle task status
@@ -103,7 +135,11 @@ export function DashboardPage() {
   }, [attendance, users]);
 
   const presentCount = useMemo(() => {
-    return attendance.filter((a) => ['present', 'late', 'overtime', 'half-day'].includes(a.status)).length;
+    return attendance.filter((a) => {
+      const s = String(a.status || '').toLowerCase();
+      const hasPunch = Boolean(a.checkInTime && a.checkInTime !== '-' && a.checkInTime !== '—');
+      return s === 'present' || s === 'late' || s === 'overtime' || s === 'half-day' || hasPunch;
+    }).length;
   }, [attendance]);
 
   const absentCount = useMemo(() => {
@@ -119,11 +155,29 @@ export function DashboardPage() {
 
   const monthlyBirthdays = useMemo(() => {
     return users
-      .filter((u) => u.birthday && u.role !== 'client')
+      .filter((u) => (u.birthday || u.birthdate) && u.role !== 'client')
       .map((u) => {
-        const parts = u.birthday.split('-');
-        const month = parseInt(parts[1], 10) - 1;
-        const day = parseInt(parts[2], 10);
+        const raw = String(u.birthday || u.birthdate).trim();
+        let month = -1;
+        let day = -1;
+        if (raw.includes('-')) {
+          const parts = raw.split('-');
+          if (parts[0].length === 4) {
+            // YYYY-MM-DD
+            month = parseInt(parts[1], 10) - 1;
+            day = parseInt(parts[2], 10);
+          } else {
+            // DD-MM-YYYY
+            month = parseInt(parts[1], 10) - 1;
+            day = parseInt(parts[0], 10);
+          }
+        } else {
+          const d = new Date(raw);
+          if (!isNaN(d.getTime())) {
+            month = d.getMonth();
+            day = d.getDate();
+          }
+        }
         return {
           ...u,
           birthMonth: month,
@@ -132,7 +186,7 @@ export function DashboardPage() {
           isUpcoming: day >= todayDate,
         };
       })
-      .filter((u) => u.birthMonth === currentMonth)
+      .filter((u) => u.birthMonth === currentMonth && u.birthDay > 0)
       .sort((a, b) => a.birthDay - b.birthDay);
   }, [users, currentMonth, currentMonthShort, todayDate]);
 
@@ -250,20 +304,20 @@ export function DashboardPage() {
         <div className="p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Active Projects
+              Total Projects
             </span>
-            <div className="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center">
-              <Icon name="projects" size={16} />
+            <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 border border-brand-200 flex items-center justify-center">
+              <Building2Icon className="size-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">{activeProjects.length}</span>
-            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
-              Live Execution
+            <span className="text-2xl font-black text-text-main">{projects.length}</span>
+            <span className="text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-1.5 py-0.5 rounded-full">
+              {activeProjects.length} Active
             </span>
           </div>
           <p className="text-[11px] text-text-muted mt-1 truncate">
-            {completedProjects.length} sites successfully handed over
+            {activeProjects.length} live sites • {completedProjects.length} delivered
           </p>
         </div>
 
@@ -274,7 +328,7 @@ export function DashboardPage() {
               Today's Attendance
             </span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center">
-              <Icon name="attendance" size={16} />
+              <CalendarCheckIcon className="size-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -301,7 +355,7 @@ export function DashboardPage() {
               Birthdays ({currentMonthName})
             </span>
             <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 border border-pink-200 flex items-center justify-center">
-              <Icon name="cake" size={16} />
+              <CakeIcon className="size-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -319,9 +373,13 @@ export function DashboardPage() {
                   {monthlyBirthdays[0].name} ({monthlyBirthdays[0].displayDate})
                 </span>
                 {monthlyBirthdays.length > 1 && (
-                  <span className="text-pink-600 font-medium shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsBirthdaysModalOpen(true)}
+                    className="text-pink-600 font-medium hover:underline shrink-0 cursor-pointer"
+                  >
                     +{monthlyBirthdays.length - 1} more
-                  </span>
+                  </button>
                 )}
               </div>
             ) : (
@@ -366,7 +424,14 @@ export function DashboardPage() {
                 No active projects found.
               </div>
             ) : (
-              <div className="max-h-[385px] overflow-y-auto pr-1 scrollbar-thin">
+              <div
+                className={cn(
+                  'pr-1 scrollbar-thin transition-all',
+                  activeProjects.length > 4
+                    ? 'max-h-[296px] overflow-y-auto'
+                    : 'overflow-visible'
+                )}
+              >
                 <Leaderboard
                   items={projectLeaderboardItems}
                   format={(val) => `${val}%`}
@@ -403,7 +468,11 @@ export function DashboardPage() {
             Staff directory arrivals, leave workflow statuses, and upcoming holiday schedule
           </p>
         </div>
-        <HRWorkforceOverview totalEmployees={30} />
+        <HRWorkforceOverview
+          users={users}
+          totalEmployees={users.filter((u) => u.role !== 'client' && u.status !== 'inactive').length}
+          onDataRefresh={loadDashboardData}
+        />
       </div>
 
       {/* Task Allocation Modal Dialog */}
@@ -412,6 +481,65 @@ export function DashboardPage() {
         onClose={() => setIsTaskModalOpen(false)}
         onTaskAllocated={() => loadDashboardData()}
       />
+
+      {/* Employee Birthdays Modal Dialog */}
+      <Modal
+        isOpen={isBirthdaysModalOpen}
+        onClose={() => setIsBirthdaysModalOpen(false)}
+        title={`Employee Birthdays — ${currentMonthName}`}
+        subtitle={`All ${monthlyBirthdays.length} team members celebrating birthdays in ${currentMonthName}`}
+        size="md"
+        footer={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsBirthdaysModalOpen(false)}
+          >
+            Close
+          </Button>
+        }
+      >
+        <div className="space-y-2.5 max-h-[350px] overflow-y-auto scrollbar-thin pr-1 text-xs">
+          {monthlyBirthdays.length === 0 ? (
+            <p className="text-xs text-text-muted text-center py-4">
+              No birthdays found for ${currentMonthName}.
+            </p>
+          ) : (
+            monthlyBirthdays.map((u) => {
+              const isToday = u.birthDay === todayDate;
+              return (
+                <div
+                  key={u.id}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
+                    isToday
+                      ? 'bg-pink-50/70 border-pink-300 dark:bg-pink-950/20 dark:border-pink-800'
+                      : 'bg-surface border-border hover:border-pink-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={u.name} size="sm" />
+                    <div>
+                      <div className="font-semibold text-xs text-text-main flex items-center gap-1.5">
+                        <span>{u.name}</span>
+                        {isToday && (
+                          <span className="text-[10px] font-bold text-pink-700 bg-pink-100 px-1.5 py-0.2 rounded-full border border-pink-200">
+                            Today! 🎂
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-text-muted">{u.role || 'Staff Member'}</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-pink-600 font-mono bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-lg">
+                    {u.displayDate}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </Modal>
+
     </div>
   );
 }

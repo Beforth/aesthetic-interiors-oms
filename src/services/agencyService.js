@@ -90,6 +90,7 @@ const mockAgencyService = {
 
       const newAgency = {
         id: `a${Date.now()}`,
+        createdAt: new Date().toISOString(),
         activeProjects: [],
         rating: 4.8,
         status: 'active',
@@ -175,7 +176,7 @@ function toApiAgency(data) {
 
 const liveAgencyService = {
   async getAllAgencies() {
-    return apiClient.getAll(AGENCY_URL);
+    return apiClient.getAllCached(AGENCY_URL);
   },
 
   async getAgencyById(id) {

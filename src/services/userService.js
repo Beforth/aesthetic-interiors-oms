@@ -62,11 +62,14 @@ function getLocalUsers() {
   return sanitizeUsers(mockUsers);
 }
 
-function saveLocalUsers(users) {
+function saveLocalUsers(users, notify = true) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
   } catch (e) {
     console.error('Failed to save users to localStorage', e);
+  }
+  if (notify && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('osm_users_updated', { detail: { users } }));
   }
 }
 
@@ -75,6 +78,7 @@ const WRITABLE_FIELDS = ['name', 'email', 'username', 'password', 'phone', 'role
 /** Only the fields the API accepts. Empty text is kept (it clears a field) except an empty password. */
 function toPayload(data) {
   const payload = {};
+  if (!data.birthday && data.birthdate) data.birthday = data.birthdate;
   WRITABLE_FIELDS.forEach((field) => {
     const value = data[field];
     if (value === undefined || value === null) return;
@@ -146,7 +150,7 @@ const baseUserService = {
     if (isDebug()) {
       return getLocalUsers();
     }
-    return apiClient.getAll('/accounts/users/');
+    return apiClient.getAllCached('/accounts/users/');
   },
 
   /** Creates a user. `name`, `email`, `password` and `role` (a role key) are required. */
@@ -163,15 +167,24 @@ const baseUserService = {
         role: userData.role || 'worker',
         title: userData.title || 'Staff Member',
         notes: userData.notes || '',
-        birthday: userData.birthday || '',
+        birthday: userData.birthday || userData.birthdate || '',
+        birthdate: userData.birthday || userData.birthdate || '',
         status: userData.status || 'active',
         joinedOn: new Date().toISOString().split('T')[0],
         assignedProjects: [],
       };
       saveLocalUsers([newUser, ...local]);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('osm_user_created', { detail: { user: newUser } }));
+      }
       return newUser;
     }
-    return apiClient.post('/accounts/users/', toPayload(userData));
+    const created = await apiClient.post('/accounts/users/', toPayload(userData));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('osm_users_updated', { detail: { user: created } }));
+      window.dispatchEvent(new CustomEvent('osm_user_created', { detail: { user: created } }));
+    }
+    return created;
   },
 
   /** Updates a user. Only the fields given change; a blank `password` leaves the password alone. */
@@ -188,6 +201,9 @@ const baseUserService = {
     }
     const updated = await apiClient.patch(`/accounts/users/${id}/`, toPayload(updateData));
     syncSignedInUser(updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('osm_users_updated', { detail: { user: updated } }));
+    }
     return updated;
   },
 
@@ -222,7 +238,7 @@ const baseUserService = {
 // Without it the pages would be offered the demo users, whose ids the backend does not know.
 const liveUserService = {
   async getAllUsers() {
-    return apiClient.getAll('/accounts/users/directory/');
+    return apiClient.getAllCached('/accounts/users/directory/');
   },
 };
 

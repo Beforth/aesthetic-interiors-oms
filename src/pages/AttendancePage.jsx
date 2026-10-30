@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { attendanceService, calculateDistanceMeters } from '../services/attendanceService';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { attendanceService, calculateDistanceMeters, cleanLocationName, formatIndianTime, getIndianTime12h, to24h } from '../services/attendanceService';
 import { projectService } from '../services/projectService';
+import { userService } from '../services/userService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
@@ -36,6 +38,7 @@ import {
   ClockIcon,
   CheckIcon,
   AlertIcon,
+  AlertCircleIcon,
   UmbrellaIcon,
   LogInIcon,
   LogOutIcon,
@@ -87,22 +90,23 @@ function localTodayIso() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+export function parseTimeToMinutes(str) {
+  if (!str || str === '—' || str === '-' || str === '—') return null;
+  const clean = String(str).trim().toLowerCase();
+  const isPM = clean.includes('pm');
+  const isAM = clean.includes('am');
+  const timePart = clean.replace(/[a-z]/g, '').trim();
+  const parts = timePart.split(':');
+  let h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1] || '0', 10);
+  if (Number.isNaN(h)) return null;
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  return h * 60 + (Number.isNaN(m) ? 0 : m);
+}
+
 export function calculateWorkingHours(checkInStr, checkOutStr) {
   if (!checkInStr) return '—';
-
-  const parseTimeToMinutes = (str) => {
-    if (!str) return null;
-    const clean = str.trim().toLowerCase();
-    const isPM = clean.includes('pm');
-    const isAM = clean.includes('am');
-    const timePart = clean.replace(/[a-z]/g, '').trim();
-    const parts = timePart.split(':');
-    let h = parseInt(parts[0], 10);
-    const m = parseInt(parts[1] || '0', 10);
-    if (isPM && h < 12) h += 12;
-    if (isAM && h === 12) h = 0;
-    return h * 60 + m;
-  };
 
   const inMin = parseTimeToMinutes(checkInStr);
   if (inMin === null) return '—';
@@ -125,7 +129,26 @@ export function calculateWorkingHours(checkInStr, checkOutStr) {
   return `${hrs.toString().padStart(2, '0')}h ${mins.toString().padStart(2, '0')}m`;
 }
 
-export function AttendancePage() {
+export function AttendancePage({ defaultTab }) {
+  // Immediate localStorage scrub: remove any legacy 'Neomed' or 'Neomad' cached entries
+  useEffect(() => {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('osm_') || key.includes('attendance') || key.includes('office'))) {
+          const val = localStorage.getItem(key);
+          if (val && /neom[ea]d/i.test(val)) {
+            const cleaned = val
+              .replace(/neom[ea]d\s*head\s*office/gi, 'Head Office')
+              .replace(/neom[ea]d\s*office/gi, 'Head Office')
+              .replace(/neom[ea]d/gi, 'Head Office');
+            localStorage.setItem(key, cleaned);
+          }
+        }
+      }
+    } catch (e) {}
+  }, []);
+
   const toast = useToast();
   const { currentUser, role, hasPermission } = useAuth();
   const isAdminOrManager =
@@ -136,7 +159,19 @@ export function AttendancePage() {
   const canCorrectAttendance = hasPermission ? hasPermission('attendance.correct') : isAdminOrManager;
 
   // Navigation tab: 'records' | 'requests' | 'leave-types' | 'stats'
-  const [activeTab, setActiveTab] = useState('records');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab = defaultTab || (tabParam === 'requests' ? 'requests' : 'records');
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    // tabParamSync
+    if (tabParam === 'requests' || tabParam === 'records') {
+      setActiveTab(tabParam);
+    } else if (defaultTab) {
+      setActiveTab(defaultTab);
+    }
+  }, [tabParam, defaultTab]);
 
   // Core Attendance State
   const [attendanceList, setAttendanceList] = useState([]);
@@ -149,6 +184,7 @@ export function AttendancePage() {
   });
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [requestsList, setRequestsList] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // PWA Real-time Geolocation State
@@ -159,13 +195,13 @@ export function AttendancePage() {
   const watchIdRef = useRef(null);
   const attendanceImportInputRef = useRef(null);
 
-  // Live Digital Clock & Calendar Date
+  // Live Digital Clock & Calendar Date (Indian Standard Time 12h: e.g. 01:00 PM after 12pm)
   const [clockData, setClockData] = useState(() => {
     const d = new Date();
     return {
-      day: d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
-      time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-      date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      day: d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long' }).toUpperCase(),
+      time: getIndianTime12h(d),
+      date: d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' }),
     };
   });
   const [currentTimeStr, setCurrentTimeStr] = useState('');
@@ -174,12 +210,18 @@ export function AttendancePage() {
     const updateClock = () => {
       const now = new Date();
       setClockData({
-        day: now.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
-        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-        date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        day: now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long' }).toUpperCase(),
+        time: getIndianTime12h(now),
+        date: now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' }),
       });
       setCurrentTimeStr(
-        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        now.toLocaleTimeString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+        }).toUpperCase()
       );
     };
     updateClock();
@@ -219,18 +261,22 @@ export function AttendancePage() {
   const [isCheckOutConfirmOpen, setIsCheckOutConfirmOpen] = useState(false);
   const [isRecheckInAlertOpen, setIsRecheckInAlertOpen] = useState(false);
   const [requestFormErrors, setRequestFormErrors] = useState({});
+  const [requestSubmitError, setRequestSubmitError] = useState(null);
+  const [staffMarkSubmitError, setStaffMarkSubmitError] = useState(null);
+  const [staffMarkErrors, setStaffMarkErrors] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const [requestForm, setRequestForm] = useState({
     userId: 'u1',
     date: new Date().toISOString().split('T')[0],
-    type: 'check-in',
+    type: 'Punch Regularization',
     reason: '',
     requestedCheckIn: '09:00 AM',
     requestedCheckOut: '06:00 PM',
   });
   const [requestSearch, setRequestSearch] = useState('');
   const [requestStatusFilter, setRequestStatusFilter] = useState('ALL'); // 'ALL' | 'pending' | 'approved' | 'rejected'
+  const today = new Date().toISOString().split('T')[0];
   const [requestFromDate, setRequestFromDate] = useState('');
   const [requestToDate, setRequestToDate] = useState('');
   const [requestSortOrder, setRequestSortOrder] = useState('desc'); // 'desc' (newest first) | 'asc'
@@ -253,7 +299,8 @@ export function AttendancePage() {
   const [leaveStatusFilter, setLeaveStatusFilter] = useState('ALL');
   const [recordSearch, setRecordSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
-  const [selectedDateFilter, setSelectedDateFilter] = useState('');
+  const [recordFromDate, setRecordFromDate] = useState(today);
+  const [recordToDate, setRecordToDate] = useState(today);
   const [cardFilter, setCardFilter] = useState(null); // 'checked-in' | 'not-checked-in' | 'on-leave' | 'checked-out' | null
 
   const handleCardFilterToggle = (filterKey) => {
@@ -277,52 +324,63 @@ export function AttendancePage() {
     const list = [];
     const seen = new Set();
 
-    (isDebug() ? mockUsers : []).forEach((u) => {
-      if (u.role !== 'client' && u.role !== ROLES.CLIENT && !seen.has(u.name)) {
-        seen.add(u.name);
+    // 1. First add users from allUsers (fetched from userService) or mockUsers
+    const baseUsers = allUsers && allUsers.length > 0 ? allUsers : (isDebug() ? mockUsers : []);
+    baseUsers.forEach((u) => {
+      const uIdStr = String(u.id);
+      if (u.role !== 'client' && u.role !== ROLES.CLIENT && !seen.has(uIdStr)) {
+        seen.add(uIdStr);
         const isAdmin =
           u.role?.toLowerCase() === 'admin' ||
           u.role?.toLowerCase() === 'owner' ||
-          u.name.toLowerCase().includes('admin');
+          (u.name && u.name.toLowerCase().includes('admin'));
         list.push({
           id: u.id,
-          name: u.name,
+          name: u.name || u.username || 'Staff Member',
+          role: u.role || 'Staff',
           isAdmin,
         });
       }
     });
 
+    // 2. Also ensure anyone from attendanceList is present
     attendanceList.forEach((r) => {
-      if (r.userName && !seen.has(r.userName) && r.userName !== '—') {
-        seen.add(r.userName);
+      let uid = r.userId;
+      if (!uid && r.id && String(r.id).startsWith('ph-')) {
+        const place = parsePlaceholder(r.id);
+        if (place) uid = place.userId;
+      }
+      if (uid && !seen.has(String(uid)) && r.userName && r.userName !== '—' && r.userName !== '—') {
+        seen.add(String(uid));
         const isAdmin =
           r.role?.toLowerCase() === 'admin' ||
           r.role?.toLowerCase() === 'owner' ||
-          r.userName.toLowerCase().includes('admin');
+          (r.userName && r.userName.toLowerCase().includes('admin'));
         list.push({
-          id: r.id,
+          id: uid,
           name: r.userName,
+          role: r.role || 'Staff',
           isAdmin,
         });
       }
     });
 
     return list;
-  }, [attendanceList]);
+  }, [allUsers, attendanceList]);
 
   const openPunchModal = () => {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
+    setStaffMarkSubmitError(null);
+    setStaffMarkErrors({});
     const today = localTodayIso();
+    const fallbackId = staffOptions[0]?.id || currentUser?.id || '1';
+    const indianTime = getIndianTime12h();
     setStaffMarkForm((prev) => ({
-      // keep the last choice only while that person is still in the list (the form starts on a demo id)
       userId: staffOptions.some((s) => String(s.id) === String(prev.userId))
         ? prev.userId
-        : staffOptions[0]?.id || '',
+        : fallbackId,
       punchType: 'in',
       date: today,
-      punchTime: `${hh}:${mm}`,
+      punchTime: indianTime,
       notes: '',
     }));
     setIsMarkStaffModalOpen(true);
@@ -389,10 +447,12 @@ export function AttendancePage() {
 
   const openRequestModal = () => {
     const today = new Date().toISOString().split('T')[0];
+    setRequestSubmitError(null);
+    setRequestFormErrors({});
     setRequestForm({
       userId: currentUser?.id || staffOptions[0]?.id || 'u1',
       date: today,
-      type: 'Punch Regularization',
+      type: 'check-in',
       reason: '',
       requestedCheckIn: '09:00 AM',
       requestedCheckOut: '06:00 PM',
@@ -400,21 +460,98 @@ export function AttendancePage() {
     setIsRequestModalOpen(true);
   };
 
-  // Fetch all initial data
+  // Real-time synchronization when attendance requests are submitted or decided
+  useEffect(() => {
+    const handleRequestsSync = () => {
+      loadData();
+      if (activeTab === 'requests') loadRequests(true);
+    };
+    window.addEventListener('osm_attendance_requests_updated', handleRequestsSync);
+    window.addEventListener('storage', handleRequestsSync);
+    return () => {
+      window.removeEventListener('osm_attendance_requests_updated', handleRequestsSync);
+      window.removeEventListener('storage', handleRequestsSync);
+    };
+  }, []);
+
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [requestsLoaded, setRequestsLoaded] = useState(false);
+
+  const loadRequests = useCallback(async (force = false) => {
+    if (requestsLoading && !force) return;
+    setRequestsLoading(true);
+    try {
+      const reqs = await attendanceService.getRequests();
+      setRequestsList(Array.isArray(reqs) ? reqs : []);
+      setRequestsLoaded(true);
+    } catch (err) {
+      console.warn('Attendance loadRequests warning:', err);
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, [requestsLoading]);
+
+  // Lazy-load secondary sub-tab data: load requests ONLY when 'requests' tab is active
+  useEffect(() => {
+    if (activeTab === 'requests' && !requestsLoaded) {
+      loadRequests();
+    }
+  }, [activeTab, requestsLoaded, loadRequests]);
+
+  const [leavesLoading, setLeavesLoading] = useState(false);
+  const [leavesLoaded, setLeavesLoaded] = useState(false);
+
+  const loadLeaveTypes = useCallback(async (force = false) => {
+    if (leavesLoading && !force) return;
+    setLeavesLoading(true);
+    try {
+      const leaves = await attendanceService.getLeaveTypes();
+      setLeaveTypes(Array.isArray(leaves) ? leaves : []);
+      setLeavesLoaded(true);
+    } catch (err) {
+      console.warn('Attendance loadLeaveTypes warning:', err);
+    } finally {
+      setLeavesLoading(false);
+    }
+  }, [leavesLoading]);
+
+  // Lazy-load secondary sub-tab data: load leave types ONLY when 'leave-types' tab is active or modal opened
+  useEffect(() => {
+    if ((activeTab === 'leave-types' || isAddLeaveTypeOpen) && !leavesLoaded) {
+      loadLeaveTypes();
+    }
+  }, [activeTab, isAddLeaveTypeOpen, leavesLoaded, loadLeaveTypes]);
+
+  // Lazy-load projects only when office settings modal is opened
+  useEffect(() => {
+    if (isOfficeSettingsOpen && projectsList.length === 0) {
+      projectService.getAllProjects().then((projs) => {
+        setProjectsList(Array.isArray(projs) ? projs : []);
+      }).catch(() => {});
+    }
+  }, [isOfficeSettingsOpen, projectsList.length]);
+
+  // Fetch primary attendance data (Today's punches, Office location, Stats, User directory)
   const loadData = async () => {
     setLoading(true);
     try {
-      const [records, office, leaves, reqs, stats, recent, projects] = await Promise.all([
+      const [records, office, stats, recent, users] = await Promise.all([
         attendanceService.getTodayAttendance().catch(() => []),
         attendanceService.getOfficeLocation().catch(() => null),
-        attendanceService.getLeaveTypes().catch(() => []),
-        attendanceService.getRequests().catch(() => []),
         attendanceService.getOverviewStats().catch(() => null),
         attendanceService.getRecentAttendance().catch(() => []),
-        projectService.getAllProjects().catch(() => []),
+        userService.getAllUsers().catch(() => []),
       ]);
+      if (Array.isArray(users) && users.length > 0) {
+        setAllUsers(users);
+      }
       const initialRecords = [...(records || []), ...(recent || [])];
-      setAttendanceList(initialRecords.length > 0 ? initialRecords : mockTodayAttendance);
+      const sanitizedInitial = (initialRecords.length > 0 ? initialRecords : mockTodayAttendance).map((r) => ({
+        ...r,
+        site: cleanLocationName(r.site || office?.name || 'Head Office'),
+        punchLocation: cleanLocationName(r.punchLocation || r.site || office?.name || 'Head Office'),
+      }));
+      setAttendanceList(sanitizedInitial);
       if (office) {
         setOfficeLocation(office);
         setOfficeForm({
@@ -424,9 +561,6 @@ export function AttendancePage() {
           radiusMeters: office.radiusMeters,
         });
       }
-      setLeaveTypes(Array.isArray(leaves) ? leaves : []);
-      setRequestsList(Array.isArray(reqs) ? reqs : []);
-      setProjectsList(Array.isArray(projects) ? projects : []);
       if (stats) setOverviewStats(stats);
     } catch (err) {
       console.warn('Attendance loadData warning:', err);
@@ -440,10 +574,10 @@ export function AttendancePage() {
     loadData();
   }, []);
 
-  // Dynamically load records when a user selects a specific date
+    // Dynamically load records when a user selects date range
   useEffect(() => {
-    if (selectedDateFilter) {
-      attendanceService.getAttendanceForDate(selectedDateFilter).then((dateRecs) => {
+    if (recordFromDate) {
+      attendanceService.getAttendanceForDate(recordFromDate).then((dateRecs) => {
         if (dateRecs && dateRecs.length > 0) {
           setAttendanceList((prev) => {
             const map = new Map();
@@ -454,7 +588,19 @@ export function AttendancePage() {
         }
       }).catch(() => {});
     }
-  }, [selectedDateFilter]);
+    if (recordToDate && recordToDate !== recordFromDate) {
+      attendanceService.getAttendanceForDate(recordToDate).then((dateRecs) => {
+        if (dateRecs && dateRecs.length > 0) {
+          setAttendanceList((prev) => {
+            const map = new Map();
+            prev.forEach((r) => map.set(`${r.userId}_${r.date}`, r));
+            dateRecs.forEach((r) => map.set(`${r.userId}_${r.date}`, r));
+            return Array.from(map.values());
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [recordFromDate, recordToDate]);
 
   // PWA Continuous Geolocation Tracking
   const startPwaLocationTracking = () => {
@@ -532,21 +678,33 @@ export function AttendancePage() {
   // Check if current user is clocked in
   const myTodayRecord = useMemo(() => {
     const todayStr = localTodayIso();
-    return attendanceList.find(
-      (r) => String(r.userId) === String(currentUser?.id || 'u1') && r.date === todayStr
-    );
+    const myIdStr = String(currentUser?.id || 'u1');
+    return attendanceList.find((r) => {
+      if (r.date !== todayStr) return false;
+      const rIdStr = String(r.userId || '');
+      if (rIdStr === myIdStr) return true;
+      if ((myIdStr === '1' || myIdStr === 'u1') && (rIdStr === '1' || rIdStr === 'u1')) return true;
+      if (currentUser?.name && r.userName && currentUser.name.toLowerCase() === r.userName.toLowerCase()) return true;
+      return false;
+    });
   }, [attendanceList, currentUser]);
 
-    const isCheckedIn =
+  const isCheckedIn = Boolean(
     myTodayRecord &&
     ['present', 'late', 'overtime', 'half-day'].includes(myTodayRecord.status) &&
     myTodayRecord.checkInTime &&
-    (!myTodayRecord.checkOutTime || myTodayRecord.checkOutTime === '-');
+    myTodayRecord.checkInTime !== '—' &&
+    myTodayRecord.checkInTime !== '-' &&
+    (!myTodayRecord.checkOutTime || myTodayRecord.checkOutTime === '-' || myTodayRecord.checkOutTime === '—')
+  );
 
   const hasCheckedOutToday = Boolean(
     myTodayRecord?.checkInTime &&
+    myTodayRecord.checkInTime !== '—' &&
+    myTodayRecord.checkInTime !== '-' &&
     myTodayRecord?.checkOutTime &&
-    myTodayRecord.checkOutTime !== '-'
+    myTodayRecord.checkOutTime !== '-' &&
+    myTodayRecord.checkOutTime !== '—'
   );
 
   // Live calculation of employee working hours from check-in to check-out or current time
@@ -653,11 +811,26 @@ export function AttendancePage() {
       });
 
       const dist = updated.distanceMeters ?? 0;
+      const formattedTime = formatIndianTime(action === 'check-out' ? updated.checkOutTime : updated.checkInTime);
       toast.success(
         action === 'check-out'
-          ? `Check-out recorded at ${updated.checkOutTime} • PWA GPS Verified`
+          ? `Check-out recorded at ${formattedTime} • Shift Completed!`
           : `Checked In at ${officeLocation.name} (${dist}m away) • Shift Started!`
       );
+      if (updated) {
+        setAttendanceList((prev) => {
+          const updatedUserId = String(updated.userId || currentUser?.id || 'u1');
+          const remaining = prev.filter((r) => {
+            if (r.date !== updated.date) return true;
+            const rIdStr = String(r.userId || '');
+            if (rIdStr === updatedUserId) return false;
+            if ((updatedUserId === '1' || updatedUserId === 'u1') && (rIdStr === '1' || rIdStr === 'u1')) return false;
+            if (currentUser?.name && r.userName && currentUser.name.toLowerCase() === r.userName.toLowerCase()) return false;
+            return true;
+          });
+          return [updated, ...remaining];
+        });
+      }
       loadData();
     } catch (err) {
       toast.error(err.message || 'Geofenced punch failed');
@@ -753,24 +926,44 @@ export function AttendancePage() {
   // Mark for Staff Modal Submit (Screenshot 2: Punch Attendance)
   const handleMarkForStaffSubmit = async (e) => {
     e.preventDefault();
-    if (!staffMarkForm.userId) {
-      toast.error('Please select a staff member');
+    setStaffMarkSubmitError(null);
+    const mErrors = {};
+
+    if (!isAdminOrManager) {
+      const msg = 'Only Administrators and Managers have permission to mark attendance for other staff members.';
+      setStaffMarkSubmitError(msg);
+      toast.error(msg);
       return;
     }
-    const staffMember = staffOptions.find((s) => String(s.id) === String(staffMarkForm.userId));
-    const user = mockUsers.find((u) => String(u.id) === String(staffMarkForm.userId)) || {
-      id: staffMarkForm.userId,
+
+    if (!staffMarkForm.userId) {
+      mErrors.userId = 'Please select a staff member';
+    }
+    if (!staffMarkForm.punchTime || !staffMarkForm.punchTime.trim()) {
+      mErrors.punchTime = 'Punch time is required';
+    }
+    if (Object.keys(mErrors).length > 0) {
+      setStaffMarkErrors(mErrors);
+      setStaffMarkSubmitError('Please fix the highlighted fields before submitting.');
+      return;
+    }
+
+    let targetUserId = staffMarkForm.userId;
+    if (typeof targetUserId === 'string' && targetUserId.startsWith('ph-')) {
+      const place = parsePlaceholder(targetUserId);
+      if (place) targetUserId = place.userId;
+    }
+    const staffMember = staffOptions.find(
+      (s) => String(s.id) === String(targetUserId) || String(s.id) === String(staffMarkForm.userId)
+    );
+    const user = {
+      id: targetUserId,
       name: staffMember?.name || 'Staff Member',
-      role: staffMember?.isAdmin ? 'Admin' : 'Staff',
+      role: staffMember?.role || (staffMember?.isAdmin ? 'Admin' : 'Staff'),
     };
 
-    if (!staffMarkForm.punchTime || !staffMarkForm.punchTime.trim()) {
-      toast.error('Punch time is required');
-      return;
-    }
-
     try {
-      await attendanceService.markForStaff({
+      const res = await attendanceService.markForStaff({
         user,
         date: staffMarkForm.date,
         action: staffMarkForm.punchType,
@@ -782,6 +975,15 @@ export function AttendancePage() {
       const punchActionLabel = staffMarkForm.punchType === 'out' ? 'Punch Out' : 'Punch In';
       toast.success(`${punchActionLabel} recorded for ${user.name}`);
       setIsMarkStaffModalOpen(false);
+
+      if (res) {
+        setAttendanceList((prev) => {
+          const remaining = prev.filter(
+            (r) => !(String(r.userId) === String(res.userId || user.id) && r.date === res.date)
+          );
+          return [res, ...remaining];
+        });
+      }
 
       // Explicitly load the date the record was marked for so it appears immediately (Bug 6a fix)
       try {
@@ -797,9 +999,11 @@ export function AttendancePage() {
       } catch (e) {}
 
       // Switch date filter to the marked date so admin sees it right away
-      setSelectedDateFilter(markedDate);
+      setRecordFromDate(markedDate);
+      setRecordToDate(markedDate);
       loadData();
     } catch (err) {
+      setStaffMarkSubmitError(err.message || 'Failed to mark staff attendance');
       toast.error(err.message || 'Failed to mark staff attendance');
     }
   };
@@ -829,6 +1033,7 @@ export function AttendancePage() {
         status: 'Active',
       });
       loadData();
+      loadLeaveTypes(true);
     } catch (err) {
       toast.error('Failed to add leave category');
     }
@@ -848,54 +1053,92 @@ export function AttendancePage() {
   // Submit Regularization Request
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
+    setRequestSubmitError(null);
     const errors = {};
 
-    if (requestForm.type === 'check-in') {
+    if (!requestForm.userId) {
+      errors.userId = 'Please select a staff member';
+    }
+
+    if (!requestForm.date) {
+      errors.date = 'Attendance date is required';
+    }
+
+    if (!requestForm.reason || !requestForm.reason.trim()) {
+      errors.reason = 'Reason is required';
+    }
+
+    if (requestForm.type === 'Punch Regularization' || requestForm.type === 'Missed Punch') {
       if (!requestForm.requestedCheckIn || !requestForm.requestedCheckIn.trim()) {
         errors.requestedCheckIn = 'Check-in time is required';
-      }
-    } else if (requestForm.type === 'check-out') {
-      if (!requestForm.requestedCheckOut || !requestForm.requestedCheckOut.trim()) {
-        errors.requestedCheckOut = 'Check-out time is required';
-      }
-    } else if (requestForm.type === 'Undo Check-Out') {
-      // Validate that the selected day has an existing check-out
-      const dayRec = attendanceList.find(
-        (r) => String(r.userId) === String(requestForm.userId) && r.date === requestForm.date
-      );
-      if (dayRec && (!dayRec.checkOutTime || dayRec.checkOutTime === '-')) {
-        toast.error('Undo Check-Out is only allowed for a day that has a recorded check-out.');
-        return;
       }
     }
 
     if (Object.keys(errors).length > 0) {
       setRequestFormErrors(errors);
+      setRequestSubmitError('Please fix the highlighted errors before submitting.');
       return;
     }
 
     try {
+      const targetStaff = staffOptions.find((s) => String(s.id) === String(requestForm.userId));
       await attendanceService.submitRequest({
         userId: requestForm.userId,
+        employeeName: targetStaff?.name || currentUser?.name || 'Staff Member',
+        name: targetStaff?.name || currentUser?.name || 'Staff Member',
         date: requestForm.date,
         type: requestForm.type,
-        reason: requestForm.reason,
-        requestedCheckIn: requestForm.type === 'check-in' ? requestForm.requestedCheckIn : undefined,
-        requestedCheckOut: requestForm.type === 'check-out' ? requestForm.requestedCheckOut : undefined,
+        duration: `${requestForm.date} (1d)`,
+        reason: requestForm.reason.trim(),
+        requestedCheckIn: requestForm.requestedCheckIn || undefined,
+        requestedCheckOut: requestForm.requestedCheckOut || undefined,
       });
       toast.success('Attendance request submitted successfully');
       setIsRequestModalOpen(false);
+      setRequestSubmitError(null);
+      setRequestFormErrors({});
       setRequestForm({
         userId: currentUser?.id || staffOptions[0]?.id || 'u1',
         date: new Date().toISOString().split('T')[0],
-        type: 'check-in',
+        type: 'Punch Regularization',
         reason: '',
         requestedCheckIn: '09:00 AM',
         requestedCheckOut: '06:00 PM',
       });
       loadData();
+      loadRequests(true);
     } catch (err) {
-      toast.error('Failed to submit request');
+      console.error('Failed to submit attendance request:', err);
+      const fieldErrors = {};
+      if (err.errors && typeof err.errors === 'object') {
+        Object.entries(err.errors).forEach(([field, messages]) => {
+          const msg = Array.isArray(messages) ? messages.join(' ') : String(messages);
+          if (field === 'user_id' || field === 'userId' || field === 'user') {
+            fieldErrors.userId = msg;
+          } else if (field === 'requested_check_in' || field === 'requestedCheckIn' || field === 'check_in') {
+            fieldErrors.requestedCheckIn = msg;
+          } else if (field === 'requested_check_out' || field === 'requestedCheckOut' || field === 'check_out') {
+            fieldErrors.requestedCheckOut = msg;
+          } else if (field === 'date') {
+            fieldErrors.date = msg;
+          } else if (field === 'type' || field === 'request_type') {
+            fieldErrors.type = msg;
+          } else if (field === 'reason') {
+            fieldErrors.reason = msg;
+          } else {
+            fieldErrors[field] = msg;
+          }
+        });
+      }
+
+      const displayMessage =
+        err.message ||
+        Object.values(fieldErrors)[0] ||
+        'Failed to submit request. Please check the fields and try again.';
+
+      setRequestSubmitError(displayMessage);
+      setRequestFormErrors(fieldErrors);
+      toast.error(displayMessage);
     }
   };
 
@@ -910,6 +1153,7 @@ export function AttendancePage() {
         toast.success(`Attendance request for ${personName} rejected`);
       }
       loadData();
+      loadRequests(true);
       if (selectedViewRequest && selectedViewRequest.id === id) {
         setSelectedViewRequest((prev) => (prev ? { ...prev, status: decision === 'approve' ? 'approved' : 'rejected' } : null));
       }
@@ -960,28 +1204,28 @@ export function AttendancePage() {
 
   // Filtered Attendance Records
   const filteredRecords = useMemo(() => {
-    return attendanceList.filter((r) => {
+    const list = attendanceList.filter((r) => {
       // 1. Overview Card Filter
       if (cardFilter === 'checked-in') {
-        const hasPunchedIn = Boolean(r.checkInTime && r.checkInTime !== '—' && r.status !== 'leave');
+        const hasPunchedIn = Boolean(r.checkInTime && r.checkInTime !== '—' && r.checkInTime !== '-' && r.checkInTime !== '—' && r.status !== 'leave');
         if (!hasPunchedIn) return false;
       } else if (cardFilter === 'not-checked-in') {
         const isNotCheckedIn =
-          (!r.checkInTime || r.checkInTime === '—' || r.status === 'absent' || r.status === 'Not marked') &&
+          (!r.checkInTime || r.checkInTime === '—' || r.checkInTime === '-' || r.checkInTime === '—' || r.status === 'absent' || r.status === 'Not marked') &&
           r.status !== 'leave';
         if (!isNotCheckedIn) return false;
       } else if (cardFilter === 'on-leave') {
         const isOnLeave = r.status === 'leave' || r.status === 'On Leave';
         if (!isOnLeave) return false;
       } else if (cardFilter === 'checked-out') {
-        const isCheckedOut = Boolean(r.checkOutTime && r.checkOutTime !== '—' && !r.checkOutTime.includes('Active'));
+        const isCheckedOut = Boolean(r.checkOutTime && r.checkOutTime !== '—' && r.checkOutTime !== '-' && r.checkOutTime !== '—' && !r.checkOutTime.includes('Active'));
         if (!isCheckedOut) return false;
       }
 
       // 2. Search query filter
-      const q = recordSearch.toLowerCase();
+      const q = recordSearch.toLowerCase().trim();
       const matchQuery =
-        !recordSearch ||
+        !q ||
         (r.userName && r.userName.toLowerCase().includes(q)) ||
         (r.role && r.role.toLowerCase().includes(q)) ||
         (r.site && r.site.toLowerCase().includes(q));
@@ -991,14 +1235,44 @@ export function AttendancePage() {
         roleFilter === 'ALL' ||
         (r.role && r.role.toLowerCase() === roleFilter.toLowerCase());
 
-      // 4. Date filter
-      const matchDate =
-        !selectedDateFilter ||
-        r.date === selectedDateFilter;
+      // 4. Date filter (From & To date range)
+      let matchDate = true;
+      if (recordFromDate) {
+        if (!r.date || r.date < recordFromDate) matchDate = false;
+      }
+      if (recordToDate) {
+        if (!r.date || r.date > recordToDate) matchDate = false;
+      }
 
       return matchQuery && matchRole && matchDate;
     });
-  }, [attendanceList, cardFilter, recordSearch, roleFilter, selectedDateFilter]);
+
+    // Requirement: "Sorting must be from newest to old, newly checked-in staff or anyone should appear at the top."
+    return list.sort((a, b) => {
+      // 1. Primary sort: Date descending (newest date first)
+      const dateA = a.date || '1970-01-01';
+      const dateB = b.date || '1970-01-01';
+      if (dateA !== dateB) {
+        return dateB.localeCompare(dateA);
+      }
+
+      // 2. Within same date: checked-in records appear before unmarked
+      const minA = parseTimeToMinutes(a.checkInTime);
+      const minB = parseTimeToMinutes(b.checkInTime);
+      const hasInA = minA !== null;
+      const hasInB = minB !== null;
+      if (hasInA && !hasInB) return -1;
+      if (!hasInA && hasInB) return 1;
+
+      // 3. Among checked-in staff: latest check-in time appears first (newest on top)
+      if (hasInA && hasInB && minA !== minB) {
+        return minB - minA;
+      }
+
+      // 4. Stable tie-breaker
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [attendanceList, cardFilter, recordSearch, roleFilter, recordFromDate, recordToDate]);
 
   // Pagination for attendance records (10 per page)
   const paginatedRecords = useMemo(() => {
@@ -1010,7 +1284,7 @@ export function AttendancePage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [recordSearch, roleFilter, selectedDateFilter, cardFilter]);
+  }, [recordSearch, roleFilter, recordFromDate, recordToDate, cardFilter]);
 
   return (
     <div className="space-y-6">
@@ -1021,13 +1295,19 @@ export function AttendancePage() {
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button
-              variant={isCheckedIn ? 'destructive' : 'outline'}
+              variant={hasCheckedOutToday ? 'secondary' : isCheckedIn ? 'destructive' : 'primary'}
               size="sm"
-              leadingIcon={isCheckedIn ? 'logout' : 'clock'}
-              disabled={punchLoading}
+              leadingIcon={hasCheckedOutToday ? 'check' : isCheckedIn ? 'logout' : 'clock'}
+              disabled={punchLoading || hasCheckedOutToday}
               onClick={handlePunchAction}
             >
-              {punchLoading ? 'Verifying GPS...' : isCheckedIn ? 'Check Out' : 'Check In'}
+              {punchLoading
+                ? 'Verifying GPS...'
+                : hasCheckedOutToday
+                ? 'Checked Out'
+                : isCheckedIn
+                ? 'Check Out'
+                : 'Check In'}
             </Button>
 
             <Button
@@ -1235,11 +1515,11 @@ export function AttendancePage() {
       {/* SECTION 3: Tabs Switcher */}
       <Tabs
         tabs={[
-          { id: 'records', label: 'Records', icon: ClockIcon, count: attendanceList.length },
-          { id: 'requests', label: 'Requests', icon: MailIcon, count: requestsList.length },
+          { id: 'records', label: 'Records', icon: ClockIcon, count: filteredRecords.length },
+          { id: 'requests', label: 'Requests', icon: MailIcon, count: filteredRequests.length },
         ]}
         activeTab={activeTab}
-        onChange={setActiveTab}
+        onChange={(tId) => { setActiveTab(tId); setSearchParams({ tab: tId }); }}
       />
 
       {/* TAB 1: Attendance Records (Screenshot 1) */}
@@ -1273,22 +1553,57 @@ export function AttendancePage() {
                 <option value="Worker">Worker</option>
               </select>
 
-              {/* Date Picker Filter */}
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="date"
-                  value={selectedDateFilter}
-                  onChange={(e) => setSelectedDateFilter(e.target.value)}
-                  className="py-1 px-2.5 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                />
-                {selectedDateFilter && (
+                            {/* Date Filters: From Date & To Date */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* From Date */}
+                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
+                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">From:</span>
+                  <input
+                    type="date"
+                    value={recordFromDate}
+                    onChange={(e) => setRecordFromDate(e.target.value)}
+                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
+                    title="From Date"
+                  />
+                </div>
+
+                {/* To Date */}
+                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
+                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">To:</span>
+                  <input
+                    type="date"
+                    value={recordToDate}
+                    onChange={(e) => setRecordToDate(e.target.value)}
+                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
+                    title="To Date"
+                  />
+                </div>
+
+                {(recordFromDate || recordToDate) && (
                   <button
                     type="button"
-                    onClick={() => setSelectedDateFilter('')}
-                    className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded bg-muted border border-border cursor-pointer"
+                    onClick={() => {
+                      setRecordFromDate('');
+                      setRecordToDate('');
+                    }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded bg-muted border border-border cursor-pointer transition-colors"
                     title="Clear date filter"
                   >
-                    Clear Date
+                    Clear Dates
+                  </button>
+                )}
+
+                {(recordFromDate !== today || recordToDate !== today) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecordFromDate(today);
+                      setRecordToDate(today);
+                    }}
+                    className="text-[10px] text-primary hover:text-primary/80 px-2 py-1 rounded bg-primary/10 border border-primary/20 font-medium cursor-pointer transition-colors"
+                    title="Filter to today's records"
+                  >
+                    Today
                   </button>
                 )}
               </div>
@@ -1318,13 +1633,14 @@ export function AttendancePage() {
               )}
 
               {/* Clear All Filters */}
-              {(recordSearch || roleFilter !== 'ALL' || selectedDateFilter || cardFilter) && (
+              {(recordSearch || roleFilter !== 'ALL' || recordFromDate || recordToDate || cardFilter) && (
                 <button
                   type="button"
                   onClick={() => {
                     setRecordSearch('');
                     setRoleFilter('ALL');
-                    setSelectedDateFilter('');
+                    setRecordFromDate('');
+                    setRecordToDate('');
                     setCardFilter(null);
                   }}
                   className="text-xs font-medium text-muted-foreground hover:text-foreground px-2 py-1 rounded bg-muted border border-border cursor-pointer transition-colors"
@@ -1374,7 +1690,7 @@ export function AttendancePage() {
                       <td className="p-3 border-b border-border/60">
                         <div className="font-medium text-foreground flex items-center gap-1">
                           <MapPinIcon className="size-3.5 text-primary shrink-0" />
-                          <span>{r.site || officeLocation.name}</span>
+                          <span>{cleanLocationName(r.site || officeLocation.name)}</span>
                         </div>
                         {r.distanceMeters !== null && r.distanceMeters !== undefined && (
                           <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -1384,12 +1700,12 @@ export function AttendancePage() {
                       </td>
                       <td className="p-3 border-b border-border/60">
                         <span className="font-mono text-xs font-semibold text-foreground">
-                          {r.checkInTime && r.checkInTime !== '-' ? r.checkInTime : '—'}
+                          {formatIndianTime(r.checkInTime)}
                         </span>
                       </td>
                       <td className="p-3 border-b border-border/60">
                         <span className="font-mono text-xs font-semibold text-foreground">
-                          {r.checkOutTime && r.checkOutTime !== '-' ? r.checkOutTime : '—'}
+                          {formatIndianTime(r.checkOutTime)}
                         </span>
                       </td>
                       <td className="p-3 border-b border-border/60">
@@ -1397,7 +1713,7 @@ export function AttendancePage() {
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1 font-medium text-foreground text-[11px]">
                               <MapPinIcon className="size-3 text-emerald-600 shrink-0" />
-                              <span className="truncate">{r.punchLocation || r.site || 'Punch GPS Site'}</span>
+                              <span className="truncate">{cleanLocationName(r.punchLocation || r.site || 'Punch GPS Site')}</span>
                             </div>
                             <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
                               {r.coordinates.lat.toFixed(4)}° N, {r.coordinates.lng.toFixed(4)}° E
@@ -1406,7 +1722,7 @@ export function AttendancePage() {
                         ) : (
                           <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                             <MapPinIcon className="size-3 text-muted-foreground shrink-0" />
-                            <span>{r.site || officeLocation.name || 'Office Location'}</span>
+                            <span>{cleanLocationName(r.site || officeLocation.name || 'Office Location')}</span>
                           </div>
                         )}
                       </td>
@@ -1441,7 +1757,7 @@ export function AttendancePage() {
                                 });
                               }}
                               className="p-2 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
-                              title="Edit / Correct record"
+                              title="Edit"
                             >
                               <EditIcon className="size-4" />
                             </button>
@@ -1924,6 +2240,35 @@ export function AttendancePage() {
         title="Punch Attendance"
       >
         <form onSubmit={handleMarkForStaffSubmit} className="space-y-4 text-xs">
+          {/* Red Alert / Error Box */}
+          {staffMarkSubmitError && (
+            <div
+              role="alert"
+              className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-start gap-2.5 animate-in fade-in duration-200"
+            >
+              <AlertCircleIcon className="size-4 shrink-0 mt-0.5 text-destructive" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-destructive">{staffMarkSubmitError}</p>
+                {Object.values(staffMarkErrors).filter(Boolean).length > 0 && (
+                  <ul className="mt-1 list-disc list-inside space-y-0.5 text-[11px] opacity-90 text-destructive">
+                    {Object.entries(staffMarkErrors)
+                      .filter(([, msg]) => Boolean(msg))
+                      .map(([key, msg]) => (
+                        <li key={key}>{msg}</li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setStaffMarkSubmitError(null)}
+                className="shrink-0 text-destructive/70 hover:text-destructive p-0.5 transition-colors cursor-pointer"
+                aria-label="Dismiss error"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </div>
+          )}
           {/* Punch In / Punch Out Segmented Switcher */}
           <div className="inline-flex p-1 rounded-xl bg-muted/70 border border-border/60">
             <button
@@ -1961,8 +2306,17 @@ export function AttendancePage() {
             </label>
             <select
               value={staffMarkForm.userId}
-              onChange={(e) => setStaffMarkForm({ ...staffMarkForm, userId: e.target.value })}
-              className="w-full px-3.5 py-2.5 border border-border rounded-xl text-foreground font-medium bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs sm:text-sm transition-all cursor-pointer"
+              onChange={(e) => {
+                setStaffMarkForm({ ...staffMarkForm, userId: e.target.value });
+                if (staffMarkErrors.userId) setStaffMarkErrors((p) => ({ ...p, userId: null }));
+                if (staffMarkSubmitError) setStaffMarkSubmitError(null);
+              }}
+              className={cn(
+                'w-full px-3.5 py-2.5 border rounded-xl text-foreground font-medium bg-card focus:outline-none text-xs sm:text-sm transition-all cursor-pointer',
+                staffMarkErrors.userId
+                  ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                  : 'border-border focus:ring-2 focus:ring-primary/20 focus:border-primary'
+              )}
             >
               <option value="" disabled>Select staff...</option>
               {staffOptions.map((staff) => (
@@ -1971,6 +2325,9 @@ export function AttendancePage() {
                 </option>
               ))}
             </select>
+            {staffMarkErrors.userId && (
+              <p className="text-[11px] font-medium text-destructive mt-1">{staffMarkErrors.userId}</p>
+            )}
           </div>
 
           {/* Attendance Date Row */}
@@ -2216,11 +2573,11 @@ export function AttendancePage() {
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-muted-foreground">Check-In Time</span>
-                <p className="font-mono font-medium text-foreground mt-0.5">{viewTargetRecord.checkInTime || '—'}</p>
+                <p className="font-mono font-medium text-foreground mt-0.5">{formatIndianTime(viewTargetRecord.checkInTime)}</p>
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-muted-foreground">Check-Out Time</span>
-                <p className="font-mono font-medium text-foreground mt-0.5">{viewTargetRecord.checkOutTime || '—'}</p>
+                <p className="font-mono font-medium text-foreground mt-0.5">{formatIndianTime(viewTargetRecord.checkOutTime)}</p>
               </div>
             </div>
 
@@ -2228,7 +2585,7 @@ export function AttendancePage() {
               <span className="text-[10px] uppercase font-bold text-muted-foreground">Punch Location</span>
               <div className="flex items-center gap-1.5 font-medium text-foreground">
                 <MapPinIcon className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>{viewTargetRecord.punchLocation || viewTargetRecord.site || 'Office Location'}</span>
+                <span>{cleanLocationName(viewTargetRecord.punchLocation || viewTargetRecord.site || 'Office Location')}</span>
               </div>
               {viewTargetRecord.coordinates && (
                 <p className="font-mono text-[11px] text-muted-foreground">
@@ -2260,6 +2617,36 @@ export function AttendancePage() {
           size="md"
         >
           <form onSubmit={handleSubmitRequest} className="space-y-4 text-xs">
+            {/* Red Alert / Error Box */}
+            {requestSubmitError && (
+              <div
+                role="alert"
+                className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-start gap-2.5 animate-in fade-in duration-200"
+              >
+                <AlertCircleIcon className="size-4 shrink-0 mt-0.5 text-destructive" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-destructive">{requestSubmitError}</p>
+                  {Object.values(requestFormErrors).filter(Boolean).length > 0 && (
+                    <ul className="mt-1 list-disc list-inside space-y-0.5 text-[11px] opacity-90 text-destructive">
+                      {Object.entries(requestFormErrors)
+                        .filter(([, msg]) => Boolean(msg))
+                        .map(([key, msg]) => (
+                          <li key={key}>{msg}</li>
+                        ))}
+                    </ul>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRequestSubmitError(null)}
+                  className="shrink-0 text-destructive/70 hover:text-destructive p-0.5 transition-colors cursor-pointer"
+                  aria-label="Dismiss error"
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Staff Member Selector */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -2268,8 +2655,19 @@ export function AttendancePage() {
               {canCorrectAttendance ? (
                 <select
                   value={requestForm.userId}
-                  onChange={(e) => setRequestForm({ ...requestForm, userId: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                  onChange={(e) => {
+                    setRequestForm({ ...requestForm, userId: e.target.value });
+                    if (requestFormErrors.userId) {
+                      setRequestFormErrors((prev) => ({ ...prev, userId: null }));
+                    }
+                    if (requestSubmitError) setRequestSubmitError(null);
+                  }}
+                  className={cn(
+                    'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-medium text-xs transition-colors cursor-pointer',
+                    requestFormErrors.userId
+                      ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                      : 'border-border focus:ring-1 focus:ring-primary'
+                  )}
                 >
                   {staffOptions.map((staff) => (
                     <option key={staff.id} value={staff.id}>
@@ -2285,6 +2683,9 @@ export function AttendancePage() {
                   className="w-full px-3 py-2 border border-border rounded-lg bg-muted text-muted-foreground font-medium text-xs cursor-not-allowed"
                 />
               )}
+              {requestFormErrors.userId && (
+                <p className="text-[11px] font-medium text-destructive">{requestFormErrors.userId}</p>
+              )}
             </div>
 
             {/* Request Type */}
@@ -2297,13 +2698,25 @@ export function AttendancePage() {
                 onChange={(e) => {
                   setRequestForm({ ...requestForm, type: e.target.value });
                   setRequestFormErrors({});
+                  if (requestSubmitError) setRequestSubmitError(null);
                 }}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                className={cn(
+                  'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-medium text-xs transition-colors cursor-pointer',
+                  requestFormErrors.type
+                    ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                    : 'border-border focus:ring-1 focus:ring-primary'
+                )}
               >
-                <option value="check-in">Check-in</option>
-                <option value="check-out">Check-out</option>
-                <option value="Undo Check-Out">Undo Check-Out</option>
+                <option value="Punch Regularization">Punch Regularization</option>
+                <option value="Missed Punch">Missed Punch</option>
+                <option value="Field Duty">Field Duty</option>
+                <option value="On-Duty (Site Visit)">On-Duty (Site Visit)</option>
+                <option value="Work From Home">Work From Home</option>
+                <option value="Other">Other</option>
               </select>
+              {requestFormErrors.type && (
+                <p className="text-[11px] font-medium text-destructive">{requestFormErrors.type}</p>
+              )}
             </div>
 
             {/* Date with quick presets */}
@@ -2318,6 +2731,8 @@ export function AttendancePage() {
                     onClick={() => {
                       const today = new Date().toISOString().split('T')[0];
                       setRequestForm((prev) => ({ ...prev, date: today }));
+                      if (requestFormErrors.date) setRequestFormErrors((p) => ({ ...p, date: null }));
+                      if (requestSubmitError) setRequestSubmitError(null);
                     }}
                     className="px-2 py-0.5 text-[10px] font-semibold rounded bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-colors cursor-pointer"
                   >
@@ -2328,6 +2743,8 @@ export function AttendancePage() {
                     onClick={() => {
                       const y = new Date(Date.now() - 86400000).toISOString().split('T')[0];
                       setRequestForm((prev) => ({ ...prev, date: y }));
+                      if (requestFormErrors.date) setRequestFormErrors((p) => ({ ...p, date: null }));
+                      if (requestSubmitError) setRequestSubmitError(null);
                     }}
                     className="px-2 py-0.5 text-[10px] font-semibold rounded bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors cursor-pointer"
                   >
@@ -2339,92 +2756,111 @@ export function AttendancePage() {
                 type="date"
                 required
                 value={requestForm.date}
-                onChange={(e) => setRequestForm({ ...requestForm, date: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                onChange={(e) => {
+                  setRequestForm({ ...requestForm, date: e.target.value });
+                  if (requestFormErrors.date) {
+                    setRequestFormErrors((prev) => ({ ...prev, date: null }));
+                  }
+                  if (requestSubmitError) setRequestSubmitError(null);
+                }}
+                className={cn(
+                  'w-full px-3 py-2 border rounded-lg bg-card text-foreground text-xs transition-colors cursor-pointer',
+                  requestFormErrors.date
+                    ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                    : 'border-border focus:ring-1 focus:ring-primary'
+                )}
               />
+              {requestFormErrors.date && (
+                <p className="text-[11px] font-medium text-destructive">{requestFormErrors.date}</p>
+              )}
             </div>
 
-            {/* Conditional Time Fields based on Request Type */}
-            {requestForm.type === 'check-in' && (
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Check-in <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 09:30 AM"
-                  value={requestForm.requestedCheckIn}
-                  onChange={(e) => {
-                    setRequestForm({ ...requestForm, requestedCheckIn: e.target.value });
-                    if (requestFormErrors.requestedCheckIn) {
-                      setRequestFormErrors((prev) => ({ ...prev, requestedCheckIn: null }));
-                    }
-                  }}
-                  className={cn(
-                    'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
-                    requestFormErrors.requestedCheckIn
-                      ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
-                      : 'border-border focus:ring-1 focus:ring-primary'
+            {/* Check-in & Check-out time fields */}
+            {(requestForm.type === 'Punch Regularization' || requestForm.type === 'Missed Punch' || requestForm.type === 'Field Duty' || requestForm.type === 'On-Duty (Site Visit)') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Check-in Time {(requestForm.type === 'Punch Regularization' || requestForm.type === 'Missed Punch') && <span className="text-destructive">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 09:30 AM"
+                    value={requestForm.requestedCheckIn}
+                    onChange={(e) => {
+                      setRequestForm({ ...requestForm, requestedCheckIn: e.target.value });
+                      if (requestFormErrors.requestedCheckIn) {
+                        setRequestFormErrors((prev) => ({ ...prev, requestedCheckIn: null }));
+                      }
+                      if (requestSubmitError) setRequestSubmitError(null);
+                    }}
+                    className={cn(
+                      'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
+                      requestFormErrors.requestedCheckIn
+                        ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                        : 'border-border focus:ring-1 focus:ring-primary'
+                    )}
+                  />
+                  {requestFormErrors.requestedCheckIn && (
+                    <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckIn}</p>
                   )}
-                />
-                {requestFormErrors.requestedCheckIn && (
-                  <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckIn}</p>
-                )}
-              </div>
-            )}
+                </div>
 
-            {requestForm.type === 'check-out' && (
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Check-out <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 06:30 PM"
-                  value={requestForm.requestedCheckOut}
-                  onChange={(e) => {
-                    setRequestForm({ ...requestForm, requestedCheckOut: e.target.value });
-                    if (requestFormErrors.requestedCheckOut) {
-                      setRequestFormErrors((prev) => ({ ...prev, requestedCheckOut: null }));
-                    }
-                  }}
-                  className={cn(
-                    'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
-                    requestFormErrors.requestedCheckOut
-                      ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
-                      : 'border-border focus:ring-1 focus:ring-primary'
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Check-out Time
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 06:30 PM"
+                    value={requestForm.requestedCheckOut}
+                    onChange={(e) => {
+                      setRequestForm({ ...requestForm, requestedCheckOut: e.target.value });
+                      if (requestFormErrors.requestedCheckOut) {
+                        setRequestFormErrors((prev) => ({ ...prev, requestedCheckOut: null }));
+                      }
+                      if (requestSubmitError) setRequestSubmitError(null);
+                    }}
+                    className={cn(
+                      'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
+                      requestFormErrors.requestedCheckOut
+                        ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                        : 'border-border focus:ring-1 focus:ring-primary'
+                    )}
+                  />
+                  {requestFormErrors.requestedCheckOut && (
+                    <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckOut}</p>
                   )}
-                />
-                {requestFormErrors.requestedCheckOut && (
-                  <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckOut}</p>
-                )}
+                </div>
               </div>
             )}
 
-            {requestForm.type === 'Undo Check-Out' && (
-              <div className="p-3 rounded-xl bg-info/10 border border-info/30 text-xs text-foreground space-y-1">
-                <p className="font-semibold text-info flex items-center gap-1.5">
-                  <InfoIcon className="size-4 shrink-0 text-info" />
-                  <span>Undo Check-Out Request</span>
-                </p>
-                <p className="text-muted-foreground text-[11px] leading-relaxed">
-                  This request removes the recorded check-out time for <strong>{requestForm.date}</strong>. Once approved, the staff member can check out again later at the end of their shift.
-                </p>
-              </div>
-            )}
-
-            {/* Reason field (Optional) */}
+            {/* Reason field (Required by backend) */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Reason
+                Reason <span className="text-destructive">*</span>
               </label>
               <textarea
                 rows={2}
-                placeholder="Optional explanation for this request..."
+                required
+                placeholder="Enter reason for request (required)..."
                 value={requestForm.reason}
-                onChange={(e) => setRequestForm({ ...requestForm, reason: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-xs resize-none"
+                onChange={(e) => {
+                  setRequestForm({ ...requestForm, reason: e.target.value });
+                  if (requestFormErrors.reason) {
+                    setRequestFormErrors((prev) => ({ ...prev, reason: null }));
+                  }
+                  if (requestSubmitError) setRequestSubmitError(null);
+                }}
+                className={cn(
+                  'w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none text-xs resize-none transition-colors',
+                  requestFormErrors.reason
+                    ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
+                    : 'border-border focus:ring-1 focus:ring-primary'
+                )}
               />
+              {requestFormErrors.reason && (
+                <p className="text-[11px] font-medium text-destructive">{requestFormErrors.reason}</p>
+              )}
             </div>
 
             {/* Action buttons */}
@@ -2435,6 +2871,7 @@ export function AttendancePage() {
                 size="sm"
                 onClick={() => {
                   setIsRequestModalOpen(false);
+                  setRequestSubmitError(null);
                   setRequestFormErrors({});
                 }}
               >
@@ -2459,7 +2896,7 @@ export function AttendancePage() {
         title="Delete attendance record?"
         message={`Are you sure you want to delete the attendance record for "${recordPendingDelete?.userName}" on ${recordPendingDelete?.date}? This action cannot be undone.`}
         confirmText="Delete Record"
-        variant="danger"
+        confirmVariant="danger"
         loading={deleteRecordLoading}
         onConfirm={async () => {
           if (!recordPendingDelete) return;
@@ -2476,6 +2913,34 @@ export function AttendancePage() {
           }
         }}
         onCancel={() => setRecordPendingDelete(null)}
+      />
+
+      {/* Confirm Check-Out Dialog */}
+      <ConfirmDialog
+        isOpen={isCheckOutConfirmOpen}
+        title="Confirm Check Out"
+        message="Are you sure you want to check out for today? This will record your check-out time in Indian Standard Time and conclude your active shift."
+        confirmText="Check Out"
+        cancelText="Cancel"
+        confirmVariant="primary"
+        loading={punchLoading}
+        onConfirm={async () => {
+          setIsCheckOutConfirmOpen(false);
+          await executePunchAction('check-out');
+        }}
+        onCancel={() => setIsCheckOutConfirmOpen(false)}
+      />
+
+      {/* Re-check-in Alert Dialog */}
+      <ConfirmDialog
+        isOpen={isRecheckInAlertOpen}
+        title="Already Checked Out"
+        message="You have already recorded your check-out for today. If you need to make adjustments to your hours or undo your check-out, please submit an Attendance Request."
+        confirmText="OK"
+        cancelText="Close"
+        confirmVariant="primary"
+        onConfirm={() => setIsRecheckInAlertOpen(false)}
+        onCancel={() => setIsRecheckInAlertOpen(false)}
       />
 
       {/* Attendance Request View Details Modal */}
@@ -2542,7 +3007,7 @@ export function AttendancePage() {
                 </span>
                 <div className="flex items-center gap-1.5 mt-1 font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                   <LogInIcon className="size-3.5" />
-                  <span>{selectedViewRequest.requestedCheckIn || '—'}</span>
+                  <span>{formatIndianTime(selectedViewRequest.requestedCheckIn)}</span>
                 </div>
               </div>
 
@@ -2552,7 +3017,7 @@ export function AttendancePage() {
                 </span>
                 <div className="flex items-center gap-1.5 mt-1 font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                   <LogOutIcon className="size-3.5" />
-                  <span>{selectedViewRequest.requestedCheckOut || '—'}</span>
+                  <span>{formatIndianTime(selectedViewRequest.requestedCheckOut)}</span>
                 </div>
               </div>
 

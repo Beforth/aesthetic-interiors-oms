@@ -13,12 +13,14 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import DetailList from '../components/ui/DetailList';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Input from '../components/ui/Input';
 import Textarea from '../components/ui/Textarea';
 import Select from '../components/ui/Select';
 import EmptyState from '../components/ui/EmptyState';
 import PermissionGate from '../components/ui/PermissionGate';
 import Icon from '../components/ui/Icon';
+import { TrashIcon } from '../components/ui/icons';
 import { Kanban } from '../components/ui/kanban';
 import StatusBadge from '../components/ui/StatusBadge';
 import { calculateProgress } from '../utils/progress';
@@ -67,6 +69,10 @@ export function ClientDetailPage() {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedProjectIdToLink, setSelectedProjectIdToLink] = useState('');
   const [linkLoading, setLinkLoading] = useState(false);
+
+  // Delete Project State
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
 
   // Add New Project Modal State
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
@@ -241,6 +247,21 @@ export function ClientDetailPage() {
     }
   };
 
+  const handleConfirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+    setDeleteProjectLoading(true);
+    try {
+      await projectService.deleteProject(projectToDelete.id);
+      toast.success(`Project "${projectToDelete.name}" deleted successfully`);
+      setProjectToDelete(null);
+      fetchData();
+    } catch (err) {
+      toast.error('Failed to delete project');
+    } finally {
+      setDeleteProjectLoading(false);
+    }
+  };
+
   // Partition client projects into active working and previous completed
   const activeWorkingProjects = useMemo(() => {
     return clientProjects.filter(
@@ -344,12 +365,25 @@ export function ClientDetailPage() {
         className="space-y-2 select-none group cursor-pointer"
         title={`Open project: ${project.name}`}
       >
-        {/* 1. Project Name & Status Badge */}
+        {/* 1. Project Name, Status Badge & Delete Button */}
         <div className="flex items-start justify-between gap-2">
           <h5 className="font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors truncate">
             {project.name}
           </h5>
-          <StatusBadge status={project.status || 'in progress'} size="sm" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <StatusBadge status={project.status || 'in progress'} size="sm" />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setProjectToDelete(project);
+              }}
+              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+              title={`Delete project "${project.name}"`}
+            >
+              <TrashIcon className="size-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* 2. Progress */}
@@ -780,6 +814,18 @@ export function ClientDetailPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Confirm Project Deletion Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(projectToDelete)}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${projectToDelete?.name}"? This will permanently remove the project from the client profile and operations database.`}
+        confirmText="Delete Project"
+        confirmVariant="destructive"
+        loading={deleteProjectLoading}
+        onConfirm={handleConfirmDeleteProject}
+        onCancel={() => setProjectToDelete(null)}
+      />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import { Avatar } from '../components/ui/avatar';
 import { Badge } from '../components/ui/badge';
 import { Kanban } from '../components/ui/kanban';
 import Modal from '../components/ui/Modal';
+import FormMultiAssigneeSelect from '../components/common/FormMultiAssigneeSelect';
 import Input from '../components/ui/Input';
 import Icon from '../components/ui/Icon';
 import {
@@ -35,171 +36,8 @@ import {
   ClockIcon,
   EyeIcon,
   ArrowLeftIcon,
+  PlayIcon,
 } from '../components/ui/icons';
-
-/**
- * BefUI Multi-Assignee Selector
- * Allows selecting multiple team members for a single task with search and visual chips.
- */
-function FormMultiAssigneeSelect({ users = [], selectedIds = [], onChange, error }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const ref = useRef(null);
-
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const getUserLabel = (u) => {
-    if (!u) return '';
-    const roleLower = String(u.role || '').toLowerCase();
-    const isOwner = roleLower === 'owner' || roleLower === 'admin' || (u.name && u.name.toLowerCase().includes('rohit'));
-    return isOwner ? `${u.name} (Admin)` : u.name;
-  };
-
-  const toggleUser = (userId) => {
-    const strId = String(userId);
-    if (selectedIds.includes(strId)) {
-      onChange(selectedIds.filter((id) => id !== strId));
-    } else {
-      onChange([...selectedIds, strId]);
-    }
-  };
-
-  const selectedUsers = users.filter((u) => selectedIds.includes(String(u.id)));
-
-  const filteredUsers = users.filter((u) => {
-    const text = getUserLabel(u).toLowerCase();
-    return text.includes(search.toLowerCase());
-  });
-
-  return (
-    <div ref={ref} className="relative space-y-1.5">
-      <label className="block text-xs font-medium text-foreground">
-        Assignees (Multiple Allowed)
-      </label>
-
-      {/* Trigger Box */}
-      <div
-        onClick={() => setIsOpen((prev) => !prev)}
-        className={cn(
-          'w-full min-h-[38px] rounded-lg border bg-background px-3 py-1.5 text-xs flex items-center justify-between text-left transition-colors cursor-pointer',
-          error
-            ? 'border-destructive ring-1 ring-destructive'
-            : 'border-border hover:border-muted-foreground/40 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20'
-        )}
-      >
-        <div className="flex items-center gap-1.5 flex-wrap flex-1 mr-2">
-          {selectedUsers.length === 0 ? (
-            <span className="text-muted-foreground">Select one or more assignees...</span>
-          ) : (
-            selectedUsers.map((u) => (
-              <span
-                key={u.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium border border-border"
-              >
-                <Avatar name={u.name} size="xs" />
-                <span>{getUserLabel(u)}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleUser(u.id);
-                  }}
-                  className="text-muted-foreground hover:text-foreground ml-0.5 cursor-pointer"
-                  title="Remove"
-                >
-                  <XIcon className="size-3" />
-                </button>
-              </span>
-            ))
-          )}
-        </div>
-        <ChevronDownIcon
-          className={cn('size-3.5 text-muted-foreground transition-transform shrink-0', isOpen && 'rotate-180')}
-        />
-      </div>
-
-      {error && <p className="text-[11px] text-destructive">{error}</p>}
-
-      {/* Dropdown Menu */}
-      {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border border-border bg-card text-card-foreground shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-          <div className="p-1.5 border-b border-border bg-muted/30">
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-background rounded-md border border-border">
-              <SearchIcon className="size-3 text-muted-foreground shrink-0" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search staff to assign..."
-                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <div className="max-h-[190px] overflow-y-auto scrollbar-thin p-1 space-y-0.5">
-            {filteredUsers.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground italic text-center">
-                No matching personnel
-              </div>
-            ) : (
-              filteredUsers.map((u) => {
-                const isSelected = selectedIds.includes(String(u.id));
-                return (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => toggleUser(u.id)}
-                    className={cn(
-                      'w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors',
-                      isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Avatar name={u.name} size="xs" />
-                      <span>{getUserLabel(u)}</span>
-                    </div>
-                    <div
-                      className={cn(
-                        'size-4 rounded border flex items-center justify-center transition-colors',
-                        isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-border'
-                      )}
-                    >
-                      {isSelected && <CheckIcon className="size-3 stroke-[2.5]" />}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          {selectedIds.length > 0 && (
-            <div className="p-2 border-t border-border bg-muted/20 flex items-center justify-between text-xs">
-              <span className="text-[11px] text-muted-foreground font-medium">
-                {selectedIds.length} person(s) assigned
-              </span>
-              <button
-                type="button"
-                onClick={() => onChange([])}
-                className="text-[11px] text-destructive hover:underline font-semibold cursor-pointer"
-              >
-                Clear all
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const TASK_KANBAN_COLUMNS = [
   { id: 'todo', title: 'To Do', tone: 'default' },
@@ -253,7 +91,7 @@ export function TasksPage() {
     assignedToIds: [],
     type: 'on-site',
     priority: 'medium',
-    dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+    dueDate: new Date().toISOString().split('T')[0],
   });
 
   // Photo Attachment Modal & Photo Viewer state
@@ -460,25 +298,30 @@ export function TasksPage() {
   }, [tasks, projectFilter, assigneeFilter, typeFilter, searchQuery]);
 
   // Create Task Submit (Stage/Trade removed, Multiple Assignees supported)
-  const handleCreateTask = async (e) => {
+    const handleCreateTask = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const titleErr = validateRequired(formData.title, 'Task Title', 2);
     const projErr = validateRequired(formData.projectId, 'Assigned Project');
-    const dateErr = validateRequired(formData.dueDate, 'Due Date');
+    const assigneesErr =
+      !formData.assignedToIds || formData.assignedToIds.length === 0
+        ? 'Please select at least one assignee'
+        : null;
 
-    if (titleErr || projErr || dateErr) {
+    if (titleErr || projErr || assigneesErr) {
       setFormErrors({
         title: titleErr,
         projectId: projErr,
-        dueDate: dateErr,
+        assignedToIds: assigneesErr,
       });
-      toast.error(titleErr || projErr || dateErr);
+      toast.error(titleErr || projErr || assigneesErr);
       return;
     }
     setFormErrors({});
     setCreatingTask(true);
 
     try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const finalDueDate = formData.dueDate && formData.dueDate.trim() ? formData.dueDate.trim() : todayStr;
       const targetProj = projects.find((p) => String(p.id) === String(formData.projectId));
       const selectedUsers = users.filter((u) => formData.assignedToIds.includes(String(u.id)));
       const assignedToNames = selectedUsers.map((u) => {
@@ -494,8 +337,8 @@ export function TasksPage() {
         projectId: formData.projectId,
         projectName: targetProj?.name || 'Interior Site Fit-Out',
         type: formData.type,
-        priority: formData.priority,
-        dueDate: formData.dueDate,
+        priority: formData.priority || 'medium',
+        dueDate: finalDueDate,
         assignedToIds: formData.assignedToIds,
         assignedToNames,
         assignedToId: formData.assignedToIds[0] || '',
@@ -511,7 +354,7 @@ export function TasksPage() {
         assignedToIds: [],
         type: 'on-site',
         priority: 'medium',
-        dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+        dueDate: new Date().toISOString().split('T')[0],
       });
       loadData();
     } catch (err) {
@@ -519,6 +362,21 @@ export function TasksPage() {
     } finally {
       setCreatingTask(false);
     }
+  };
+
+
+  const handleOpenCreateModal = () => {
+    setFormErrors({});
+    setFormData({
+      title: '',
+      description: '',
+      projectId: projects[0]?.id || 'P1',
+      assignedToIds: [],
+      type: 'on-site',
+      priority: 'medium',
+      dueDate: new Date().toISOString().split('T')[0],
+    });
+    setIsModalOpen(true);
   };
 
   // BefUI Kanban Board Data & Handlers
@@ -631,159 +489,7 @@ export function TasksPage() {
     } catch (err) {
       toast.error('Failed to attach photo');
     }
-  };
-
-  // In-Page Create Task View
-  if (isModalOpen) {
-    return (
-      <div className="space-y-6 animate-fadeIn pb-12">
-        {/* Top Breadcrumb & Heading */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(false)}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground mb-2 transition-colors group cursor-pointer"
-          >
-            <ArrowLeftIcon className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
-            <span>Tasks</span>
-          </button>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Create Task
-          </h1>
-        </div>
-
-        <form onSubmit={handleCreateTask} noValidate className="space-y-6">
-          <Card title={<span className="text-sm font-semibold text-foreground">Task Allocation</span>}>
-            <div className="space-y-5">
-              {/* Row 1: Task Title & Description side-by-side */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1.5">
-                    Task Title <span className="text-destructive">*</span>
-                  </label>
-                  <textarea
-                    required
-                    rows={1}
-                    value={formData.title}
-                    onChange={(e) => {
-                      setFormData((prev) => ({ ...prev, title: e.target.value }));
-                      if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: '' }));
-                    }}
-                    placeholder="e.g. Master bedroom veneer grain continuity inspection"
-                    className={cn(
-                      'w-full min-h-[42px] h-[42px] rounded-lg border bg-background px-3 py-2 text-xs text-foreground resize-y transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs',
-                      formErrors.title ? 'border-destructive ring-1 ring-destructive' : 'border-border'
-                    )}
-                  />
-                  {formErrors.title && (
-                    <p className="mt-1 text-[11px] text-destructive">{formErrors.title}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1.5">
-                    Description
-                  </label>
-                  <textarea
-                    rows={1}
-                    value={formData.description}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                    placeholder="Add specific execution details, material references, or notes..."
-                    className="w-full min-h-[42px] h-[42px] rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground resize-y transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs"
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Assigned Project & Location (Both BefUI Standard Selects) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Select
-                  label="Assigned Project"
-                  required
-                  error={formErrors.projectId}
-                  value={formData.projectId}
-                  onChange={(e) => {
-                    setFormData((prev) => ({ ...prev, projectId: e.target.value }));
-                    if (formErrors.projectId) setFormErrors((prev) => ({ ...prev, projectId: '' }));
-                  }}
-                  options={projects.map((p) => ({
-                    value: String(p.id),
-                    label: p.name,
-                  }))}
-                />
-
-                <Select
-                  label="Location"
-                  value={formData.type}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
-                  options={[
-                    { value: 'on-site', label: 'On-Site' },
-                    { value: 'office', label: 'Office' },
-                    { value: 'meeting', label: 'Meeting' },
-                  ]}
-                />
-              </div>
-
-              {/* Row 3: Multiple Assignees Selector (Stage / Trade Removed per leader instructions) */}
-              <div>
-                <FormMultiAssigneeSelect
-                  users={users}
-                  selectedIds={formData.assignedToIds}
-                  onChange={(ids) => setFormData((prev) => ({ ...prev, assignedToIds: ids }))}
-                />
-              </div>
-
-              {/* Row 4: Due Date & Priority Level */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Due Date"
-                  type="date"
-                  required
-                  error={formErrors.dueDate}
-                  value={formData.dueDate}
-                  onChange={(e) => {
-                    setFormData((prev) => ({ ...prev, dueDate: e.target.value }));
-                    if (formErrors.dueDate) setFormErrors((prev) => ({ ...prev, dueDate: '' }));
-                  }}
-                />
-
-                <Select
-                  label="Priority Level"
-                  value={formData.priority}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, priority: e.target.value }))}
-                  options={[
-                    { value: 'low', label: 'Low Priority' },
-                    { value: 'medium', label: 'Medium Priority' },
-                    { value: 'high', label: 'High Priority' },
-                  ]}
-                />
-              </div>
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="mt-6 pt-4 border-t border-border flex items-center justify-end gap-2.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                loading={creatingTask}
-                leadingIcon="plus"
-              >
-                Create Task
-              </Button>
-            </div>
-          </Card>
-        </form>
-      </div>
-    );
-  }
+  };
 
   return (
     <div className="space-y-4">
@@ -829,7 +535,7 @@ export function TasksPage() {
                 variant="primary"
                 size="sm"
                 leadingIcon="plus"
-                onClick={() => setIsModalOpen(true)}
+                onClick={handleOpenCreateModal}
               >
                 Create Task
               </Button>
@@ -910,6 +616,7 @@ export function TasksPage() {
                   { value: 'on-site', label: 'On-Site' },
                   { value: 'office', label: 'Office' },
                   { value: 'meeting', label: 'Meeting' },
+                  { value: 'other', label: 'Other' },
                 ]}
                 className="h-9 text-xs"
               />
@@ -981,7 +688,7 @@ export function TasksPage() {
             onChange={handleBoardChange}
             density={cardDensity}
             columnClassName="w-80 sm:w-96 md:flex-1 shrink-0"
-            onAdd={canCreate ? () => setIsModalOpen(true) : undefined}
+            onAdd={canCreate ? handleOpenCreateModal : undefined}
             renderCard={(t) => {
               const assigneesList = Array.isArray(t.assignedToNames) && t.assignedToNames.length > 0
                 ? t.assignedToNames
@@ -989,22 +696,36 @@ export function TasksPage() {
 
               return (
                 <div className="space-y-2 p-1">
-                  {/* Top line: Priority indicator + Location chip + Overdue */}
+                                    {/* Top line: Location chip + Priority Level badge + Overdue */}
                   <div className="flex items-center justify-between gap-1.5 text-xs">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                      <span className="font-semibold text-secondary-foreground bg-secondary px-2 py-0.5 rounded text-xs truncate max-w-[140px]">
+                        {t.type === 'site' || t.type === 'on-site' ? 'On-Site' : t.type === 'office' ? 'Office' : t.type === 'meeting' ? 'Meeting' : t.type === 'other' ? 'Other' : (t.type || 'On-Site')}
+                      </span>
+
+                      {/* Visible Priority Level Badge */}
                       <span
                         className={cn(
-                          'size-2 rounded-full shrink-0',
-                          t.priority === 'high'
-                            ? 'bg-destructive ring-2 ring-destructive/20'
-                            : t.priority === 'medium'
-                            ? 'bg-warning ring-2 ring-warning/20'
-                            : 'bg-muted-foreground/40'
+                          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold border capitalize shrink-0',
+                          (t.priority || 'medium').toLowerCase() === 'high'
+                            ? 'bg-destructive/10 text-destructive border-destructive/20'
+                            : (t.priority || 'medium').toLowerCase() === 'medium'
+                            ? 'bg-warning/10 text-warning border-warning/20'
+                            : 'bg-muted text-muted-foreground border-border'
                         )}
                         title={`Priority: ${t.priority || 'medium'}`}
-                      />
-                      <span className="font-semibold text-secondary-foreground bg-secondary px-2 py-0.5 rounded text-xs truncate max-w-[140px]">
-                        {t.type === 'site' || t.type === 'on-site' ? 'On-Site' : t.type === 'office' ? 'Office' : 'Meeting'}
+                      >
+                        <span
+                          className={cn(
+                            'size-1.5 rounded-full shrink-0',
+                            (t.priority || 'medium').toLowerCase() === 'high'
+                              ? 'bg-destructive'
+                              : (t.priority || 'medium').toLowerCase() === 'medium'
+                              ? 'bg-warning'
+                              : 'bg-muted-foreground'
+                          )}
+                        />
+                        <span>{(t.priority || 'medium')} Priority</span>
                       </span>
                     </div>
 
@@ -1078,24 +799,40 @@ export function TasksPage() {
                         </button>
                       )}
 
-                      {/* Forward-Only Action Button (Cannot move backward) */}
-                      {t.status !== 'done' && (
+                                            {/* Action buttons: Start, Complete, Done - Consistent shape, padding & icon style */}
+                      {t.status === 'todo' && (
                         <button
                           type="button"
-                          className="px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer shadow-2xs"
-                          title={t.status === 'todo' ? 'Advance to In Progress' : 'Advance to Completed'}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground border border-border transition-colors cursor-pointer shadow-2xs"
+                          title="Advance to In Progress"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAdvanceStatus(t);
                           }}
                         >
-                          {t.status === 'todo' ? 'Start ›' : 'Complete ✓'}
+                          <PlayIcon className="size-3 shrink-0 text-primary" />
+                          <span>Start</span>
+                        </button>
+                      )}
+
+                      {t.status === 'in-progress' && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground border border-border transition-colors cursor-pointer shadow-2xs"
+                          title="Advance to Completed"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAdvanceStatus(t);
+                          }}
+                        >
+                          <CheckIcon className="size-3 shrink-0 text-success" />
+                          <span>Complete</span>
                         </button>
                       )}
 
                       {t.status === 'done' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-success/15 text-success border border-success/30 select-none">
-                          <CheckIcon className="size-3 stroke-[2.5]" />
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-success/15 text-success border border-success/30 select-none shadow-2xs">
+                          <CheckIcon className="size-3 shrink-0 text-success" />
                           <span>Done</span>
                         </span>
                       )}
@@ -1149,7 +886,7 @@ export function TasksPage() {
                                   : 'bg-muted-foreground/40'
                               )}
                             />
-                            {t.type === 'site' || t.type === 'on-site' ? 'On-Site' : t.type === 'office' ? 'Office' : 'Meeting'} • Priority: {t.priority}
+                            {t.type === 'site' || t.type === 'on-site' ? 'On-Site' : t.type === 'office' ? 'Office' : t.type === 'meeting' ? 'Meeting' : t.type === 'other' ? 'Other' : (t.type || 'On-Site')} • Priority: {t.priority}
                           </div>
                         </td>
                         <td className="py-2 px-3">
@@ -1200,18 +937,34 @@ export function TasksPage() {
                               </button>
                             )}
 
-                            {/* Forward-only button (Cannot move backward) */}
-                            {t.status !== 'done' ? (
-                              <Button
-                                variant="outline"
-                                size="xs"
+                                                        {/* Forward-only button: Start, Complete, Done */}
+                            {t.status === 'todo' && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground border border-border transition-colors cursor-pointer shadow-2xs"
+                                title="Advance to In Progress"
                                 onClick={() => handleAdvanceStatus(t)}
                               >
-                                {t.status === 'todo' ? 'Start ›' : 'Complete ✓'}
-                              </Button>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-success/15 text-success border border-success/30 select-none">
-                                <CheckIcon className="size-3 stroke-[2.5]" />
+                                <PlayIcon className="size-3 shrink-0 text-primary" />
+                                <span>Start</span>
+                              </button>
+                            )}
+
+                            {t.status === 'in-progress' && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground border border-border transition-colors cursor-pointer shadow-2xs"
+                                title="Advance to Completed"
+                                onClick={() => handleAdvanceStatus(t)}
+                              >
+                                <CheckIcon className="size-3 shrink-0 text-success" />
+                                <span>Complete</span>
+                              </button>
+                            )}
+
+                            {t.status === 'done' && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-success/15 text-success border border-success/30 select-none shadow-2xs">
+                                <CheckIcon className="size-3 shrink-0 text-success" />
                                 <span>Done</span>
                               </span>
                             )}
@@ -1226,6 +979,162 @@ export function TasksPage() {
           </div>
         </Card>
       )}
+
+      
+      {/* Create Task Modal Popup */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setFormErrors({});
+        }}
+        title="Create Task"
+        subtitle="Allocate task to projects, set locations and assign staff"
+        size="lg"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsModalOpen(false);
+                setFormErrors({});
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="create-task-form"
+              variant="primary"
+              size="sm"
+              loading={creatingTask}
+              leadingIcon="plus"
+            >
+              Create Task
+            </Button>
+          </div>
+        }
+      >
+        <form
+          id="create-task-form"
+          onSubmit={handleCreateTask}
+          noValidate
+          className="space-y-4 text-xs"
+        >
+          {/* Row 1: Task Title */}
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Task Title <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.title}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, title: e.target.value }));
+                if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: '' }));
+              }}
+              placeholder="e.g. Master bedroom veneer grain continuity inspection"
+              className={cn(
+                'w-full h-9 rounded-lg border bg-background px-3 text-xs text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs',
+                formErrors.title ? 'border-destructive ring-1 ring-destructive' : 'border-border'
+              )}
+            />
+            {formErrors.title && (
+              <p className="mt-1 text-[11px] text-destructive">{formErrors.title}</p>
+            )}
+          </div>
+
+          {/* Row 2: Description */}
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Description
+            </label>
+            <textarea
+              rows={2}
+              value={formData.description}
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="Add specific execution details, material references, or notes..."
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground resize-none transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs"
+            />
+          </div>
+
+          {/* Row 3: Assigned Project & Location */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <Select
+              label="Assigned Project"
+              required
+              error={formErrors.projectId}
+              value={formData.projectId}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, projectId: e.target.value }));
+                if (formErrors.projectId) setFormErrors((prev) => ({ ...prev, projectId: '' }));
+              }}
+              options={projects.map((p) => ({
+                value: String(p.id),
+                label: p.name,
+              }))}
+            />
+
+            <Select
+              label="Location"
+              value={formData.type}
+              onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
+              options={[
+                { value: 'on-site', label: 'On-Site' },
+                { value: 'office', label: 'Office' },
+                { value: 'meeting', label: 'Meeting' },
+                { value: 'other', label: 'Other' },
+              ]}
+            />
+          </div>
+
+          {/* Row 4: Multiple Assignees Selector (Compulsory) */}
+          <div>
+            <FormMultiAssigneeSelect
+              users={users}
+              required
+              label="Assign"
+              error={formErrors.assignedToIds}
+              selectedIds={formData.assignedToIds}
+              onChange={(ids) => {
+                setFormData((prev) => ({ ...prev, assignedToIds: ids }));
+                if (formErrors.assignedToIds) {
+                  setFormErrors((prev) => ({ ...prev, assignedToIds: '' }));
+                }
+              }}
+            />
+          </div>
+
+          {/* Row 5: Due Date & Priority Level */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <Input
+              label="Due Date"
+              type="date"
+              helperText="Defaults to today if omitted"
+              error={formErrors.dueDate}
+              value={formData.dueDate}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, dueDate: e.target.value }));
+                if (formErrors.dueDate) setFormErrors((prev) => ({ ...prev, dueDate: '' }));
+              }}
+            />
+
+            <Select
+              label="Priority Level"
+              value={formData.priority}
+              onChange={(e) => setFormData((prev) => ({ ...prev, priority: e.target.value }))}
+              options={[
+                { value: 'low', label: 'Low Priority' },
+                { value: 'medium', label: 'Medium Priority' },
+                { value: 'high', label: 'High Priority' },
+              ]}
+            />
+          </div>
+        </form>
+      </Modal>
 
       {/* Attach Photo Modal */}
       <Modal
