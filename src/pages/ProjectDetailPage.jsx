@@ -4,6 +4,7 @@ import { projectService } from '../services/projectService';
 import { userService } from '../services/userService';
 import { agencyService } from '../services/agencyService';
 import { taskService } from '../services/taskService';
+import { isDebug } from '../config/env';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
@@ -152,7 +153,8 @@ export function ProjectDetailPage() {
       const matched = (allTasks || []).filter(
         (t) => String(t.projectId) === String(id) || t.projectName === project.name
       );
-      if (matched.length > 0) {
+      // the sample tasks are only for the standalone mock mode: with a backend, no tasks means none yet
+      if (matched.length > 0 || !isDebug()) {
         setProjectTasks(matched);
       } else {
         const stagesList = project.stages || [];

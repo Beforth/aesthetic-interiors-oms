@@ -1,5 +1,6 @@
 import { apiClient } from './apiClient';
 import { mockTasks } from '../data/tasks';
+import { withBackend } from './serviceMode';
 
 const STORAGE_KEY = 'osm_tasks_store_v2';
 
@@ -25,7 +26,7 @@ function saveTasks(tasks) {
   }
 }
 
-export const taskService = {
+const mockTaskService = {
   async getAllTasks() {
     return apiClient.execute(async () => {
       const todayStr = new Date().toISOString().split('T')[0];
@@ -114,5 +115,57 @@ export const taskService = {
     }, 'Task deleted successfully');
   },
 };
+
+// ----------------------------------------------------------------------------------------------------------------
+// Live (backend) implementation: /api/v1/tasks/tasks/. The API already sends the shape the page uses.
+// ----------------------------------------------------------------------------------------------------------------
+const TASK_URL = '/tasks/tasks/';
+
+/** The page's form -> what the API takes. Ids go as numbers; an empty project means "no project". */
+function toApiTask(data) {
+  const body = {};
+  ['title', 'description', 'priority', 'type', 'status'].forEach((key) => {
+    if (data[key] !== undefined) body[key] = data[key];
+  });
+  if (data.dueDate !== undefined) body.dueDate = data.dueDate || null;
+  if (data.projectId !== undefined) body.projectId = data.projectId ? String(data.projectId) : null;
+  const ids = data.assignedToIds ?? (data.assignedToId ? [data.assignedToId] : undefined);
+  if (ids !== undefined) body.assignedToIds = ids.map(Number).filter((n) => Number.isFinite(n));
+  return body;
+}
+
+/** Mock status names the old page used map onto the three the API has. */
+const toApiStatus = (status) => ({ pending: 'todo', 'to do': 'todo', completed: 'done' }[status] || status);
+
+const liveTaskService = {
+  async getAllTasks() {
+    return apiClient.getAll(TASK_URL);
+  },
+
+  async createTask(taskData) {
+    return apiClient.post(TASK_URL, toApiTask(taskData));
+  },
+
+  async updateTaskStatus(id, newStatus) {
+    return apiClient.patch(`${TASK_URL}${id}/`, { status: toApiStatus(newStatus) });
+  },
+
+  async updateTask(id, updateData) {
+    const body = toApiTask(updateData);
+    if (body.status) body.status = toApiStatus(body.status);
+    return apiClient.patch(`${TASK_URL}${id}/`, body);
+  },
+
+  async attachPhoto(id, photoUrl) {
+    return apiClient.post(`${TASK_URL}${id}/photos/`, { url: photoUrl });
+  },
+
+  async deleteTask(id) {
+    await apiClient.delete(`${TASK_URL}${id}/`);
+    return true;
+  },
+};
+
+export const taskService = withBackend(mockTaskService, liveTaskService);
 
 export default taskService;
