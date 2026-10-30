@@ -9,9 +9,6 @@ import {
   mockAgencyPayouts,
 } from '../data/payments';
 import { mockAgencies } from '../data/agencies';
-import { isDebug } from '../config/env';
-import { agencyService } from '../services/agencyService';
-import { paymentService } from '../services/paymentService';
 import { cn } from '../lib/utils';
 
 // BefUI Components
@@ -60,7 +57,6 @@ export function PaymentsPage() {
   // 1. DATA STATE & LOCAL STORAGE PERSISTENCE
   // ---------------------------------------------------------------------------
   const [schedules, setSchedules] = useState(() => {
-    if (!isDebug()) return []; // with a backend the data is loaded from the API
     try {
       const saved = localStorage.getItem(STORAGE_KEY_CLIENT_PAYMENTS);
       return saved ? JSON.parse(saved) : mockProjectPaymentSchedules;
@@ -70,7 +66,6 @@ export function PaymentsPage() {
   });
 
   const [labourPayouts, setLabourPayouts] = useState(() => {
-    if (!isDebug()) return []; // with a backend the data is loaded from the API
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LABOUR_PAYOUTS);
       return saved ? JSON.parse(saved) : mockLabourPayouts;
@@ -80,7 +75,6 @@ export function PaymentsPage() {
   });
 
   const [agencyPayouts, setAgencyPayouts] = useState(() => {
-    if (!isDebug()) return []; // with a backend the data is loaded from the API
     try {
       const saved = localStorage.getItem(STORAGE_KEY_AGENCY_PAYOUTS);
       return saved ? JSON.parse(saved) : mockAgencyPayouts;
@@ -115,29 +109,6 @@ export function PaymentsPage() {
       console.error('Failed to save agency payouts', e);
     }
   };
-
-  // With a backend: load everything from the API. A section the person may not see (403) is simply empty.
-  const [agencyList, setAgencyList] = useState(isDebug() ? mockAgencies : []);
-
-  const reloadLive = async () => {
-    const [sch, lab, bills, agencies] = await Promise.all([
-      paymentService.getSchedules().catch(() => []),
-      paymentService.getLabour().catch(() => []),
-      paymentService.getAgencyPayouts().catch(() => []),
-      agencyService.getAllAgencies().catch(() => []),
-    ]);
-    setSchedules(sch);
-    setLabourPayouts(lab);
-    setAgencyPayouts(bills);
-    setAgencyList(agencies);
-    setSelectedProjectId((current) =>
-      sch.some((x) => String(x.projectId) === String(current)) ? current : sch[0]?.projectId || ''
-    );
-  };
-
-  useEffect(() => {
-    if (!isDebug()) reloadLive();
-  }, []);
 
   // ---------------------------------------------------------------------------
   // 2. SEARCH & FILTER STATE
@@ -318,25 +289,13 @@ export function PaymentsPage() {
   // 4. ACTION HANDLERS
   // ---------------------------------------------------------------------------
   // Record Client Payment
-  const handleRecordClientPayment = async (e) => {
+  const handleRecordClientPayment = (e) => {
     e.preventDefault();
     if (!recordTargetInstallment || !currentSchedule) return;
 
     const amt = parseFloat(paymentForm.amount);
     if (isNaN(amt) || amt <= 0) {
       toast.error('Please enter a valid received amount');
-      return;
-    }
-
-    if (!isDebug()) {
-      try {
-        await paymentService.recordPayment(recordTargetInstallment.id, paymentForm);
-        await reloadLive();
-        toast.success(`Payment of ${formatCurrency(amt)} recorded for ${recordTargetInstallment.title}`);
-        setIsRecordPaymentOpen(false);
-      } catch (err) {
-        toast.error(err.message || 'Failed to record the payment');
-      }
       return;
     }
 
@@ -375,23 +334,11 @@ export function PaymentsPage() {
   };
 
   // Set Budget & Milestones
-  const handleSaveBudget = async (e) => {
+  const handleSaveBudget = (e) => {
     e.preventDefault();
     const cost = parseFloat(costForm.totalCost);
     if (isNaN(cost) || cost <= 0) {
       toast.error('Please enter a valid project contract budget');
-      return;
-    }
-
-    if (!isDebug()) {
-      try {
-        await paymentService.setBudget(costForm.projectId, costForm);
-        await reloadLive();
-        toast.success(`Contract budget set to ${formatCurrency(cost)} with ${costForm.milestoneCount} installments`);
-        setIsSetCostOpen(false);
-      } catch (err) {
-        toast.error(err.message || 'Failed to set the budget');
-      }
       return;
     }
 
@@ -450,7 +397,7 @@ export function PaymentsPage() {
   };
 
   // Record Labour Payout
-  const handleSaveLabourPayout = async (e) => {
+  const handleSaveLabourPayout = (e) => {
     e.preventDefault();
     if (!labourForm.workerName.trim()) {
       toast.error('Artisan/worker name is required');
@@ -459,18 +406,6 @@ export function PaymentsPage() {
     const amt = parseFloat(labourForm.amount);
     if (isNaN(amt) || amt <= 0) {
       toast.error('Please enter a valid payout amount');
-      return;
-    }
-
-    if (!isDebug()) {
-      try {
-        await paymentService.createLabour(labourForm);
-        await reloadLive();
-        toast.success(`Labour payout of ${formatCurrency(amt)} recorded for ${labourForm.workerName.trim()}`);
-        setIsRecordLabourOpen(false);
-      } catch (err) {
-        toast.error(err.message || 'Failed to record the payout');
-      }
       return;
     }
 
@@ -500,17 +435,7 @@ export function PaymentsPage() {
   };
 
   // Quick Pay Labour Payout
-  const handleQuickPayLabour = async (id) => {
-    if (!isDebug()) {
-      try {
-        await paymentService.payLabour(id, 'Direct Cash');
-        await reloadLive();
-        toast.success('Labour payout marked as paid');
-      } catch (err) {
-        toast.error(err.message || 'Failed to mark the payout as paid');
-      }
-      return;
-    }
+  const handleQuickPayLabour = (id) => {
     const updated = labourPayouts.map((l) => {
       if (l.id === id) {
         return {
@@ -527,7 +452,7 @@ export function PaymentsPage() {
   };
 
   // Record Agency Payout
-  const handleSaveAgencyPayout = async (e) => {
+  const handleSaveAgencyPayout = (e) => {
     e.preventDefault();
     const billAmt = parseFloat(agencyForm.billAmount);
     const paidAmt = parseFloat(agencyForm.paidAmount) || 0;
@@ -537,20 +462,8 @@ export function PaymentsPage() {
       return;
     }
 
-    if (!isDebug()) {
-      try {
-        await paymentService.createAgencyPayout(agencyForm);
-        await reloadLive();
-        toast.success('Agency bill recorded');
-        setIsRecordAgencyOpen(false);
-      } catch (err) {
-        toast.error(err.message || 'Failed to record the agency bill');
-      }
-      return;
-    }
-
     const targetProj = schedules.find((s) => s.projectId === agencyForm.projectId);
-    const targetAg = agencyList.find((a) => a.id === agencyForm.agencyId);
+    const targetAg = mockAgencies.find((a) => a.id === agencyForm.agencyId);
     const pendingBal = Math.max(0, billAmt - paidAmt);
     const status = paidAmt === 0 ? 'pending' : pendingBal === 0 ? 'paid' : 'partially_paid';
 
@@ -618,7 +531,7 @@ export function PaymentsPage() {
                           amount: pending.amount,
                           paymentMode: 'Bank Transfer (NEFT)',
                           paidDate: new Date().toISOString().split('T')[0],
-                          receiptNumber: isDebug() ? `REC-${Date.now().toString().slice(-4)}` : '',
+                          receiptNumber: `REC-${Date.now().toString().slice(-4)}`,
                           notes: '',
                         });
                         setIsRecordPaymentOpen(true);
@@ -650,7 +563,7 @@ export function PaymentsPage() {
                       amount: 5700,
                       paidDate: new Date().toISOString().split('T')[0],
                       paymentMode: 'UPI (PhonePe)',
-                      voucherNumber: isDebug() ? `VCH-LAB-${Date.now().toString().slice(-4)}` : '',
+                      voucherNumber: `VCH-LAB-${Date.now().toString().slice(-4)}`,
                       status: 'paid',
                       notes: '',
                     });
@@ -668,19 +581,19 @@ export function PaymentsPage() {
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    const firstAg = agencyList[0];
+                    const firstAg = mockAgencies[0];
                     setAgencyForm({
                       agencyId: firstAg?.id || 'a1',
                       agencyName: firstAg?.name || 'Apex False Ceiling',
                       trade: firstAg?.trade || 'Ceiling',
                       projectId: selectedProjectId,
                       workStage: 'Framing & Boarding Stage Bill',
-                      invoiceNumber: isDebug() ? `INV-AGC-${Date.now().toString().slice(-4)}` : '',
+                      invoiceNumber: `INV-AGC-${Date.now().toString().slice(-4)}`,
                       billAmount: 120000,
                       paidAmount: 80000,
                       paymentDate: new Date().toISOString().split('T')[0],
                       paymentMode: 'Corporate RTGS',
-                      transactionRef: isDebug() ? `UTR-HDFC-${Math.floor(10000000 + Math.random() * 90000000)}` : '',
+                      transactionRef: `UTR-HDFC-${Math.floor(10000000 + Math.random() * 90000000)}`,
                       notes: 'Stage completion clearance',
                     });
                     setIsRecordAgencyOpen(true);
@@ -884,7 +797,7 @@ export function PaymentsPage() {
                                       amount: inst.amount,
                                       paymentMode: 'Bank Transfer (NEFT)',
                                       paidDate: new Date().toISOString().split('T')[0],
-                                      receiptNumber: isDebug() ? `REC-${Date.now().toString().slice(-4)}` : '',
+                                      receiptNumber: `REC-${Date.now().toString().slice(-4)}`,
                                       notes: '',
                                     });
                                     setIsRecordPaymentOpen(true);
@@ -1647,7 +1560,7 @@ export function PaymentsPage() {
               <select
                 value={agencyForm.agencyId}
                 onChange={(e) => {
-                  const ag = agencyList.find((a) => String(a.id) === e.target.value);
+                  const ag = mockAgencies.find((a) => a.id === e.target.value);
                   setAgencyForm({
                     ...agencyForm,
                     agencyId: e.target.value,
@@ -1657,7 +1570,7 @@ export function PaymentsPage() {
                 }}
                 className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
               >
-                {agencyList.map((a) => (
+                {mockAgencies.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} ({a.trade})
                   </option>
