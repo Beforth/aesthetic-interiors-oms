@@ -113,7 +113,10 @@ export function TasksPage() {
       if (allProjects.length > 0) {
         setFormData((prev) => ({
           ...prev,
-          projectId: prev.projectId || allProjects[0]?.id || 'P1',
+          // keep the choice only while it is still a real project (the first form value may be a mock id)
+          projectId: allProjects.some((p) => String(p.id) === String(prev.projectId))
+            ? prev.projectId
+            : String(allProjects[0]?.id ?? ''),
         }));
       }
     } catch (e) {
