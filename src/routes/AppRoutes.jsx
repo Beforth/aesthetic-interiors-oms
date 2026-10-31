@@ -18,7 +18,7 @@ import NewProjectPage from '../pages/NewProjectPage';
 import AgenciesPage from '../pages/AgenciesPage';
 import AttendancePage from '../pages/RoleAttendance';
 import TasksPage from '../pages/TasksPage';
-import DailyReportsPage from '../pages/DailyReportsPage';
+import DailyReportsPage from '../pages/RoleDsr';
 import PaymentsPage from '../pages/PaymentsPage';
 import LeavePayslipsPage from '../pages/LeavePayslipsPage';
 import LeaveRequestsPage from '../pages/LeaveRequestsPage';
