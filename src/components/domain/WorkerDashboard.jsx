@@ -72,119 +72,6 @@ function currentStageName(project) {
   return stage ? stage.name : null;
 }
 
-const SHIFT_MINUTES = 8 * 60; // the ring fills over an eight hour day
-
-/** A circle that fills with the day's worked time. */
-function TimeRing({ minutes, active }) {
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  const fraction = Math.min(1, (minutes || 0) / SHIFT_MINUTES);
-  return (
-    <div className="relative size-28 shrink-0">
-      <svg viewBox="0 0 100 100" className="size-full -rotate-90">
-        <circle cx="50" cy="50" r={radius} fill="none" stroke="currentColor" strokeOpacity="0.22" strokeWidth="7" />
-        <circle
-          cx="50"
-          cy="50"
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="7"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - fraction)}
-          className="transition-all duration-700"
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="font-mono text-lg font-bold leading-none tabular-nums">{minutes != null ? formatDuration(minutes) : '0m'}</span>
-        <span className="mt-1 text-[10px] font-medium uppercase tracking-wider text-primary-foreground/70">
-          {active ? 'working' : 'today'}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** Punch in, working, punch out: where the day is right now. */
-function DaySteps({ checkedIn, checkedOut, inTime, outTime }) {
-  const steps = [
-    { label: 'Punch in', note: checkedIn ? inTime : '—', done: checkedIn, current: !checkedIn },
-    { label: 'Working', note: checkedIn && !checkedOut ? 'now' : checkedOut ? 'done' : '—', done: checkedOut, current: checkedIn && !checkedOut },
-    { label: 'Punch out', note: checkedOut ? outTime : '—', done: checkedOut, current: false },
-  ];
-  return (
-    <ol className="flex items-start">
-      {steps.map((step, index) => (
-        <li key={step.label} className="flex flex-1 items-start last:flex-none">
-          <div className="flex flex-col items-center text-center">
-            <span
-              className={`flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-bold ${
-                step.done
-                  ? 'border-white bg-white text-primary'
-                  : step.current
-                  ? 'animate-pulse border-white bg-transparent text-white'
-                  : 'border-white/35 text-white/50'
-              }`}
-            >
-              {step.done ? '✓' : index + 1}
-            </span>
-            <span className="mt-1.5 text-[11px] font-semibold">{step.label}</span>
-            <span className="text-[10px] text-primary-foreground/70">{step.note}</span>
-          </div>
-          {index < steps.length - 1 && <span className={`mx-2 mt-3 h-0.5 flex-1 rounded ${step.done ? 'bg-white' : 'bg-white/25'}`} />}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-/** The last seven days as seven dots: filled when he punched in that day. */
-function WeekStrip({ records }) {
-  const byDate = new Map(records.map((r) => [r.date, r]));
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const iso = isoDay(i - 6);
-    const [y, m, d] = iso.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return { iso, letter: date.toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 1), isToday: i === 6, record: byDate.get(iso), off: date.getDay() === 0 };
-  });
-  const present = days.filter((d) => d.record && hasTime(d.record.checkInTime)).length;
-  return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h3 className="text-sm font-bold text-text-main">This week</h3>
-        <p className="mt-0.5 text-xs text-text-muted">
-          {present} {present === 1 ? 'day' : 'days'} punched in over the last 7 days
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
-        {days.map((day) => {
-          const here = day.record && hasTime(day.record.checkInTime);
-          return (
-            <div key={day.iso} className="flex flex-col items-center gap-1.5">
-              <span
-                className={`flex size-8 items-center justify-center rounded-full text-[11px] font-bold ${
-                  here
-                    ? 'bg-primary text-primary-foreground'
-                    : day.isToday
-                    ? 'border-2 border-primary text-primary'
-                    : day.off
-                    ? 'bg-muted/60 text-muted-foreground'
-                    : 'border border-border text-muted-foreground'
-                }`}
-                title={day.iso}
-              >
-                {here ? '✓' : day.off ? '·' : ''}
-              </span>
-              <span className={`text-[10px] font-semibold ${day.isToday ? 'text-primary' : 'text-text-muted'}`}>{day.letter}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 const rangeText = (r) => (r.startDate === r.endDate ? formatDate(r.startDate) : `${formatDate(r.startDate)} – ${formatDate(r.endDate)}`);
 
 /** A plain white card that opens its tab: the number in the app's primary colour. */
@@ -239,8 +126,6 @@ export function WorkerDashboard() {
   const [record, setRecord] = useState(null);
   const [dsrToday, setDsrToday] = useState([]);
   const [leaves, setLeaves] = useState([]);
-  const [week, setWeek] = useState([]);
-  const [now, setNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(true);
   const [punching, setPunching] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -258,14 +143,12 @@ export function WorkerDashboard() {
 
       if (!isDebug()) {
         // these come from the server only (the standalone mock mode has no data for them)
-        const [entries, leaveRows, weekRows] = await Promise.all([
+        const [entries, leaveRows] = await Promise.all([
           dsrService.listEntries({ from: isoDay(0), to: isoDay(0) }).catch(() => []),
           apiClient.getAll('/leave/requests/').catch(() => []),
-          apiClient.getAll('/attendance/records/', { from: isoDay(-6), to: isoDay(0) }).catch(() => []),
         ]);
         setDsrToday(entries);
         setLeaves(leaveRows);
-        setWeek(weekRows);
       }
     } catch (err) {
       toast.error(err.message || 'Could not load your dashboard');
@@ -289,20 +172,6 @@ export function WorkerDashboard() {
   const checkedIn = hasTime(record?.checkInTime);
   const checkedOut = checkedIn && hasTime(record?.checkOutTime);
   const working = checkedIn && !checkedOut; // punched in and not yet out: the button now says Punch Out
-
-  // minutes worked today: counts up while punched in, fixed once punched out
-  useEffect(() => {
-    if (!working) return undefined;
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(timer);
-  }, [working]);
-  const workedToday = working
-    ? record?.checkInAt
-      ? Math.max(0, Math.floor((now - new Date(record.checkInAt).getTime()) / 60000))
-      : null
-    : checkedOut
-    ? record?.workedMinutes ?? null
-    : 0;
 
   const activeProjects = useMemo(
     () => projects.filter((p) => p.status !== 'completed' && p.status !== 'done'),
@@ -360,57 +229,49 @@ export function WorkerDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Greeting, today's time ring and the day's steps */}
-      <div className="rounded-2xl bg-primary p-6 text-primary-foreground shadow-xs">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-5">
-            <TimeRing minutes={workedToday} active={working} />
-            <div>
-              <p className="text-xs font-medium text-primary-foreground/70">{dateText}</p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-                {greeting()}, {firstName}
-              </h1>
-              <p className="mt-1.5 text-sm text-primary-foreground/80">{dayLine}</p>
-              <div className="mt-4 flex flex-wrap items-center gap-2.5">
-                {canCreateTask && (
-                  <button
-                    type="button"
-                    onClick={() => setIsTaskModalOpen(true)}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-white/25"
-                  >
-                    <PlusIcon className="size-3.5" />
-                    <span>Create Task</span>
-                  </button>
-                )}
+      {/* Greeting and the two things a worker does first */}
+      <div className="flex flex-col gap-5 rounded-2xl bg-primary p-6 text-primary-foreground shadow-xs md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-medium text-primary-foreground/70">{dateText}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+            {greeting()}, {firstName}
+          </h1>
+          <p className="mt-1.5 text-sm text-primary-foreground/80">{dayLine}</p>
+        </div>
 
-                {/* One button: Punch In until the worker has punched in, then Punch Out. Once out, the day is done. */}
-                {checkedOut ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground">
-                    <CalendarCheckIcon className="size-3.5" />
-                    <span>Day complete</span>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handlePunch}
-                    disabled={punching || loading}
-                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold shadow-2xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                      working
-                        ? 'border border-white/30 bg-white/15 text-primary-foreground hover:bg-white/25'
-                        : 'border border-white bg-white text-primary hover:bg-white/90'
-                    }`}
-                  >
-                    {working ? <LogOutIcon className="size-3.5" /> : <LogInIcon className="size-3.5" />}
-                    <span>{punching ? 'Please wait…' : working ? 'Punch Out' : 'Punch In'}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {canCreateTask && (
+            <button
+              type="button"
+              onClick={() => setIsTaskModalOpen(true)}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-white/25"
+            >
+              <PlusIcon className="size-3.5" />
+              <span>Create Task</span>
+            </button>
+          )}
 
-          <div className="w-full max-w-sm rounded-xl bg-white/10 p-4 lg:w-80">
-            <DaySteps checkedIn={checkedIn} checkedOut={checkedOut} inTime={record?.checkInTime} outTime={record?.checkOutTime} />
-          </div>
+          {/* One button: Punch In until the worker has punched in, then Punch Out. Once out, the day is done. */}
+          {checkedOut ? (
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground">
+              <CalendarCheckIcon className="size-3.5" />
+              <span>Day complete</span>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePunch}
+              disabled={punching || loading}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold shadow-2xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                working
+                  ? 'border border-white/30 bg-white/15 text-primary-foreground hover:bg-white/25'
+                  : 'border border-white bg-white text-primary hover:bg-white/90'
+              }`}
+            >
+              {working ? <LogOutIcon className="size-3.5" /> : <LogInIcon className="size-3.5" />}
+              <span>{punching ? 'Please wait…' : working ? 'Punch Out' : 'Punch In'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -446,8 +307,6 @@ export function WorkerDashboard() {
           to="/leave/requests"
         />
       </div>
-
-      <WeekStrip records={week} />
 
       {/* Two short lists */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
