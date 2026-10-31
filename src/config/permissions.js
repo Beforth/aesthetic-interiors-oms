@@ -172,6 +172,20 @@ export const SYSTEM_PERMISSIONS = [
     group: 'Task Assignment & Tracking',
   },
 
+  // --- DASHBOARD ---
+  {
+    id: 'dashboard.birthdays',
+    label: 'Dashboard: Birthdays',
+    hint: 'Show the Birthdays card on the dashboard',
+    group: 'Dashboard',
+  },
+  {
+    id: 'dashboard.hrOverview',
+    label: 'Dashboard: Workforce & HR',
+    hint: 'Show the Workforce and HR section (new joiners, staff, leaves, holidays) on the dashboard',
+    group: 'Dashboard',
+  },
+
   // --- MODULE 3.8: DAILY SITE REPORTS (DSR) ---
   {
     id: 'dsr.submit',
@@ -330,6 +344,8 @@ export const permissionMatrix = {
   'tasks.updateOwn': [A, M, S, W],
 
   // --- MODULE 3.8: DAILY SITE REPORTS (DSR) ---
+  'dashboard.birthdays': [A, M],
+  'dashboard.hrOverview': [A, M],
   'dsr.submit': [A, M, S, W],
   'dsr.viewAll': [A, M],
   'dsr.manageClientLink': [A, M],

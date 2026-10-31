@@ -12,6 +12,9 @@ import { formatDate } from '../../utils/formatters';
 import { formatDuration } from '../../utils/dsr';
 import StatusBadge from '../ui/StatusBadge';
 import { clientService } from '../../services/clientService';
+import { dashboardService } from '../../services/dashboardService';
+import { userService } from '../../services/userService';
+import HRWorkforceOverview from './HRWorkforceOverview';
 import WorkerTaskModal from './WorkerTaskModal';
 import TaskAllocationModal from '../common/TaskAllocationModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -136,6 +139,8 @@ export function PersonalDashboard() {
   const [teamIn, setTeamIn] = useState(null);
   const [clientCount, setClientCount] = useState(null);
   const [pendingApprovals, setPendingApprovals] = useState(null);
+  const [birthdays, setBirthdays] = useState(null);
+  const [staff, setStaff] = useState(null);
   const [loading, setLoading] = useState(true);
   const [punching, setPunching] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -156,13 +161,17 @@ export function PersonalDashboard() {
 
       if (!isDebug()) {
         // these come from the server only (the standalone mock mode has no data for them)
-        const [entries, leaveRows, overview, clients, approvals] = await Promise.all([
+        const [entries, leaveRows, overview, clients, approvals, summary, people] = await Promise.all([
           ask('dsr.submit', () => dsrService.listEntries({ from: isoDay(0), to: isoDay(0) }), []),
           ask('leave.apply', () => apiClient.getAll('/leave/requests/', { person: 'me' }), []),
           ask('attendance.viewBoard', () => attendanceService.getOverviewStats(), null),
           ask('clients.view', () => clientService.getAllClients(), null),
           ask('leave.approve', () => apiClient.getAll('/leave/requests/', { status: 'pending' }), null),
+          ask('dashboard.birthdays', () => dashboardService.getSummary(), null),
+          ask('dashboard.hrOverview', () => userService.getAllUsers(), null),
         ]);
+        setBirthdays(summary ? summary.birthdays || [] : null);
+        setStaff(people);
         setDsrToday(entries);
         setLeaves(leaveRows);
         setTeamIn(overview);
@@ -386,6 +395,19 @@ export function PersonalDashboard() {
             to="/leave/requests"
           />
         )}
+        {can('dashboard.birthdays') && birthdays !== null && (
+          <StatCard
+            label="Birthdays"
+            value={birthdays.length}
+            note={
+              birthdays.length
+                ? `${birthdays.find((b) => b.isUpcoming)?.name || birthdays[birthdays.length - 1].name} (${new Date().toLocaleString('en-US', { month: 'short' })} ${(birthdays.find((b) => b.isUpcoming) || birthdays[birthdays.length - 1]).day})`
+                : 'None this month'
+            }
+            Icon={CalendarIcon}
+            to="/dashboard"
+          />
+        )}
         {can('clients.view') && clientCount !== null && (
           <StatCard label="Clients" value={clientCount} note="On your projects" Icon={UsersIcon} to="/clients" />
         )}
@@ -465,6 +487,13 @@ export function PersonalDashboard() {
           </Section>
         )}
       </div>
+
+      {can('dashboard.hrOverview') && staff && (
+        <div className="space-y-4 border-t border-border/80 pt-6">
+          <h2 className="text-base font-bold text-text-main">Workforce & HR Operations</h2>
+          <HRWorkforceOverview users={staff} totalEmployees={staff.filter((u) => u.role !== 'client' && u.status !== 'inactive').length} onDataRefresh={load} />
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={confirmOut}
