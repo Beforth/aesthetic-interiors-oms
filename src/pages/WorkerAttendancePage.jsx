@@ -332,30 +332,30 @@ export function WorkerAttendancePage() {
       />
 
       {/* Today at a glance: the first thing the worker sees on this page */}
-      <div className="p-5 rounded-2xl bg-brand-900 text-white shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
+      <div className="p-5 rounded-xl bg-card border border-border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
         <div className="flex items-center gap-5 sm:gap-8 flex-wrap">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-200">Check-in</p>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Check-in</p>
+            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight text-primary">
               {checkedIn ? formatIndianTime(todayRecord.checkInTime) : '—'}
             </p>
           </div>
-          <div className="hidden sm:block w-px h-10 bg-white/20" />
+          <div className="hidden sm:block w-px h-10 bg-border" />
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-200">Check-out</p>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Check-out</p>
+            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight text-primary">
               {checkedOut ? formatIndianTime(todayRecord.checkOutTime) : '—'}
             </p>
           </div>
-          <div className="hidden sm:block w-px h-10 bg-white/20" />
+          <div className="hidden sm:block w-px h-10 bg-border" />
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-200">Working today</p>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight">{hoursText(workedToday)}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Working today</p>
+            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight text-primary">{hoursText(workedToday)}</p>
           </div>
         </div>
 
-        <span className="self-start sm:self-center inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white/10 border border-white/25">
-          {working && <span className="w-2 h-2 rounded-full bg-white animate-pulse" />}
+        <span className="self-start sm:self-center inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/30">
+          {working && <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />}
           {checkedOut ? 'Checked Out' : working ? 'Checked In' : 'Not Checked In'}
         </span>
       </div>
