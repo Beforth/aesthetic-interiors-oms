@@ -13,6 +13,7 @@ import Dropdown from '../ui/Dropdown';
 import { SidebarTrigger } from '../ui/sidebar';
 import TaskAllocationModal from '../common/TaskAllocationModal';
 import { XIcon, CheckIcon, TrashIcon } from '../ui/icons';
+import { useNotifications } from '../../hooks/useNotifications';
 
 /**
  * Top navigation bar with live global search, Task Allocation shortcut,
@@ -27,7 +28,7 @@ export function Topbar({ onToggleMobileMenu }) {
   const location = useLocation();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationContainerRef = useRef(null);
-  const [notifications, setNotifications] = useState([
+  const [notifications, setNotifications] = useNotifications([
     {
       id: 'n1',
       title: 'Rohit Kumar punched in',
