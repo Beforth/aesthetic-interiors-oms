@@ -16,7 +16,7 @@ import ProjectsPage from '../pages/ProjectsPage';
 import ProjectDetailPage from '../pages/ProjectDetailPage';
 import NewProjectPage from '../pages/NewProjectPage';
 import AgenciesPage from '../pages/AgenciesPage';
-import AttendancePage from '../pages/AttendancePage';
+import AttendancePage from '../pages/RoleAttendance';
 import TasksPage from '../pages/TasksPage';
 import DailyReportsPage from '../pages/DailyReportsPage';
 import PaymentsPage from '../pages/PaymentsPage';

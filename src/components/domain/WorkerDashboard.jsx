@@ -157,7 +157,9 @@ export function WorkerDashboard() {
               onClick={handlePunch}
               disabled={punching || loading}
               className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
-                working ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-700 hover:bg-emerald-600'
+                working
+                  ? 'bg-brand-800 hover:bg-brand-700 border border-brand-700'
+                  : 'bg-emerald-700 hover:bg-emerald-600'
               }`}
             >
               {working ? <LogOutIcon className="size-3.5" /> : <LogInIcon className="size-3.5" />}
