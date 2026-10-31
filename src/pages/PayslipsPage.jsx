@@ -36,7 +36,16 @@ export function PayslipsPage() {
     currentUser?.role === ROLES.MANAGER ||
     currentUser?.role === 'admin';
 
-  const [payslips, setPayslips] = useState(mockPayslips);
+  // Everyone but an admin or manager sees only their own payslips (the sample data uses ids like 'u4', so match
+  // the number or the name)
+  const isMine = (ps) => {
+    const norm = (v) => String(v ?? '').replace(/^u/i, '');
+    return (
+      norm(ps.employeeId) === norm(currentUser?.id) ||
+      String(ps.employeeName || '').toLowerCase() === String(currentUser?.name || '').toLowerCase()
+    );
+  };
+  const [payslips, setPayslips] = useState(() => (isAdminOrManager ? mockPayslips : mockPayslips.filter(isMine)));
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [generateMonth, setGenerateMonth] = useState('October 2026');
@@ -130,7 +139,8 @@ export function PayslipsPage() {
         )}
       </div>
 
-      {/* KPI Summary Cards */}
+      {/* KPI Summary Cards (company payroll totals: admin and manager only) */}
+      {isAdminOrManager && (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -174,6 +184,7 @@ export function PayslipsPage() {
           <span className="text-[10px] text-muted-foreground block">Bank transfers approved</span>
         </div>
       </div>
+      )}
 
       {/* Search & Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-border bg-card shadow-2xs">
@@ -200,6 +211,7 @@ export function PayslipsPage() {
               { value: 'Pending', label: 'Pending' },
             ]}
           />
+          {isAdminOrManager && (
           <Button
             variant="outline"
             size="sm"
@@ -209,6 +221,7 @@ export function PayslipsPage() {
             <DownloadIcon className="size-3.5" />
             <span>Export Batch</span>
           </Button>
+          )}
         </div>
       </div>
 
