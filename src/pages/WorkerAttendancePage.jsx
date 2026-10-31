@@ -158,6 +158,21 @@ export function WorkerAttendancePage() {
   const checkedOut = checkedIn && hasTime(todayRecord?.checkOutTime);
   const working = checkedIn && !checkedOut;
 
+  // minutes worked today: counts up while punched in, fixed once punched out
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!working) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, [working]);
+  const workedToday = working
+    ? todayRecord?.checkInAt
+      ? Math.max(0, Math.floor((now - new Date(todayRecord.checkInAt).getTime()) / 60000))
+      : null
+    : checkedOut
+    ? todayRecord?.workedMinutes ?? null
+    : null;
+
   // ---- punch -------------------------------------------------------------------------------------------------------
   const readLocation = () =>
     new Promise((resolve, reject) => {
@@ -316,22 +331,31 @@ export function WorkerAttendancePage() {
         }
       />
 
-      <div className="flex items-center justify-between gap-3 flex-wrap p-3.5 rounded-xl bg-card border border-border shadow-xs">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <ClockIcon className="size-4 text-primary" />
-          <span>
-            In: <strong className="text-foreground">{checkedIn ? formatIndianTime(todayRecord.checkInTime) : '—'}</strong>
-            {' • '}Out: <strong className="text-foreground">{checkedOut ? formatIndianTime(todayRecord.checkOutTime) : '—'}</strong>
-          </span>
+      {/* Today at a glance: the first thing the worker sees on this page */}
+      <div className="p-5 rounded-2xl bg-brand-900 text-white shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
+        <div className="flex items-center gap-5 sm:gap-8 flex-wrap">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-200">Check-in</p>
+            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight">
+              {checkedIn ? formatIndianTime(todayRecord.checkInTime) : '—'}
+            </p>
+          </div>
+          <div className="hidden sm:block w-px h-10 bg-white/20" />
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-200">Check-out</p>
+            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight">
+              {checkedOut ? formatIndianTime(todayRecord.checkOutTime) : '—'}
+            </p>
+          </div>
+          <div className="hidden sm:block w-px h-10 bg-white/20" />
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-200">Working today</p>
+            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight">{hoursText(workedToday)}</p>
+          </div>
         </div>
-        <span
-          className={cn(
-            'text-xs font-bold px-3 py-1 rounded-full border',
-            working
-              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-              : 'bg-muted/80 text-muted-foreground border-border'
-          )}
-        >
+
+        <span className="self-start sm:self-center inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white/10 border border-white/25">
+          {working && <span className="w-2 h-2 rounded-full bg-white animate-pulse" />}
           {checkedOut ? 'Checked Out' : working ? 'Checked In' : 'Not Checked In'}
         </span>
       </div>
