@@ -154,6 +154,12 @@ export const SYSTEM_PERMISSIONS = [
     group: 'Task Assignment & Tracking',
   },
   {
+    id: 'tasks.createOwn',
+    label: 'Create Own Tasks',
+    hint: 'Create tasks for yourself only (a site worker)',
+    group: 'Task Assignment & Tracking',
+  },
+  {
     id: 'tasks.viewAll',
     label: 'View All Tasks',
     hint: 'Search, audit, and filter tasks across all assignees (FR-TSK-06)',
@@ -319,6 +325,7 @@ export const permissionMatrix = {
 
   // --- MODULE 3.7: TASK ASSIGNMENT & TRACKING ---
   'tasks.create': [A, M, S],
+  'tasks.createOwn': [W],
   'tasks.viewAll': [A, M],
   'tasks.updateOwn': [A, M, S, W],
 

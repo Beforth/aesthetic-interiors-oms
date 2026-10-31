@@ -52,11 +52,7 @@ export function ProjectDetailPage() {
   const canEditDates = usePermission('stages.editDates');
   const canUpdateStatus = usePermission('stages.updateStatus');
   const canEditProjectStages = usePermission('stages.editProjectStages');
-  const canManageTasks =
-    role === ROLES.ADMIN ||
-    role === ROLES.MANAGER ||
-    role === ROLES.SUPERVISOR ||
-    canUpdateStatus;
+  const canManageTasks = usePermission('tasks.create');
 
   const [project, setProject] = useState(null);
   const [projectTasks, setProjectTasks] = useState([]);

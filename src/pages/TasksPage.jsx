@@ -59,11 +59,7 @@ export function TasksPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { currentUser, hasPermission } = useAuth();
-  const canCreate =
-    hasPermission('tasks.create') ||
-    currentUser?.role === ROLES.ADMIN ||
-    currentUser?.role === ROLES.MANAGER ||
-    currentUser?.role === ROLES.SUPERVISOR;
+  const canCreate = hasPermission('tasks.create');
 
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);

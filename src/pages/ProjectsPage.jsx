@@ -980,8 +980,7 @@ export function ProjectsPage() {
   const canCreateProject = usePermission('projects.create');
   const canEditProjectStatus =
     hasPermission('stages.editProjectStages') ||
-    hasPermission('projects.create') ||
-    role !== 'client';
+    hasPermission('projects.create');
 
   // Authority check for manager / owner / admin
   const isManagerOrAdmin =

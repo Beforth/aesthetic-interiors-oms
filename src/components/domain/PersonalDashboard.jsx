@@ -14,6 +14,7 @@ import StatusBadge from '../ui/StatusBadge';
 import { clientService } from '../../services/clientService';
 import WorkerTaskModal from './WorkerTaskModal';
 import TaskAllocationModal from '../common/TaskAllocationModal';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import {
   ArrowRightIcon,
   Building2Icon,
@@ -138,6 +139,7 @@ export function PersonalDashboard() {
   const [loading, setLoading] = useState(true);
   const [punching, setPunching] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [confirmOut, setConfirmOut] = useState(false);
 
   const load = useCallback(async () => {
     const user = userRef.current;
@@ -310,7 +312,7 @@ export function PersonalDashboard() {
           ) : (
             <button
               type="button"
-              onClick={handlePunch}
+              onClick={() => (working ? setConfirmOut(true) : handlePunch())}
               disabled={punching || loading}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold shadow-2xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                 working
@@ -463,6 +465,19 @@ export function PersonalDashboard() {
           </Section>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmOut}
+        title="Punch out?"
+        message="Are you sure you want to punch out for today? You cannot punch in again today without a request."
+        confirmText="Punch Out"
+        confirmVariant="primary"
+        onCancel={() => setConfirmOut(false)}
+        onConfirm={() => {
+          setConfirmOut(false);
+          handlePunch();
+        }}
+      />
 
       {createForOthers ? (
         <TaskAllocationModal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} onTaskAllocated={() => load()} />
