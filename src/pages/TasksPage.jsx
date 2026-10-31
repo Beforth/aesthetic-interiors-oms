@@ -61,12 +61,9 @@ export function TasksPage() {
   const { currentUser, hasPermission } = useAuth();
   const canCreate =
     hasPermission('tasks.create') ||
-    hasPermission('tasks.createOwn') ||
     currentUser?.role === ROLES.ADMIN ||
     currentUser?.role === ROLES.MANAGER ||
     currentUser?.role === ROLES.SUPERVISOR;
-  // a worker (tasks.createOwn only) creates tasks for themselves: the assignee is fixed to them
-  const selfOnly = !hasPermission('tasks.create') && hasPermission('tasks.createOwn');
 
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -377,7 +374,7 @@ export function TasksPage() {
       title: '',
       description: '',
       projectId: projects[0]?.id || 'P1',
-      assignedToIds: selfOnly && currentUser?.id ? [String(currentUser.id)] : [],
+      assignedToIds: [],
       type: 'on-site',
       priority: 'medium',
       dueDate: new Date().toISOString().split('T')[0],
@@ -1099,12 +1096,6 @@ export function TasksPage() {
 
           {/* Row 4: Multiple Assignees Selector (Compulsory) */}
           <div>
-            {selfOnly && (
-              <div className="text-xs text-muted-foreground">
-                Assigned to: <span className="font-semibold text-foreground">You</span>
-              </div>
-            )}
-            {!selfOnly && (
             <FormMultiAssigneeSelect
               users={users}
               required
@@ -1118,7 +1109,6 @@ export function TasksPage() {
                 }
               }}
             />
-            )}
           </div>
 
           {/* Row 5: Due Date & Priority Level */}
