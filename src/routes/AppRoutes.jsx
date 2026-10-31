@@ -7,7 +7,7 @@ import RoleRoute from '../components/layout/RoleRoute';
 import AppShell from '../components/layout/AppShell';
 
 import LoginPage from '../pages/LoginPage';
-import DashboardPage from '../pages/DashboardPage';
+import DashboardPage from '../pages/RoleDashboard';
 import UsersPage from '../pages/UsersPage';
 import NewRolePage from '../pages/NewRolePage';
 import ClientsPage from '../pages/ClientsPage';
