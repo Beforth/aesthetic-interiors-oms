@@ -115,7 +115,8 @@ export function WorkerLeavePage() {
     e.preventDefault();
     const found = {};
     if (!form.startDate) found.startDate = 'Choose the first day of leave';
-    if (form.endDate && form.startDate && form.endDate < form.startDate) found.endDate = 'The last day cannot be before the first day';
+    if (!form.endDate) found.endDate = 'Choose the last day of leave';
+    else if (form.startDate && form.endDate < form.startDate) found.endDate = 'The last day cannot be before the first day';
     if (!form.reason.trim() || form.reason.trim().length < 5) found.reason = 'Give a reason (at least 5 characters)';
     if (Object.keys(found).length) {
       setErrors(found);
@@ -126,7 +127,7 @@ export function WorkerLeavePage() {
       await apiClient.post(`${BASE}/requests/`, {
         leaveType: form.leaveType,
         startDate: form.startDate,
-        ...(form.endDate ? { endDate: form.endDate } : {}),
+        endDate: form.endDate,
         reason: form.reason.trim(),
       });
       toast.success('Leave request sent to your manager');
@@ -314,7 +315,7 @@ export function WorkerLeavePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">From</label>
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">From <span className="text-destructive">*</span></label>
               <input
                 type="date"
                 value={form.startDate}
@@ -324,7 +325,7 @@ export function WorkerLeavePage() {
               {errors.startDate && <p className="text-[11px] font-medium text-destructive">{errors.startDate}</p>}
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">To (optional)</label>
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">To <span className="text-destructive">*</span></label>
               <input
                 type="date"
                 value={form.endDate}
@@ -335,7 +336,7 @@ export function WorkerLeavePage() {
               {errors.endDate && <p className="text-[11px] font-medium text-destructive">{errors.endDate}</p>}
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground">Leave out the last day for a single day. Weekly off days are not counted.</p>
+          <p className="text-[11px] text-muted-foreground">For a single day, choose the same date in both. Weekly off days are not counted.</p>
 
           <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Reason</label>
