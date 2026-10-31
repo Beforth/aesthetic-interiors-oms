@@ -12,7 +12,7 @@ import UsersPage from '../pages/UsersPage';
 import NewRolePage from '../pages/NewRolePage';
 import ClientsPage from '../pages/ClientsPage';
 import ClientDetailPage from '../pages/ClientDetailPage';
-import ProjectsPage from '../pages/RoleProjects';
+import ProjectsPage from '../pages/ProjectsPage';
 import ProjectDetailPage from '../pages/ProjectDetailPage';
 import NewProjectPage from '../pages/NewProjectPage';
 import AgenciesPage from '../pages/AgenciesPage';
