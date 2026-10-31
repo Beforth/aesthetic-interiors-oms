@@ -10,10 +10,10 @@ import { taskService } from '../../services/taskService';
 import { dsrService } from '../../services/dsrService';
 import { formatDate } from '../../utils/formatters';
 import { formatDuration } from '../../utils/dsr';
-import { cn } from '../../lib/utils';
 import StatusBadge from '../ui/StatusBadge';
 import WorkerTaskModal from './WorkerTaskModal';
 import {
+  ArrowRightIcon,
   Building2Icon,
   CalendarCheckIcon,
   CalendarIcon,
@@ -21,7 +21,6 @@ import {
   ListChecksIcon,
   LogInIcon,
   LogOutIcon,
-  MapPinIcon,
   PlusIcon,
 } from '../ui/icons';
 
@@ -35,20 +34,9 @@ const isoDay = (offset = 0) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-/** The API sends 24-hour clock text ('18:05'); the page shows '06:05 PM'. */
-function to12h(clock) {
-  if (!clock) return '—';
-  const [h, m] = String(clock).split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return clock;
-  return `${String(h % 12 || 12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
-}
-
-const RECORD_LABELS = { present: 'Present', late: 'Late', 'half-day': 'Half Day', overtime: 'Overtime', absent: 'Absent', leave: 'Leave' };
-const LEAVE_STYLES = {
-  pending: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
-  approved: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-  rejected: 'bg-destructive/15 text-destructive border-destructive/30',
-  withdrawn: 'bg-muted text-muted-foreground border-border',
+const greeting = () => {
+  const hour = new Date().getHours();
+  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 };
 
 /** Where a worker's punch comes from: the phone's location (or the office pin in the standalone mock mode). */
@@ -86,36 +74,32 @@ function currentStageName(project) {
 
 const rangeText = (r) => (r.startDate === r.endDate ? formatDate(r.startDate) : `${formatDate(r.startDate)} – ${formatDate(r.endDate)}`);
 
-/** A summary card that opens its tab. */
+/** A plain white card that opens its tab: the number in the app's primary colour. */
 function StatCard({ label, value, note, Icon, to }) {
   return (
     <Link
       to={to}
-      className="p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all block"
+      className="group block rounded-2xl border border-border bg-card p-4 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
     >
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-text-muted uppercase tracking-wider truncate">{label}</span>
-        <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 border border-brand-200 flex items-center justify-center shrink-0">
-          <Icon className="size-4" />
-        </div>
+      <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="size-[18px]" />
       </div>
-      <div className="mt-2 text-2xl font-black text-text-main leading-tight">{value}</div>
-      <p className="text-[11px] text-text-muted mt-1 truncate">{note}</p>
+      <div className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-primary">{value}</div>
+      <div className="mt-0.5 text-xs font-semibold text-text-main">{label}</div>
+      <p className="mt-0.5 truncate text-[11px] text-text-muted">{note}</p>
     </Link>
   );
 }
 
-/** A titled block of the dashboard with a link to the full tab. */
+/** A titled white block with a link to the full tab. */
 function Section({ title, to, linkText, children }) {
   return (
-    <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-3">
-      <div className="flex items-center justify-between border-b border-border/80 pb-3">
-        <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
-          <span>{title}</span>
-        </h3>
-        <Link to={to} className="text-xs text-brand-600 hover:text-brand-700 font-semibold hover:underline">
-          {linkText} →
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-bold text-text-main">{title}</h3>
+        <Link to={to} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+          {linkText}
+          <ArrowRightIcon className="size-3" />
         </Link>
       </div>
       {children}
@@ -124,13 +108,13 @@ function Section({ title, to, linkText, children }) {
 }
 
 const Empty = ({ children }) => (
-  <div className="p-6 text-center text-xs text-text-muted bg-brand-50/50 rounded-xl">{children}</div>
+  <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-xs text-text-muted">{children}</div>
 );
 
 /**
- * The Dashboard of a site worker: a summary of each of their tabs (Attendance, Projects, Tasks, Daily Report and
- * Leave), a Punch In / Punch Out button and a shortcut to create their own task. Only their own data: no
- * company-wide numbers, progress, birthdays, HR overview or payslips.
+ * The Dashboard of a site worker: a calm greeting with the Punch In / Punch Out button, one card per tab
+ * (Attendance, Projects, Tasks, Daily Report, Leave) and two short lists (tasks and projects). Only their own data:
+ * no company-wide numbers, progress, birthdays, HR overview or payslips.
  */
 export function WorkerDashboard() {
   const { currentUser, hasPermission } = useAuth();
@@ -140,7 +124,6 @@ export function WorkerDashboard() {
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [record, setRecord] = useState(null);
-  const [recent, setRecent] = useState([]);
   const [dsrToday, setDsrToday] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -160,12 +143,10 @@ export function WorkerDashboard() {
 
       if (!isDebug()) {
         // these come from the server only (the standalone mock mode has no data for them)
-        const [records, entries, leaveRows] = await Promise.all([
-          apiClient.getAll('/attendance/records/', { from: isoDay(-6), to: isoDay(0) }).catch(() => []),
+        const [entries, leaveRows] = await Promise.all([
           dsrService.listEntries({ from: isoDay(0), to: isoDay(0) }).catch(() => []),
           apiClient.getAll('/leave/requests/').catch(() => []),
         ]);
-        setRecent(records);
         setDsrToday(entries);
         setLeaves(leaveRows);
       }
@@ -197,26 +178,25 @@ export function WorkerDashboard() {
     [projects]
   );
 
-  // tasks
   const openTasks = useMemo(
     () =>
       tasks
         .filter((t) => t.status !== 'done')
-        .sort((a, b) => Number(Boolean(b.isOverdue)) - Number(Boolean(a.isOverdue)) || String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))),
+        .sort(
+          (a, b) =>
+            Number(Boolean(b.isOverdue)) - Number(Boolean(a.isOverdue)) ||
+            String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))
+        ),
     [tasks]
   );
   const overdueCount = openTasks.filter((t) => t.isOverdue).length;
   const dueTodayCount = openTasks.filter((t) => t.dueDate === isoDay(0)).length;
 
-  // daily report
   const dsrMinutes = dsrToday.reduce((sum, e) => sum + e.minutes, 0);
-
-  // leave
   const pendingLeaves = leaves.filter((l) => l.status === 'pending');
   const nextLeave = leaves
     .filter((l) => l.status === 'approved' && l.endDate >= isoDay(0))
     .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
-  const recentLeaves = leaves.filter((l) => l.status !== 'withdrawn').slice(0, 3);
 
   const handlePunch = async () => {
     setPunching(true);
@@ -240,22 +220,31 @@ export function WorkerDashboard() {
 
   const firstName = currentUser?.name ? currentUser.name.trim().split(/\s+/)[0] : 'there';
   const canCreateTask = hasPermission('tasks.createOwn') || hasPermission('tasks.create');
+  const dateText = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dayLine = checkedOut
+    ? `You punched out at ${record.checkOutTime}. Have a good evening.`
+    : working
+    ? `You punched in at ${record.checkInTime}.`
+    : 'You have not punched in yet today.';
 
   return (
     <div className="space-y-6">
-      {/* Welcome and the two things a worker does first */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-primary text-primary-foreground shadow-xs">
+      {/* Greeting and the two things a worker does first */}
+      <div className="flex flex-col gap-5 rounded-2xl bg-primary p-6 text-primary-foreground shadow-xs md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Welcome back, {firstName}!</h1>
-          <p className="text-xs sm:text-sm text-primary-foreground/80 mt-1">Your day at a glance</p>
+          <p className="text-xs font-medium text-primary-foreground/70">{dateText}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+            {greeting()}, {firstName}
+          </h1>
+          <p className="mt-1.5 text-sm text-primary-foreground/80">{dayLine}</p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap self-start md:self-center">
+        <div className="flex flex-wrap items-center gap-2.5">
           {canCreateTask && (
             <button
               type="button"
               onClick={() => setIsTaskModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white/15 hover:bg-white/25 text-primary-foreground border border-white/30 transition-colors shadow-2xs cursor-pointer"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-white/25"
             >
               <PlusIcon className="size-3.5" />
               <span>Create Task</span>
@@ -264,7 +253,7 @@ export function WorkerDashboard() {
 
           {/* One button: Punch In until the worker has punched in, then Punch Out. Once out, the day is done. */}
           {checkedOut ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white/15 text-primary-foreground border border-white/30">
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground">
               <CalendarCheckIcon className="size-3.5" />
               <span>Day complete</span>
             </span>
@@ -273,10 +262,10 @@ export function WorkerDashboard() {
               type="button"
               onClick={handlePunch}
               disabled={punching || loading}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition-colors shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold shadow-2xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                 working
-                  ? 'bg-white/15 hover:bg-white/25 text-primary-foreground border border-white/30'
-                  : 'bg-white hover:bg-white/90 text-primary border border-white'
+                  ? 'border border-white/30 bg-white/15 text-primary-foreground hover:bg-white/25'
+                  : 'border border-white bg-white text-primary hover:bg-white/90'
               }`}
             >
               {working ? <LogOutIcon className="size-3.5" /> : <LogInIcon className="size-3.5" />}
@@ -287,23 +276,17 @@ export function WorkerDashboard() {
       </div>
 
       {/* One card per tab */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
         <StatCard
-          label="Today's Attendance"
-          value={checkedOut ? 'Punched Out' : working ? 'Punched In' : 'Not In'}
-          note={`In: ${checkedIn ? record.checkInTime : '—'} • Out: ${checkedOut ? record.checkOutTime : '—'}`}
+          label="Attendance"
+          value={checkedOut ? 'Out' : working ? 'In' : '—'}
+          note={checkedOut ? `Out at ${record.checkOutTime}` : working ? `In at ${record.checkInTime}` : 'Not punched in'}
           Icon={CalendarCheckIcon}
           to="/attendance"
         />
+        <StatCard label="Projects" value={projects.length} note={`${activeProjects.length} active`} Icon={Building2Icon} to="/projects" />
         <StatCard
-          label="My Projects"
-          value={projects.length}
-          note={`${activeProjects.length} active`}
-          Icon={Building2Icon}
-          to="/projects"
-        />
-        <StatCard
-          label="My Tasks"
+          label="Tasks"
           value={openTasks.length}
           note={overdueCount ? `${overdueCount} overdue` : dueTodayCount ? `${dueTodayCount} due today` : 'Open tasks'}
           Icon={ListChecksIcon}
@@ -318,15 +301,15 @@ export function WorkerDashboard() {
         />
         <StatCard
           label="Leave"
-          value={pendingLeaves.length ? `${pendingLeaves.length} Pending` : nextLeave ? 'Approved' : 'None'}
-          note={nextLeave ? `Next: ${rangeText(nextLeave)}` : pendingLeaves.length ? 'Waiting for your manager' : 'No upcoming leave'}
+          value={pendingLeaves.length ? pendingLeaves.length : nextLeave ? '1' : '—'}
+          note={pendingLeaves.length ? 'Pending approval' : nextLeave ? `Next: ${rangeText(nextLeave)}` : 'No upcoming leave'}
           Icon={CalendarIcon}
           to="/leave/requests"
         />
       </div>
 
-      {/* My tasks and today's daily report */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Two short lists */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Section title="My Tasks" to="/tasks" linkText="All tasks">
           {loading ? (
             <Empty>Loading…</Empty>
@@ -335,15 +318,15 @@ export function WorkerDashboard() {
           ) : (
             <ul className="divide-y divide-border">
               {openTasks.slice(0, 5).map((t) => (
-                <li key={t.id} className="py-2.5 flex items-start justify-between gap-3">
+                <li key={t.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text-main leading-snug truncate">{t.title}</p>
-                    <p className="text-[11px] text-text-muted mt-0.5 truncate">
+                    <p className="truncate text-sm font-semibold text-text-main">{t.title}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-text-muted">
                       {t.projectName || 'No project'}
                       {t.dueDate ? ` • Due ${formatDate(t.dueDate)}` : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     {t.isOverdue && <span className="text-[10px] font-bold text-destructive">Overdue</span>}
                     <StatusBadge status={t.status} />
                   </div>
@@ -353,110 +336,37 @@ export function WorkerDashboard() {
           )}
         </Section>
 
-        <Section title="Today's Daily Report" to="/daily-reports" linkText="Daily report">
+        <Section title="My Projects" to="/projects" linkText="All projects">
           {loading ? (
             <Empty>Loading…</Empty>
-          ) : isDebug() ? (
-            <Empty>Open Daily Report to log your work.</Empty>
-          ) : dsrToday.length === 0 ? (
-            <Empty>Nothing logged today yet. Add what you worked on in Daily Report.</Empty>
-          ) : (
-            <ul className="divide-y divide-border">
-              {dsrToday.slice(0, 5).map((e) => (
-                <li key={e.id} className="py-2.5 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text-main leading-snug truncate">{e.task}</p>
-                    <p className="text-[11px] text-text-muted mt-0.5 truncate">{e.project} • {e.category}</p>
-                  </div>
-                  <span className="font-mono text-xs font-semibold text-text-main shrink-0">{formatDuration(e.minutes)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-      </div>
-
-      {/* My projects, recent attendance and leave */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Section title="My Projects" to="/projects" linkText="All my projects">
-          {loading ? (
-            <Empty>Loading your projects…</Empty>
           ) : projects.length === 0 ? (
             <Empty>You are not assigned to any project yet.</Empty>
           ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {projects.slice(0, 4).map((project) => {
+            <ul className="divide-y divide-border">
+              {projects.slice(0, 5).map((project) => {
                 const stage = currentStageName(project);
                 return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    onClick={() => navigate(`/projects/${project.id}`)}
-                    className="text-left p-4 rounded-xl border border-border hover:border-brand-300 bg-background transition-colors cursor-pointer space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-semibold text-text-main leading-snug">{project.name}</span>
+                  <li key={project.id}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                      className="flex w-full cursor-pointer items-center justify-between gap-3 py-2.5 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-text-main">{project.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-text-muted">
+                          {project.clientName || 'Client'}
+                          {stage ? ` • Now: ${stage}` : ''}
+                        </p>
+                      </div>
                       <StatusBadge status={project.status} />
-                    </div>
-                    {project.clientName && <p className="text-xs text-text-muted truncate">Client: {project.clientName}</p>}
-                    {project.siteAddress && (
-                      <p className="text-xs text-text-muted flex items-start gap-1">
-                        <MapPinIcon className="size-3.5 shrink-0 mt-px" />
-                        <span className="line-clamp-2">{project.siteAddress}</span>
-                      </p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted pt-1">
-                      {stage && <span>Now: {stage}</span>}
-                      {(project.targetDate || project.endDate) && <span>Due: {formatDate(project.targetDate || project.endDate)}</span>}
-                    </div>
-                  </button>
+                    </button>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </Section>
-
-        <div className="space-y-6">
-          <Section title="Recent Attendance" to="/attendance" linkText="Attendance">
-            {loading ? (
-              <Empty>Loading…</Empty>
-            ) : isDebug() || recent.length === 0 ? (
-              <Empty>{isDebug() ? 'Open Attendance to see your records.' : 'No attendance in the last 7 days.'}</Empty>
-            ) : (
-              <ul className="divide-y divide-border">
-                {[...recent].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((r) => (
-                  <li key={r.id} className="py-2 flex items-center justify-between gap-3 text-xs">
-                    <span className="font-medium text-text-main whitespace-nowrap">{formatDate(r.date)}</span>
-                    <span className="font-mono text-text-muted">{to12h(r.checkInTime)} – {to12h(r.checkOutTime)}</span>
-                    <span className="text-text-main">{RECORD_LABELS[r.status] || r.status}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-
-          <Section title="My Leave" to="/leave/requests" linkText="Leave">
-            {loading ? (
-              <Empty>Loading…</Empty>
-            ) : isDebug() || recentLeaves.length === 0 ? (
-              <Empty>{isDebug() ? 'Open Leave to see your requests.' : 'No leave requests yet.'}</Empty>
-            ) : (
-              <ul className="divide-y divide-border">
-                {recentLeaves.map((l) => (
-                  <li key={l.id} className="py-2 flex items-center justify-between gap-3 text-xs">
-                    <div className="min-w-0">
-                      <p className="font-medium text-text-main truncate">{l.leaveType}</p>
-                      <p className="text-[11px] text-text-muted">{rangeText(l)}</p>
-                    </div>
-                    <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-semibold border capitalize', LEAVE_STYLES[l.status])}>
-                      {l.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-        </div>
       </div>
 
       <WorkerTaskModal
