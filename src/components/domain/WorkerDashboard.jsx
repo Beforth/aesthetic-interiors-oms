@@ -127,10 +127,10 @@ export function WorkerDashboard() {
   return (
     <div className="space-y-6">
       {/* Welcome and the two things a worker does first */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-brand-900 text-white shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-primary text-primary-foreground shadow-xs">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Welcome back, {firstName}!</h1>
-          <p className="text-xs sm:text-sm text-brand-200 mt-1">Your projects and today's attendance</p>
+          <p className="text-xs sm:text-sm text-primary-foreground/80 mt-1">Your projects and today's attendance</p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap self-start md:self-center">
@@ -138,7 +138,7 @@ export function WorkerDashboard() {
             <button
               type="button"
               onClick={() => setIsTaskModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-brand-800 hover:bg-brand-700 text-white border border-brand-700 transition-colors shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white/15 hover:bg-white/25 text-primary-foreground border border-white/30 transition-colors shadow-2xs cursor-pointer"
             >
               <PlusIcon className="size-3.5" />
               <span>Create Task</span>
@@ -147,7 +147,7 @@ export function WorkerDashboard() {
 
           {/* One button: Punch In until the worker has punched in, then Punch Out. Once out, the day is done. */}
           {checkedOut ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white/10 text-white border border-white/20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white/15 text-primary-foreground border border-white/30">
               <CalendarCheckIcon className="size-3.5" />
               <span>Day complete</span>
             </span>
@@ -156,10 +156,10 @@ export function WorkerDashboard() {
               type="button"
               onClick={handlePunch}
               disabled={punching || loading}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition-colors shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                 working
-                  ? 'bg-brand-800 hover:bg-brand-700 border border-brand-700'
-                  : 'bg-emerald-700 hover:bg-emerald-600'
+                  ? 'bg-white/15 hover:bg-white/25 text-primary-foreground border border-white/30'
+                  : 'bg-white hover:bg-white/90 text-primary border border-white'
               }`}
             >
               {working ? <LogOutIcon className="size-3.5" /> : <LogInIcon className="size-3.5" />}

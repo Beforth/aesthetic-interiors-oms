@@ -324,7 +324,6 @@ export function WorkerAttendancePage() {
             leadingIcon={checkedOut ? 'check' : working ? 'logout' : 'clock'}
             disabled={punching || checkedOut || loading}
             onClick={onPunchClick}
-            className={working && !punching ? 'bg-brand-800 hover:bg-brand-700 border border-brand-700 text-white' : ''}
           >
             {punchLabel}
           </Button>
