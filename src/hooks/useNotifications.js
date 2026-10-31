@@ -34,19 +34,15 @@ const writeSet = (userId, name, set) => {
 /**
  * The bell's list. Same shape as a plain `useState([...])`: `[notifications, setNotifications]`.
  *
- * - A person who only works on their own tabs (a site worker: they punch in, but cannot see everyone's attendance or
- *   tasks) gets their real notifications from the server: only their own attendance, leave, tasks and daily report.
+ * - A person who only works on their own tabs (a site worker or supervisor: they punch in, but cannot see every
+ *   project) gets their real notifications from the server: only their own attendance, leave, tasks and daily report.
  *   What they read or dismiss is remembered on this browser.
  * - Everyone else keeps the sample list passed in, exactly as before.
  */
 export function useNotifications(sample) {
   const { currentUser, hasPermission } = useAuth();
-  const isWorkerView =
-    !isDebug() &&
-    hasPermission('attendance.markOwn') &&
-    !hasPermission('attendance.viewBoard') &&
-    !hasPermission('tasks.create') &&
-    !hasPermission('tasks.viewAll');
+  // the same rule as the personal dashboard: someone who punches in but cannot see every project
+  const isWorkerView = !isDebug() && hasPermission('attendance.markOwn') && !hasPermission('projects.viewAll');
   const userId = String(currentUser?.id ?? '');
 
   const [items, setItems] = useState(isWorkerView ? [] : sample);
