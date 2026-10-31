@@ -2,8 +2,8 @@ import React from 'react';
 import { CheckIcon, SparkleIcon, BuildingIcon } from '../ui/icons';
 
 /**
- * The three summary cards of the Daily Report for a site worker, in the app's dark brand colour (the same look as
- * the worker's Dashboard and Attendance highlight). Same numbers as the cards other roles see.
+ * The three summary cards of the Daily Report for a site worker: the same plain white cards as before, with the
+ * numbers and icons in the same colour as the "Add Work" button (the app's primary colour).
  */
 export function WorkerDsrCards({ completed, inProgress, sites, total }) {
   const cards = [
@@ -13,18 +13,21 @@ export function WorkerDsrCards({ completed, inProgress, sites, total }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-in fade-in slide-in-from-top-2 duration-500">
+    <div className="flex flex-wrap items-center gap-3">
       {cards.map(({ label, value, note, Icon }) => (
-        <div key={label} className="rounded-2xl bg-brand-900 text-white p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-200 truncate">{label}</span>
-            <div className="size-7 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+        <div
+          key={label}
+          className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">{label}</span>
+            <div className="size-6 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
               <Icon className="size-3.5" />
             </div>
           </div>
-          <div className="mt-2 flex items-baseline justify-between gap-2">
-            <span className="text-3xl sm:text-4xl font-bold font-mono tabular-nums leading-none">{value}</span>
-            <span className="text-xs font-medium text-brand-200 truncate">{note}</span>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-primary tabular-nums">{value}</span>
+            <span className="text-xs font-medium text-primary truncate">{note}</span>
           </div>
         </div>
       ))}
