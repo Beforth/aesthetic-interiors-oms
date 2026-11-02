@@ -582,11 +582,11 @@ export function Topbar({ onToggleMobileMenu }) {
                     type="button"
                     onClick={() => {
                       setIsNotificationsOpen(false);
-                      navigate('/attendance');
+                      navigate('/notifications');
                     }}
                     className="text-xs font-semibold text-primary hover:underline cursor-pointer"
                   >
-                    View All Attendance & Logs →
+                    View All Notifications & Updates →
                   </button>
                 </div>
               </div>

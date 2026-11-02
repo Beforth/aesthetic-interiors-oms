@@ -26,6 +26,7 @@ import LeaveTypesPage from '../pages/LeaveTypesPage';
 import HolidayListsPage from '../pages/HolidayListsPage';
 import PayslipsPage from '../pages/PayslipsPage';
 import ReportsPage from '../pages/ReportsPage';
+import NotificationsPage from '../pages/NotificationsPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 
@@ -149,14 +150,26 @@ export function AppRoutes() {
         />
 
         {/* 8. Payments (Admin, Manager, Client) */}
+        <Route path="payments" element={<Navigate to="/payments/received" replace />} />
         <Route
-          path="payments"
+          path="payments/received"
           element={
             <RoleRoute permissions={['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage']}>
-              <PaymentsPage />
+              <PaymentsPage mode="received" />
             </RoleRoute>
           }
         />
+        <Route
+          path="payments/pay"
+          element={
+            <RoleRoute permissions={['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage']}>
+              <PaymentsPage mode="pay" />
+            </RoleRoute>
+          }
+        />
+
+        {/* Full Notifications & Updates Page */}
+        <Route path="notifications" element={<NotificationsPage />} />
 
         {/* Leave Routes */}
         <Route path="leave" element={<Navigate to="/leave/requests" replace />} />

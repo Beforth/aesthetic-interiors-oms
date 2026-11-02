@@ -654,101 +654,74 @@ export function ClientsPage() {
         }
       />
 
-      {/* Modern BefUI DataToolbar with Search, Status, Sorting, and Date Filters */}
-      <div className="bg-card border border-border rounded-xl p-3.5 shadow-xs space-y-3">
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          {/* Search bar: searches name, phone, address, email, notes */}
-          <div className="relative flex-1 w-full lg:max-w-md">
-            <Icon
-              name="search"
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, phone, address, email..."
-              className="w-full pl-9 pr-8 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 text-foreground placeholder:text-muted-foreground transition-all"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <Icon name="x" size={14} />
-              </button>
-            )}
-          </div>
+      {/* Modern BefUI Filter Toolbar: Search, Client Type Dropdown, Sort, Onboarding, Rows in a Single Row */}
+      <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+            {/* Search bar: searches name, phone, address, email, notes */}
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Icon
+                name="search"
+                size={15}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, phone, address, email..."
+                className="w-full h-9 pl-9 pr-8 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 text-foreground placeholder:text-muted-foreground transition-all shadow-2xs"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                  title="Clear search"
+                >
+                  <Icon name="x" size={13} />
+                </button>
+              )}
+            </div>
 
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-secondary border border-border rounded-lg self-start lg:self-auto overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => setTypeFilter('ALL')}
-              className={`px-3 py-1 rounded text-xs font-semibold transition-all whitespace-nowrap ${
-                typeFilter === 'ALL'
-                  ? 'bg-card text-foreground shadow-2xs border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+            {/* Client Type Dropdown (Replaces separate All/New/Existing tab buttons) */}
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="h-9 px-3 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
+              title="Filter by client type"
             >
-              All Clients ({counts.total})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTypeFilter('new')}
-              className={`px-3 py-1 rounded text-xs font-semibold transition-all whitespace-nowrap ${
-                typeFilter === 'new'
-                  ? 'bg-card text-success shadow-2xs border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              New ({counts.newClients})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTypeFilter('old')}
-              className={`px-3 py-1 rounded text-xs font-semibold transition-all whitespace-nowrap ${
-                typeFilter === 'old'
-                  ? 'bg-card text-foreground shadow-2xs border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Existing (Old) ({counts.oldClients})
-            </button>
-          </div>
-        </div>
+              <option value="ALL">All Clients ({counts.total})</option>
+              <option value="new">New Clients ({counts.newClients})</option>
+              <option value="old">Existing Clients ({counts.oldClients})</option>
+            </select>
 
-        {/* Second Row: Sorting, Date filter, and Clear Action */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-border/60">
-          <div className="flex flex-wrap items-center gap-2.5 text-xs">
             {/* Sorting Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground font-medium flex items-center gap-1">
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground font-medium flex items-center gap-1 shrink-0">
                 <Icon name="arrow-up-down" size={13} /> Sort:
               </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="py-1 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+                className="h-9 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
               >
                 <option value="date_desc">Newest Registered</option>
                 <option value="date_asc">Oldest Registered</option>
-                <option value="name_asc">Name (A â†’ Z)</option>
-                <option value="name_desc">Name (Z â†’ A)</option>
+                <option value="name_asc">Name (A → Z)</option>
+                <option value="name_desc">Name (Z → A)</option>
               </select>
             </div>
 
-            {/* Date Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground font-medium flex items-center gap-1">
+            {/* Onboarding Date Filter */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground font-medium flex items-center gap-1 shrink-0">
                 <Icon name="calendar" size={13} /> Onboarding:
               </span>
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="py-1 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+                className="h-9 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
               >
                 <option value="ALL">All Time</option>
                 <option value="THIS_MONTH">This Month</option>
@@ -760,12 +733,12 @@ export function ClientsPage() {
 
             {/* Custom Date Inputs if CUSTOM selected */}
             {dateFilter === 'CUSTOM' && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-xs">
                 <input
                   type="date"
                   value={customFromDate}
                   onChange={(e) => setCustomFromDate(e.target.value)}
-                  className="py-0.5 px-2 bg-background border border-border rounded-lg text-xs text-foreground"
+                  className="h-9 px-2 bg-background border border-border rounded-lg text-xs text-foreground shadow-2xs"
                   title="From Date"
                 />
                 <span className="text-muted-foreground">to</span>
@@ -773,22 +746,22 @@ export function ClientsPage() {
                   type="date"
                   value={customToDate}
                   onChange={(e) => setCustomToDate(e.target.value)}
-                  className="py-0.5 px-2 bg-background border border-border rounded-lg text-xs text-foreground"
+                  className="h-9 px-2 bg-background border border-border rounded-lg text-xs text-foreground shadow-2xs"
                   title="To Date"
                 />
               </div>
             )}
 
-            {/* Page Size Selector */}
-            <div className="hidden sm:flex items-center gap-1.5 ml-2">
-              <span className="text-muted-foreground">Rows:</span>
+            {/* Rows Page Size Selector */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground font-medium shrink-0">Rows:</span>
               <select
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="py-1 px-2 bg-background border border-border rounded-lg text-xs font-medium text-foreground"
+                className="h-9 px-2 bg-background border border-border rounded-lg text-xs font-medium text-foreground cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -805,7 +778,7 @@ export function ClientsPage() {
               size="sm"
               onClick={handleResetFilters}
               leadingIcon="x"
-              className="text-xs font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40 transition-colors"
+              className="h-9 text-xs font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40 transition-colors shrink-0"
             >
               Clear
             </Button>

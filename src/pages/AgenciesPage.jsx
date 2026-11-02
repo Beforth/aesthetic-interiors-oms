@@ -700,7 +700,7 @@ export function AgenciesPage() {
             type="button"
             onClick={() => setViewingAgency(a)}
             className="p-1.5 text-text-muted hover:text-primary hover:bg-accent rounded-md transition-colors cursor-pointer"
-            title="View Agency Profile & 12-Stage Products"
+            data-tooltip="View" aria-label="View"
           >
             <EyeIcon className="size-3.5" />
           </button>
@@ -709,7 +709,7 @@ export function AgenciesPage() {
               type="button"
               onClick={() => handleOpenEdit(a)}
               className="p-1.5 text-text-muted hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors cursor-pointer"
-              title="Edit Agency Coordinates & Commercials"
+              data-tooltip="Edit" aria-label="Edit"
             >
               <EditIcon className="size-3.5" />
             </button>
@@ -717,7 +717,7 @@ export function AgenciesPage() {
               type="button"
               onClick={() => setDeleteTarget(a)}
               className="p-1.5 text-text-muted hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-              title="Delete Agency"
+              data-tooltip="Delete" aria-label="Delete"
             >
               <TrashIcon className="size-3.5" />
             </button>

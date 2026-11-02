@@ -1,3 +1,5 @@
+import { cn } from '../lib/utils';
+import { TrashIcon, EyeIcon } from '../components/ui/icons';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { projectService } from '../services/projectService';
@@ -222,12 +224,10 @@ export function ProjectDetailPage() {
 
   // Tabs config
   const projectTabs = [
-    { id: 'overview', label: 'Overview', icon: 'projects' },
-    { id: 'timeline', label: 'Stages & Timeline', icon: 'calendar', count: stages.length },
-    { id: 'tasks', label: 'Tasks', icon: 'tasks', count: projectTasks.length },
-    { id: 'dsr', label: 'Daily Reports', icon: 'daily-reports' },
-    { id: 'files', label: 'Files', icon: 'folder' },
-    { id: 'payments', label: 'Payments', icon: 'payments' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'timeline', label: 'Stages & Timeline', count: stages.length },
+    { id: 'dsr', label: 'Daily Reports' },
+    { id: 'payments', label: 'Payments' },
   ];
 
   // Resolve team objects
@@ -278,14 +278,25 @@ export function ProjectDetailPage() {
 
   // Handle stage status click for Supervisor / Worker
   const handleQuickStatusChange = async (stage, newStatus) => {
+    // Optimistically update local project state immediately so the color reflects instantly!
+    setProject((prev) => {
+      if (!prev) return prev;
+      const nextStages = (prev.stages || []).map((s) =>
+        String(s.id) === String(stage.id) ? { ...s, status: newStatus } : s
+      );
+      return { ...prev, stages: nextStages };
+    });
+
     try {
       const updated = await projectService.updateStageStatus(
         project.id,
         stage.id,
         newStatus
       );
-      setProject({ ...updated });
-      toast.success(`${stage.name} status updated to "${newStatus}"`);
+      if (updated) {
+        setProject({ ...updated });
+      }
+      toast.success(`${stage.name} status updated to "${newStatus === 'done' ? 'Complete' : newStatus === 'late' ? 'Late / Due' : newStatus === 'in progress' ? 'In Progress' : 'Not Started'}"`);
     } catch (err) {
       toast.error('Failed to update stage status');
     }
@@ -426,32 +437,19 @@ export function ProjectDetailPage() {
       {/* Top Header */}
       <PageHeader
         title={project.name}
-        subtitle={`Site Address: ${project.siteAddress} • Overall Progress: ${progress}%`}
         breadcrumbs={[
           { label: 'Projects', path: '/projects' },
           { label: project.name },
         ]}
         actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              leadingIcon="arrow-left"
-              onClick={() => navigate('/projects')}
-            >
-              All Projects
-            </Button>
-            {canAssignPeople && (
-              <Button
-                variant="primary"
-                size="sm"
-                leadingIcon="users"
-                onClick={() => setIsTeamModalOpen(true)}
-              >
-                Assign Team & Roles
-              </Button>
-            )}
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            leadingIcon="arrow-left"
+            onClick={() => navigate('/projects')}
+          >
+            All Projects
+          </Button>
         }
       />
 
@@ -459,7 +457,17 @@ export function ProjectDetailPage() {
       <Tabs
         tabs={projectTabs}
         activeTab={activeTab}
-        onChange={setActiveTab}
+        onChange={(tabId) => {
+          if (tabId === 'dsr') {
+            navigate(`/daily-reports?search=${encodeURIComponent(project?.name || '')}`);
+            return;
+          }
+          if (tabId === 'payments') {
+            navigate(`/payments/received?project=${project?.id || 'P1'}`);
+            return;
+          }
+          setActiveTab(tabId);
+        }}
         className="bg-surface rounded-t border px-2"
       />
 
@@ -467,12 +475,16 @@ export function ProjectDetailPage() {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           {/* Progress Card */}
-          <Card title="Project Progress & Milestone Metrics">
+          <Card title="Project Overall Progress">
             <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  Averaged Across 12 Stages: <strong className="text-primary font-bold">{progress}%</strong>
+                </span>
+              </div>
               <ProgressBar
                 value={progress}
-                showLabel
-                label="Overall Contract Completion (Averaged Across 12 Stages)"
+                showLabel={false}
                 size="lg"
                 color={progress > 70 ? 'success' : 'primary'}
               />
@@ -481,9 +493,9 @@ export function ProjectDetailPage() {
                   Total Stages: <strong className="text-text-main">{stages.length}</strong>
                 </span>
                 <span>
-                  Completed:{' '}
+                  Complete:{' '}
                   <strong className="text-success">
-                    {stages.filter((s) => s.status === 'done').length}
+                    {stages.filter((s) => s.status === 'done' || s.status === 'completed' || s.status === 'complete').length}
                   </strong>
                 </span>
                 <span>
@@ -510,7 +522,7 @@ export function ProjectDetailPage() {
           {/* Assigned Team & Subcontractors */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card
-              title="Site Supervisory & Crafts Team"
+              title="Project Team Members"
               headerAction={
                 canAssignPeople && (
                   <Button
@@ -607,15 +619,13 @@ export function ProjectDetailPage() {
 
       {/* TAB 2: STAGES & TIMELINE */}
       {activeTab === 'timeline' && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="pt-4 sm:pt-6 space-y-6 sm:space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border/40">
             <div>
-              <h3 className="text-base font-bold text-text-main">
+              <h3 className="text-lg font-bold text-foreground">
                 Stages Execution & Schedule
               </h3>
-              <p className="text-xs text-text-muted">
-                12-stage fit-out pipeline with real-time Gantt tracking and status updates
-              </p>
+              
             </div>
 
             <div className="flex items-center gap-2">
@@ -644,100 +654,149 @@ export function ProjectDetailPage() {
           />
 
           {/* 2. Detailed Stages Table View */}
-          <Card title="Stage Execution Management Table">
+          <Card
+            title="Stage Execution Management Table"
+            subtitle="Track progress, scheduled dates, and assigned trade subcontractors"
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
+                <colgroup>
+                  <col className="w-12 sm:w-14" />       {/* # */}
+                  <col className="w-[28%]" />            {/* Stage Name */}
+                  <col className="w-[22%]" />            {/* Allocated Agency */}
+                  <col className="w-[14%]" />            {/* Start Date */}
+                  <col className="w-[14%]" />            {/* Target End Date */}
+                  <col className="w-[16%]" />            {/* Status */}
+                  <col className="w-20" />               {/* Actions */}
+                </colgroup>
                 <thead>
-                  <tr className="border-b border-border bg-muted text-muted-foreground font-semibold uppercase tracking-wider">
-                    <th className="p-3 w-12 text-center">#</th>
-                    <th className="p-3">Stage Name</th>
-                    <th className="p-3">Allocated Agency</th>
-                    <th className="p-3">Start Date</th>
-                    <th className="p-3">Target End Date</th>
-                    <th className="p-3 text-center">Status</th>
-                    <th className="p-3 text-right">Actions</th>
+                  <tr className="border-b border-border bg-muted/40 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <th className="py-3 pl-4 pr-2 text-center">#</th>
+                    <th className="py-3 px-3">Stage Name</th>
+                    <th className="py-3 px-3">Allocated Agency</th>
+                    <th className="py-3 px-3">Start Date</th>
+                    <th className="py-3 px-3">Target End Date</th>
+                    <th className="py-3 px-3 text-center">Status</th>
+                    <th className="py-3 pl-2 pr-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {stages.map((stage, idx) => {
-                    const isLate = isStageLate(stage, TODAY_STR);
+                    const rawStatus = (stage.status || 'not started').toLowerCase().trim();
+                    const isDone = rawStatus === 'done' || rawStatus === 'completed' || rawStatus === 'complete';
+                    const isExplicitLate = rawStatus === 'late' || rawStatus === 'due' || rawStatus === 'overdue' || rawStatus === 'late / due';
+                    const isOverdue = !isDone && isStageLate(stage, TODAY_STR);
+                    const isLate = isExplicitLate || isOverdue;
+                    const isInProgress = (rawStatus === 'in progress' || rawStatus === 'in-progress') && !isExplicitLate;
+
+                    const normalizedStatus = isDone
+                      ? 'done'
+                      : isExplicitLate
+                      ? 'late'
+                      : isInProgress
+                      ? 'in progress'
+                      : isOverdue
+                      ? 'late'
+                      : 'not started';
 
                     return (
-                      <tr key={stage.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="p-3 text-center font-bold text-primary">
-                          {stage.order}
+                      <tr key={stage.id || idx} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3.5 pl-4 pr-2 text-center">
+                          <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded border border-border">
+                            #{stage.order || idx + 1}
+                          </span>
                         </td>
-                        <td className="p-3">
-                          <div className="font-semibold text-text-main flex items-center gap-1.5">
-                            <span>{stage.name}</span>
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-foreground text-xs">{stage.name}</span>
                             {isLate && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-danger-light text-danger">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 shrink-0">
                                 Late
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="p-3 text-text-muted">
-                          {stage.agencyName || 'Unallocated'}
+                        <td className="py-3.5 px-3">
+                          <span className="text-xs text-muted-foreground font-medium">
+                            {stage.agencyName || 'Unallocated'}
+                          </span>
                         </td>
-                        <td className="p-3 font-mono">{formatDate(stage.startDate)}</td>
-                        <td className="p-3 font-mono">{formatDate(stage.endDate)}</td>
-                        <td className="p-3 text-center">
+                        <td className="py-3.5 px-3 font-mono text-xs text-foreground whitespace-nowrap">
+                          {formatDate(stage.startDate)}
+                        </td>
+                        <td className="py-3.5 px-3 font-mono text-xs whitespace-nowrap">
+                          <span className={isLate ? 'text-destructive font-bold' : 'text-foreground'}>
+                            {formatDate(stage.endDate)}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-center">
                           {canUpdateStatus ? (
-                            <div className="w-44 mx-auto">
-                              <StageStatusControl
-                                value={stage.status}
-                                onChange={(val) => handleQuickStatusChange(stage, val)}
-                              />
-                            </div>
+                            <select
+                              value={normalizedStatus}
+                              onChange={(e) => handleQuickStatusChange(stage, e.target.value)}
+                              className={cn(
+                                'text-xs font-semibold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer outline-none focus:ring-2 focus:ring-primary/20 shadow-2xs',
+                                normalizedStatus === 'done'
+                                  ? 'bg-success/15 text-success border-success/40 font-bold'
+                                  : normalizedStatus === 'late'
+                                  ? 'bg-destructive/15 text-destructive border-destructive/40 font-bold'
+                                  : normalizedStatus === 'in progress'
+                                  ? 'bg-primary text-primary-foreground border-primary font-bold shadow-xs'
+                                  : 'bg-muted/70 text-muted-foreground border-border'
+                              )}
+                            >
+                              <option value="not started" className="bg-card text-foreground">Not Started</option>
+                              <option value="in progress" className="bg-card text-foreground">In Progress</option>
+                              <option value="late" className="bg-card text-destructive font-semibold">Late / Due</option>
+                              <option value="done" className="bg-card text-foreground">Complete</option>
+                            </select>
                           ) : (
-                            <StatusBadge status={stage.status} size="sm" />
+                            <Badge
+                              variant={
+                                normalizedStatus === 'done'
+                                  ? 'success'
+                                  : normalizedStatus === 'late'
+                                  ? 'danger'
+                                  : normalizedStatus === 'in progress'
+                                  ? 'primary'
+                                  : 'neutral'
+                              }
+                              size="sm"
+                              dot
+                            >
+                              {normalizedStatus === 'done'
+                                ? 'COMPLETE'
+                                : normalizedStatus === 'late'
+                                ? 'LATE'
+                                : normalizedStatus === 'in progress'
+                                ? 'IN PROGRESS'
+                                : 'NOT STARTED'}
+                            </Badge>
                           )}
                         </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {/* Reorder buttons */}
-                            {canEditProjectStages && (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={idx === 0}
-                                  onClick={() => handleMoveStage(idx, -1)}
-                                  className="p-1 text-text-muted hover:text-text-main disabled:opacity-30"
-                                  aria-label="Move stage up"
-                                >
-                                  ▲
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={idx === stages.length - 1}
-                                  onClick={() => handleMoveStage(idx, 1)}
-                                  className="p-1 text-text-muted hover:text-text-main disabled:opacity-30"
-                                  aria-label="Move stage down"
-                                >
-                                  ▼
-                                </button>
-                              </>
-                            )}
-
+                        <td className="py-3.5 pl-2 pr-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
                             {(canEditDates || canEditProjectStages) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
+                              <button
+                                type="button"
+                                title="View & Edit Stage Details"
+                                aria-label="View Stage"
                                 onClick={() => handleOpenEditStage(stage)}
+                                className="p-1.5 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors cursor-pointer"
                               >
-                                Edit
-                              </Button>
+                                <EyeIcon className="size-4" />
+                              </button>
                             )}
-
                             {canEditProjectStages && stages.length > 1 && (
-                              <IconButton
-                                icon="trash"
-                                size="sm"
-                                ariaLabel={`Remove ${stage.name}`}
-                                className="text-danger hover:bg-danger-light"
+                              <button
+                                type="button"
+                                title="Delete Stage"
+                                aria-label={`Remove ${stage.name}`}
+                                className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                                 onClick={() => setStagePendingDelete({ id: stage.id, name: stage.name })}
-                              />
+                              >
+                                <TrashIcon className="size-3.5" />
+                              </button>
                             )}
                           </div>
                         </td>
@@ -751,132 +810,74 @@ export function ProjectDetailPage() {
         </div>
       )}
 
-      {/* TAB 3: SITE TASKS KANBAN BOARD (BefUI Kanban Component) */}
-      {activeTab === 'tasks' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border shadow-2xs">
-            <div>
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                <span>Site Trade Tasks & Execution Kanban</span>
-                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                  {projectTasks.length} Total
-                </span>
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Authorized supervisors & managers can drag cards or move with Alt+Arrows to track real-time trade progress
-              </p>
-            </div>
-
-            {canManageTasks && (
-              <Button
-                variant="primary"
-                size="sm"
-                leadingIcon="plus"
-                onClick={() => setIsTaskModalOpen(true)}
-              >
-                Allocate Site Task
-              </Button>
-            )}
-          </div>
-
-          <Kanban
-            columns={DETAIL_TASK_KANBAN_COLUMNS}
-            value={taskKanbanBoard}
-            onChange={handleTaskBoardChange}
-            onAdd={canManageTasks ? () => setIsTaskModalOpen(true) : undefined}
-            renderCard={(t) => (
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <Badge variant={t.priority === 'high' ? 'danger' : 'default'} size="sm">
-                    {t.stageName || 'Fit-Out'}
-                  </Badge>
-                  {t.priority === 'high' && (
-                    <Badge variant="danger" size="sm">
-                      High Priority
-                    </Badge>
-                  )}
-                </div>
-
-                <p className="font-semibold text-xs text-foreground leading-snug">
-                  {t.title}
-                </p>
-
-                {t.notes && (
-                  <p className="text-[11px] text-muted-foreground line-clamp-2">
-                    {t.notes}
-                  </p>
-                )}
-
-                <div className="flex items-center justify-between pt-1.5 border-t border-border/70 text-xs">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Avatar name={t.assignedToName || 'Artisan'} size="xs" />
-                    <span className="text-[11px] text-muted-foreground truncate max-w-[110px]">
-                      {t.assignedToName || 'Artisan'}
-                    </span>
-                  </div>
-
-                  {canManageTasks && (
-                    <div className="flex items-center gap-1">
-                      {t.status !== 'todo' && t.status !== 'pending' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTaskStatusChange(t.id, t.status === 'done' ? 'in progress' : 'todo');
-                          }}
-                          title="Move backward"
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary text-xs font-semibold"
-                        >
-                          ‹
-                        </button>
-                      )}
-                      {t.status !== 'done' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTaskStatusChange(t.id, (t.status === 'todo' || t.status === 'pending') ? 'in progress' : 'done');
-                          }}
-                          title="Move forward"
-                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                        >
-                          {(t.status === 'todo' || t.status === 'pending') ? 'Start ›' : 'Complete ✓'}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          />
-        </div>
-      )}
-
-      {/* TAB 4: DAILY REPORTS (Phase 3 Placeholder) */}
+      {/* TAB 4: DAILY REPORTS (Linked to Daily Reports in Side Navigation) */}
       {activeTab === 'dsr' && (
-        <EmptyState
-          icon="daily-reports"
-          title="Daily Site Reports (DSR)"
-          description="Supervisor evening site logs, progress photo gallery, and client WhatsApp broadcasts will be activated in Phase 3."
-        />
+        <Card className="p-8 text-center space-y-4">
+          <div className="mx-auto size-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+            <Icon name="daily-reports" size={24} />
+          </div>
+          <div className="max-w-md mx-auto space-y-1">
+            <h3 className="text-base font-bold text-foreground">
+              Daily Reports for {project.name}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              View daily site work logs, supervisor updates, craftsperson attendance, and photo galleries for this project.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate(`/daily-reports?search=${encodeURIComponent(project.name)}`)}
+              className="flex items-center gap-1.5"
+            >
+              <span>Open Daily Reports</span>
+              <Icon name="arrow-right" size={14} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/reports')}
+            >
+              <span>View Reports Section</span>
+            </Button>
+          </div>
+        </Card>
       )}
 
-      {/* TAB 5: FILES (Phase 4 Placeholder) */}
-      {activeTab === 'files' && (
-        <EmptyState
-          icon="folder"
-          title="Architectural Blueprints & 3D Renderings"
-          description="Site layout DWGs, high-res renders, and vendor warranty documents storage will be activated in Phase 4."
-        />
-      )}
-
-      {/* TAB 6: PAYMENTS (Phase 4 Placeholder) */}
+      {/* TAB 5: PAYMENTS (Linked to Payments Received in Side Navigation) */}
       {activeTab === 'payments' && (
-        <EmptyState
-          icon="payments"
-          title="Payment Milestones & Disbursements"
-          description="Stage-linked client invoices, advance requests, and piece-rate artisan payouts will be activated in Phase 4."
-        />
+        <Card className="p-8 text-center space-y-4">
+          <div className="mx-auto size-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+            <Icon name="payments" size={24} />
+          </div>
+          <div className="max-w-md mx-auto space-y-1">
+            <h3 className="text-base font-bold text-foreground">
+              Payments & Billing for {project.name}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Manage client advances, installments, payment records, and payment proof attachments in Payments Received.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate(`/payments/received?project=${project.id}`)}
+              className="flex items-center gap-1.5"
+            >
+              <span>Go to Payments (Received)</span>
+              <Icon name="arrow-right" size={14} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/payments/pay')}
+            >
+              <span>View Labour & Agency Payouts</span>
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* Edit Stage Modal */}
@@ -941,12 +942,22 @@ export function ProjectDetailPage() {
             <label className="text-xs font-semibold text-text-main">
               Execution Status
             </label>
-            <StageStatusControl
-              value={stageFormData.status}
-              onChange={(status) =>
-                setStageFormData({ ...stageFormData, status })
+            <select
+              value={
+                stageFormData.status === 'done' || stageFormData.status === 'completed'
+                  ? 'done'
+                  : stageFormData.status === 'in progress' || stageFormData.status === 'in-progress'
+                  ? 'in progress'
+                  : 'not started'
               }
-            />
+              onChange={(e) => setStageFormData({ ...stageFormData, status: e.target.value })}
+              className="w-full rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-2xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="not started">Not Started</option>
+              <option value="in progress">In Progress</option>
+              <option value="late">Late / Due</option>
+              <option value="done">Complete</option>
+            </select>
           </div>
         </form>
       </Modal>
@@ -1061,12 +1072,7 @@ export function ProjectDetailPage() {
         onCancel={() => setStagePendingDelete(null)}
       />
 
-      {/* Task Allocation Modal Dialog */}
-      <TaskAllocationModal
-        isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
-        onTaskAllocated={() => fetchProjectTasks()}
-      />
+      
     </div>
   );
 }

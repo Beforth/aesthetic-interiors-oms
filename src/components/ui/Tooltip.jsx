@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 /**
  * Lightweight accessible tooltip with hover and keyboard focus detection.
+ * Conforms strictly to the same BefUI popover design across the project.
  *
  * @param {Object} props
  * @param {string} props.content - Tooltip text
@@ -20,10 +21,10 @@ export function Tooltip({
   if (!content) return children;
 
   const placementClasses = {
-    top: 'bottom-full left-1/2 -translate-x-1/2 mb-1.5',
-    bottom: 'top-full left-1/2 -translate-x-1/2 mt-1.5',
-    left: 'right-full top-1/2 -translate-y-1/2 mr-1.5',
-    right: 'left-full top-1/2 -translate-y-1/2 ml-1.5',
+    top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
+    bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
+    left: 'right-full top-1/2 -translate-y-1/2 mr-2',
+    right: 'left-full top-1/2 -translate-y-1/2 ml-2',
   };
 
   return (
@@ -38,7 +39,7 @@ export function Tooltip({
       {isVisible && (
         <div
           role="tooltip"
-          className={`absolute z-40 px-2 py-1 text-[11px] font-medium text-popover-foreground bg-popover rounded-md border border-border shadow-md whitespace-nowrap pointer-events-none animate-in fade-in duration-100 ${
+          className={`absolute z-50 px-2.5 py-1 text-xs font-medium text-popover-foreground bg-popover rounded-md border border-border shadow-md whitespace-nowrap pointer-events-none transition-all duration-100 animate-fadeIn ${
             placementClasses[placement] || placementClasses.top
           }`}
         >

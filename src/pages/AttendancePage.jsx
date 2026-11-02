@@ -1,3 +1,4 @@
+import { TimePicker, formatTo12HourTime, normalizeTo24HourTime } from '../components/ui/TimePicker';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { attendanceService, calculateDistanceMeters, cleanLocationName, formatIndianTime, getIndianTime12h, to24h } from '../services/attendanceService';
@@ -1738,7 +1739,7 @@ export function AttendancePage({ defaultTab }) {
                             type="button"
                             onClick={() => setViewTargetRecord(r)}
                             className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
-                            title="View details"
+                            data-tooltip="View" aria-label="View"
                           >
                             <EyeIcon className="size-4" />
                           </button>
@@ -1757,7 +1758,7 @@ export function AttendancePage({ defaultTab }) {
                                 });
                               }}
                               className="p-2 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
-                              title="Edit"
+                              data-tooltip="Edit" aria-label="Edit"
                             >
                               <EditIcon className="size-4" />
                             </button>
@@ -1769,7 +1770,7 @@ export function AttendancePage({ defaultTab }) {
                               type="button"
                               onClick={() => setRecordPendingDelete(r)}
                               className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer"
-                              title="Delete record"
+                              data-tooltip="Delete" aria-label="Delete"
                             >
                               <TrashIcon className="size-4" />
                             </button>
@@ -2346,19 +2347,17 @@ export function AttendancePage({ defaultTab }) {
           </div>
 
           {/* Punch Time Row */}
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              {staffMarkForm.punchType === 'out' ? 'CHECK-OUT' : 'CHECK-IN'}
-            </label>
-            <div className="relative">
-              <input
-                type="time"
-                value={staffMarkForm.punchTime}
-                onChange={(e) => setStaffMarkForm({ ...staffMarkForm, punchTime: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-border rounded-xl text-foreground font-mono font-medium bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs sm:text-sm transition-all"
-              />
-            </div>
-          </div>
+          <TimePicker
+            label={staffMarkForm.punchType === 'out' ? 'CHECK-OUT' : 'CHECK-IN'}
+            value={staffMarkForm.punchTime}
+            onChange={(val) => {
+              setStaffMarkForm((prev) => ({ ...prev, punchTime: val }));
+              if (staffMarkErrors?.punchTime) setStaffMarkErrors((p) => ({ ...p, punchTime: null }));
+              if (staffMarkSubmitError) setStaffMarkSubmitError(null);
+            }}
+            error={staffMarkErrors?.punchTime}
+            required
+          />
 
           {/* Admin Override Alert */}
           <div className="p-3.5 rounded-xl border border-warning/30 bg-warning/10 text-foreground flex items-start gap-2.5">
@@ -2778,59 +2777,34 @@ export function AttendancePage({ defaultTab }) {
             {/* Check-in & Check-out time fields */}
             {(requestForm.type === 'Punch Regularization' || requestForm.type === 'Missed Punch' || requestForm.type === 'Field Duty' || requestForm.type === 'On-Duty (Site Visit)') && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Check-in Time {(requestForm.type === 'Punch Regularization' || requestForm.type === 'Missed Punch') && <span className="text-destructive">*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 09:30 AM"
-                    value={requestForm.requestedCheckIn}
-                    onChange={(e) => {
-                      setRequestForm({ ...requestForm, requestedCheckIn: e.target.value });
-                      if (requestFormErrors.requestedCheckIn) {
-                        setRequestFormErrors((prev) => ({ ...prev, requestedCheckIn: null }));
-                      }
-                      if (requestSubmitError) setRequestSubmitError(null);
-                    }}
-                    className={cn(
-                      'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
-                      requestFormErrors.requestedCheckIn
-                        ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
-                        : 'border-border focus:ring-1 focus:ring-primary'
-                    )}
-                  />
-                  {requestFormErrors.requestedCheckIn && (
-                    <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckIn}</p>
-                  )}
-                </div>
+                <TimePicker
+                  label="Check-in Time"
+                  value={requestForm.requestedCheckIn}
+                  onChange={(val) => {
+                    const formatted = formatTo12HourTime(val) || val;
+                    setRequestForm((prev) => ({ ...prev, requestedCheckIn: formatted }));
+                    if (requestFormErrors.requestedCheckIn) {
+                      setRequestFormErrors((p) => ({ ...p, requestedCheckIn: null }));
+                    }
+                    if (requestSubmitError) setRequestSubmitError(null);
+                  }}
+                  error={requestFormErrors.requestedCheckIn}
+                  required={requestForm.type === 'Punch Regularization' || requestForm.type === 'Missed Punch'}
+                />
 
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Check-out Time
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 06:30 PM"
-                    value={requestForm.requestedCheckOut}
-                    onChange={(e) => {
-                      setRequestForm({ ...requestForm, requestedCheckOut: e.target.value });
-                      if (requestFormErrors.requestedCheckOut) {
-                        setRequestFormErrors((prev) => ({ ...prev, requestedCheckOut: null }));
-                      }
-                      if (requestSubmitError) setRequestSubmitError(null);
-                    }}
-                    className={cn(
-                      'w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono focus:outline-none text-xs transition-colors',
-                      requestFormErrors.requestedCheckOut
-                        ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
-                        : 'border-border focus:ring-1 focus:ring-primary'
-                    )}
-                  />
-                  {requestFormErrors.requestedCheckOut && (
-                    <p className="text-[11px] font-medium text-destructive">{requestFormErrors.requestedCheckOut}</p>
-                  )}
-                </div>
+                <TimePicker
+                  label="Check-out Time"
+                  value={requestForm.requestedCheckOut}
+                  onChange={(val) => {
+                    const formatted = formatTo12HourTime(val) || val;
+                    setRequestForm((prev) => ({ ...prev, requestedCheckOut: formatted }));
+                    if (requestFormErrors.requestedCheckOut) {
+                      setRequestFormErrors((p) => ({ ...p, requestedCheckOut: null }));
+                    }
+                    if (requestSubmitError) setRequestSubmitError(null);
+                  }}
+                  error={requestFormErrors.requestedCheckOut}
+                />
               </div>
             )}
 

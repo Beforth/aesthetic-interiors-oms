@@ -8,10 +8,11 @@
  * @returns {string}
  */
 export function formatCurrency(amount) {
-  if (amount === null || amount === undefined || isNaN(Number(amount))) {
+  const clean = String(amount ?? '').replace(/,/g, '').trim();
+  if (amount === null || amount === undefined || isNaN(Number(clean)) || clean === '') {
     return '₹0';
   }
-  const numeric = Math.round(Number(amount));
+  const numeric = Math.round(Number(clean));
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
@@ -58,4 +59,51 @@ export function getInitials(name) {
  */
 export function cn(...classes) {
   return classes.filter(Boolean).join(' ');
+}
+
+/**
+ * Formats a raw number or numeric string with commas for numbers >= 1,000 using Indian grouping (e.g. 15000000 -> 1,50,00,000).
+ * Preserves decimals if present.
+ * @param {number|string} value
+ * @returns {string}
+ */
+export function formatNumberWithCommas(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const str = String(value).trim();
+  if (str === '-') return '-';
+
+  const clean = str.replace(/,/g, '');
+  const parts = clean.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts.length > 1 ? `.${parts[1]}` : '';
+
+  if (integerPart === '' || integerPart === '-') return str;
+  if (isNaN(Number(integerPart))) return str;
+
+  const isNegative = integerPart.startsWith('-');
+  const absInt = isNegative ? integerPart.slice(1) : integerPart;
+
+  if (!absInt) return isNegative ? '-' : '';
+
+  const numVal = Number(absInt);
+  const formattedInt = numVal.toLocaleString('en-IN');
+  return `${isNegative ? '-' : ''}${formattedInt}${decimalPart}`;
+}
+
+export const formatNumber = formatNumberWithCommas;
+
+/**
+ * Strips commas from a formatted numeric string to get a clean number.
+ * @param {string|number} value
+ * @returns {string}
+ */
+export function cleanNumber(value) {
+  if (value === null || value === undefined) return '';
+  return String(value).replace(/,/g, '').trim();
+}
+
+export function parseDateSafe(dateInput) {
+  if (!dateInput) return null;
+  const d = new Date(dateInput);
+  return isNaN(d.getTime()) ? null : d;
 }

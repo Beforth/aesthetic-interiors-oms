@@ -226,7 +226,26 @@ export function DailyReportsPage() {
     });
   };
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const qSearch = params.get('search');
+      if (qSearch) {
+        return { ...DEFAULT_FILTERS, search: qSearch };
+      }
+    } catch {}
+    return DEFAULT_FILTERS;
+  });
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const qSearch = params.get('search');
+      if (qSearch !== null) {
+        setFilters((prev) => ({ ...prev, search: qSearch }));
+      }
+    } catch {}
+  }, []);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showMore, setShowMore] = useState(false);
@@ -746,16 +765,13 @@ export function DailyReportsPage() {
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               Tasks Completed
             </span>
-            <div className="size-6 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-              <CheckIcon className="size-3.5 stroke-[2.5]" />
+            <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+              <CheckIcon className="size-4 stroke-[2.5]" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {completedCount}
-            </span>
-            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 truncate">
-              {filtered.length > 0 ? `${Math.round((completedCount / filtered.length) * 100)}% done` : '0%'}
             </span>
           </div>
         </div>
@@ -766,16 +782,13 @@ export function DailyReportsPage() {
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               In Progress
             </span>
-            <div className="size-6 rounded-md bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400 shrink-0">
-              <SparkleIcon className="size-3.5" />
+            <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+              <ClockIcon className="size-4" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {inProgressCount}
-            </span>
-            <span className="text-xs font-medium text-muted-foreground truncate">
-              Active ongoing
             </span>
           </div>
         </div>
@@ -786,16 +799,13 @@ export function DailyReportsPage() {
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
               Active Sites
             </span>
-            <div className="size-6 rounded-md bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-              <BuildingIcon className="size-3.5" />
+            <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+              <BuildingIcon className="size-4" />
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
               {activeSitesCount}
-            </span>
-            <span className="text-xs font-medium text-muted-foreground truncate">
-              Live projects
             </span>
           </div>
         </div>

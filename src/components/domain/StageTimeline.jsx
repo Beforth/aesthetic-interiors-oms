@@ -41,16 +41,17 @@ export function StageTimeline({ stages = [], today = TODAY_STR, onStageClick }) 
   );
 
   const getBarColor = (stage) => {
-    if (stage.status === 'done' || stage.status === 'completed') {
+    const s = (stage.status || '').toLowerCase().trim();
+    if (s === 'done' || s === 'completed' || s === 'complete') {
       return 'bg-success text-white border-success';
     }
-    if (isStageLate(stage, today)) {
+    if (s === 'late' || s === 'due' || s === 'overdue' || s === 'late / due' || isStageLate(stage, today)) {
       return 'bg-destructive text-white border-destructive';
     }
-    if (stage.status === 'in progress' || stage.status === 'in-progress') {
-      return 'bg-primary text-primary-foreground border-primary';
+    if (s === 'in progress' || s === 'in-progress') {
+      return 'bg-primary text-primary-foreground border-primary shadow-xs';
     }
-    return 'bg-primary/10 text-primary border-border';
+    return 'bg-muted text-muted-foreground border-border';
   };
 
   return (
@@ -61,7 +62,7 @@ export function StageTimeline({ stages = [], today = TODAY_STR, onStageClick }) 
           <span className="font-semibold text-foreground">Legend:</span>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-success inline-block" />
-            <span className="text-muted-foreground">Done</span>
+            <span className="text-muted-foreground">Complete</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-primary inline-block" />

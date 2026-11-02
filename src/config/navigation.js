@@ -16,6 +16,14 @@ export const navigationItems = [
     bottomNavPriority: 1,
   },
   {
+    id: 'notifications',
+    label: 'Notifications',
+    path: '/notifications',
+    icon: 'bell',
+    permissions: ['tasks.updateOwn', 'attendance.markOwn', 'tasks.viewAll'],
+    roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER, ROLES.CLIENT],
+  },
+  {
     id: 'clients',
     label: 'Clients',
     path: '/clients',
@@ -71,11 +79,21 @@ export const navigationItems = [
   {
     id: 'payments',
     label: 'Payments',
-    path: '/payments',
+    path: '/payments/received',
     icon: 'payments',
     permissions: ['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage'],
     roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.CLIENT],
     bottomNavPriority: 4,
+    items: [
+      {
+        label: 'Received',
+        path: '/payments/received',
+      },
+      {
+        label: 'Pay',
+        path: '/payments/pay',
+      },
+    ],
   },
   {
     id: 'leave',

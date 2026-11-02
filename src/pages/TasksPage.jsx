@@ -27,6 +27,8 @@ import {
   ListIcon,
   PlusIcon,
   CameraIcon,
+  CloudUploadIcon,
+  TrashIcon,
   SearchIcon,
   XIcon,
   CheckIcon,
@@ -92,21 +94,27 @@ export function TasksPage() {
 
   // Photo Attachment Modal & Photo Viewer state
   const [photoTargetTask, setPhotoTargetTask] = useState(null);
-  const [photoInputUrl, setPhotoInputUrl] = useState('');
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [selectedImagePreview, setSelectedImagePreview] = useState(null);
+  const [imageUploadError, setImageUploadError] = useState(null);
+  const fileInputRef = useRef(null);
   const [viewingPhotoTask, setViewingPhotoTask] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [allTasks, allProjects, allUsers] = await Promise.all([
-        taskService.getAllTasks(),
+        taskService.getAllTasks().catch((err) => {
+          console.warn('Failed to fetch tasks from service:', err);
+          return [];
+        }),
         projectService.getAllProjects().catch(() => []),
         userService.getAllUsers().catch(() => []),
       ]);
-      setTasks(allTasks);
-      setProjects(allProjects);
-      setUsers(allUsers);
-      if (allProjects.length > 0) {
+      setTasks(Array.isArray(allTasks) ? allTasks : []);
+      setProjects(Array.isArray(allProjects) ? allProjects : []);
+      setUsers(Array.isArray(allUsers) ? allUsers : []);
+      if (Array.isArray(allProjects) && allProjects.length > 0) {
         setFormData((prev) => ({
           ...prev,
           // keep the choice only while it is still a real project (the first form value may be a mock id)
@@ -116,6 +124,7 @@ export function TasksPage() {
         }));
       }
     } catch (e) {
+      console.error('Unexpected error loading tasks page data:', e);
       toast.error('Failed to load tasks and assignees');
     } finally {
       setLoading(false);
@@ -476,14 +485,46 @@ export function TasksPage() {
     }
   };
 
+  // Device Image Selection handler
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('Please select a valid image file (PNG, JPG, WEBP, etc.)');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setImageUploadError('Image size should be less than 15MB');
+      return;
+    }
+    setImageUploadError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImageFile(file);
+      setSelectedImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearSelectedImage = () => {
+    setSelectedImageFile(null);
+    setSelectedImagePreview(null);
+    setImageUploadError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Add Photo Attachment handler
   const handleAttachPhoto = async () => {
-    if (!photoInputUrl.trim()) return;
+    if (!selectedImagePreview) {
+      toast.error('Please select an image from your device');
+      return;
+    }
     try {
-      await taskService.attachPhoto(photoTargetTask.id, photoInputUrl.trim());
-      toast.success('Inspection photo attached to task');
+      await taskService.attachPhoto(photoTargetTask.id, selectedImagePreview);
+      toast.success('Inspection photo uploaded and attached to task');
       setPhotoTargetTask(null);
-      setPhotoInputUrl('');
+      handleClearSelectedImage();
       loadData();
     } catch (err) {
       toast.error('Failed to attach photo');
@@ -1138,21 +1179,36 @@ export function TasksPage() {
       {/* Attach Photo Modal */}
       <Modal
         isOpen={!!photoTargetTask}
-        onClose={() => setPhotoTargetTask(null)}
+        onClose={() => {
+          setPhotoTargetTask(null);
+          handleClearSelectedImage();
+        }}
         title="Attach Inspection Photo"
         subtitle={`Task: ${photoTargetTask?.title}`}
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={() => setPhotoTargetTask(null)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPhotoTargetTask(null);
+                handleClearSelectedImage();
+              }}
+            >
               Cancel
             </Button>
-            <Button variant="primary" size="sm" onClick={handleAttachPhoto}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleAttachPhoto}
+              disabled={!selectedImagePreview}
+            >
               Upload Photo Proof
             </Button>
           </>
         }
       >
-        <div className="space-y-3 text-xs">
+        <div className="space-y-3.5 text-xs">
           {photoTargetTask?.photos && photoTargetTask.photos.length > 0 && (
             <div className="space-y-1.5 pb-2 border-b border-border">
               <div className="flex items-center justify-between">
@@ -1182,13 +1238,112 @@ export function TasksPage() {
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label className="block font-medium text-foreground">Photo URL or CDN Resource</label>
-            <Input
-              value={photoInputUrl}
-              onChange={(e) => setPhotoInputUrl(e.target.value)}
-              placeholder="https://..."
+          {/* Device Image Upload Area */}
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-foreground">
+              Upload Inspection Image from Device
+            </label>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleFileSelect(e.target.files[0]);
+                }
+              }}
             />
+
+            {!selectedImagePreview ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                  }
+                }}
+                className="group border-2 border-dashed border-border hover:border-primary/60 bg-muted/20 hover:bg-muted/40 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2"
+              >
+                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <CloudUploadIcon className="size-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">
+                    Click to browse or drag & drop image here
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    PNG, JPG, WEBP, GIF up to 15MB
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="mt-1 gap-1 text-xs"
+                >
+                  <CameraIcon className="size-3.5" />
+                  <span>Choose Image File</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl border border-border bg-card space-y-2.5">
+                <div className="relative rounded-lg overflow-hidden border border-border bg-muted/20 max-h-56 flex items-center justify-center">
+                  <img
+                    src={selectedImagePreview}
+                    alt="Preview"
+                    className="max-h-56 w-full object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleClearSelectedImage}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-background/80 hover:bg-background text-destructive border border-border shadow-md transition-colors cursor-pointer"
+                    data-tooltip="Remove selected image"
+                    aria-label="Remove"
+                  >
+                    <TrashIcon className="size-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
+                  <span className="font-medium text-foreground truncate max-w-[200px]">
+                    {selectedImageFile?.name || 'Selected image'}
+                  </span>
+                  <span>
+                    {selectedImageFile
+                      ? `${(selectedImageFile.size / (1024 * 1024)).toFixed(2)} MB`
+                      : ''}
+                  </span>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs"
+                  >
+                    Change Image
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {imageUploadError && (
+              <p className="text-xs text-destructive font-medium mt-1">
+                {imageUploadError}
+              </p>
+            )}
           </div>
         </div>
       </Modal>

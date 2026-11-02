@@ -281,10 +281,13 @@ export function SidebarItem({
   }, [active, isAnySubActive]);
 
   const handleClick = (e: React.MouseEvent) => {
-    if (hasSubItems) {
-      e.preventDefault();
-      setExpanded((prev) => !prev);
+    if (isCollapsed) {
+      // In collapsed desktop rail mode, clicking MUST always navigate to the item's page!
       if (onClick) onClick();
+      return;
+    }
+    if (hasSubItems) {
+      setExpanded((prev) => !prev);
     } else {
       if (onClick) onClick();
       if (isMobile) setOpenMobile(false);
@@ -299,8 +302,7 @@ export function SidebarItem({
         type="button"
         onClick={handleClick}
         aria-label={label}
-        title={isCollapsed ? label : undefined}
-        className={cn(
+                className={cn(
           'group flex w-full items-center gap-3 rounded-lg text-sm font-medium transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           isCollapsed ? 'h-10 justify-center px-0' : 'min-h-[38px] px-2.5 py-2',
           isCurrentActive
@@ -350,7 +352,7 @@ export function SidebarItem({
       {isCollapsed && (
         <div
           role="tooltip"
-          className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 z-50 hidden rounded-md bg-slate-900 text-white border border-slate-700/60 px-2.5 py-1 text-xs font-semibold shadow-xl whitespace-nowrap group-hover/sidebar-item:flex items-center gap-1.5 animate-fadeIn"
+          className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 z-50 hidden rounded-md bg-popover text-popover-foreground border border-border px-2.5 py-1 text-xs font-medium shadow-md whitespace-nowrap group-hover/sidebar-item:flex items-center gap-1.5 animate-fadeIn"
         >
           <span>{label}</span>
           {badge !== undefined && (

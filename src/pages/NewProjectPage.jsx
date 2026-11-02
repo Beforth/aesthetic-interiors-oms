@@ -269,6 +269,21 @@ export default function NewProjectPage() {
     toast.success(`Sequentially distributed ${phases.length} phases across project duration.`);
   };
 
+  const hasSpreadDates = useMemo(() => {
+    return phases.some((p) => Boolean(p.startDate || p.endDate));
+  }, [phases]);
+
+  const handleClearSpreadDates = () => {
+    setPhases((prev) =>
+      prev.map((p) => ({
+        ...p,
+        startDate: '',
+        endDate: '',
+      }))
+    );
+    toast.info('All spread phase dates cleared.');
+  };
+
   const totalPlannedHours = useMemo(() => {
     return phases.reduce((acc, p) => acc + (Number(p.plannedHours) || 0), 0);
   }, [phases]);
@@ -648,14 +663,28 @@ export default function NewProjectPage() {
           title={<span className="text-sm font-semibold text-foreground">Schedule</span>}
           subtitle="Break the project into sequential or overlapping phases. Team members track time against these."
           headerAction={
-            <button
-              type="button"
-              onClick={handleSpreadDates}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer shadow-2xs whitespace-nowrap shrink-0"
-            >
-              <RefreshIcon className="size-3.5 shrink-0" />
-              <span>Spread Dates</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {hasSpreadDates && (
+                <button
+                  type="button"
+                  onClick={handleClearSpreadDates}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-destructive/30 bg-card hover:bg-destructive/10 text-xs font-semibold text-destructive transition-colors cursor-pointer shadow-2xs whitespace-nowrap shrink-0"
+                  data-tooltip="Clear all spread dates"
+                  aria-label="Clear Dates"
+                >
+                  <TrashIcon className="size-3.5 shrink-0" />
+                  <span>Clear Dates</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleSpreadDates}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer shadow-2xs whitespace-nowrap shrink-0"
+              >
+                <RefreshIcon className="size-3.5 shrink-0" />
+                <span>Spread Dates</span>
+              </button>
+            </div>
           }
         >
           <div className="space-y-4">
