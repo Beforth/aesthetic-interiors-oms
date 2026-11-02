@@ -26,7 +26,7 @@ import OverallProgressGraph from '../components/domain/OverallProgressGraph';
 import HRWorkforceOverview from '../components/domain/HRWorkforceOverview';
 
 export function DashboardPage() {
-  const { currentUser, role } = useAuth();
+  const { currentUser, role, hasPermission } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -271,6 +271,7 @@ export function DashboardPage() {
 
         {/* Header Action Buttons (No Logout button here - logout is located at user avatar icon in topbar) */}
         <div className="flex items-center gap-2.5 flex-wrap self-start md:self-center">
+          {hasPermission('tasks.create') && (
           <button
             type="button"
             onClick={() => setIsTaskModalOpen(true)}
@@ -279,7 +280,9 @@ export function DashboardPage() {
             <Icon name="plus" size={14} />
             <span>Allocate Task</span>
           </button>
+          )}
 
+          {hasPermission('attendance.markOwn') && (
           <Link
             to="/attendance"
             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white transition-colors shadow-2xs cursor-pointer"
@@ -287,7 +290,9 @@ export function DashboardPage() {
             <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
             <span>Mark Attendance</span>
           </Link>
+          )}
 
+          {hasPermission('projects.create') && (
           <Link
             to="/projects"
             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white text-brand-900 hover:bg-brand-50 transition-colors shadow-2xs cursor-pointer"
@@ -295,12 +300,14 @@ export function DashboardPage() {
             <Icon name="plus" size={14} />
             <span>New Site</span>
           </Link>
+          )}
         </div>
       </div>
 
       {/* 3 Fresh Clean Stat Cards - Solid Modern Styling */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Card 1: Active Projects (Brand Indigo) */}
+        {hasPermission('projects.viewAll') && (
         <div className="p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
@@ -320,8 +327,10 @@ export function DashboardPage() {
             {activeProjects.length} live sites • {completedProjects.length} delivered
           </p>
         </div>
+        )}
 
         {/* Card 2: Today's Attendance (Emerald) */}
+        {hasPermission('attendance.viewBoard') && (
         <div className="p-4 rounded-2xl bg-surface border border-border hover:border-emerald-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
@@ -347,8 +356,10 @@ export function DashboardPage() {
             {presentCount} on-duty, {absentCount} absent from attendance muster
           </p>
         </div>
+        )}
 
         {/* Card 3: Upcoming Employee Birthdays (This Month) */}
+        {hasPermission('dashboard.birthdays') && (
         <div className="p-4 rounded-2xl bg-surface border border-border hover:border-pink-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
@@ -387,8 +398,12 @@ export function DashboardPage() {
             )}
           </div>
         </div>
+        )}
+
       </div>
 
+      {hasPermission('projects.viewAll') && (
+      <>
       {/* Main Grid: Left Column (Project Process + Graphs + Tasks), Right Column (Today's Attendance + Operational Notes) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 Cols wide) */}
@@ -456,7 +471,11 @@ export function DashboardPage() {
           />
         </div>
       </div>
+      </>
+      )}
 
+      {hasPermission('dashboard.hrOverview') && (
+      <>
       {/* Workforce & HR Operations (Recent Employees, Total Employees, Leave Applications, Holidays) */}
       <div className="border-t border-border/80 pt-6 space-y-4">
         <div>
@@ -474,6 +493,8 @@ export function DashboardPage() {
           onDataRefresh={loadDashboardData}
         />
       </div>
+      </>
+      )}
 
       {/* Task Allocation Modal Dialog */}
       <TaskAllocationModal

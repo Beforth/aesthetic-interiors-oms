@@ -37,6 +37,7 @@ import EmptyState from '../components/ui/EmptyState';
 import PermissionGate from '../components/ui/PermissionGate';
 import PersonMenu from '../components/dsr/PersonMenu';
 import DsrAttachmentUploader from '../components/dsr/DsrAttachmentUploader';
+import WorkerDsrCards from '../components/dsr/WorkerDsrCards';
 import DsrPhotoLightboxModal from '../components/dsr/DsrPhotoLightboxModal';
 import DsrPhotoActionMenu from '../components/dsr/DsrPhotoActionMenu';
 import { Avatar } from '../components/ui/avatar';
@@ -692,6 +693,7 @@ export function DailyReportsPage() {
             >
               Export CSV
             </Button>
+            {canViewAll && (<>
             <Button
               variant="outline"
               size="sm"
@@ -713,6 +715,7 @@ export function DailyReportsPage() {
                 e.target.value = '';
               }}
             />
+            </>)}
             <PermissionGate permission="dsr.submit">
               <Button
                 variant="primary"
@@ -728,6 +731,14 @@ export function DailyReportsPage() {
       />
 
       {/* Sleek KPI Summary Cards */}
+      {!canViewAll ? (
+        <WorkerDsrCards
+          completed={completedCount}
+          inProgress={inProgressCount}
+          sites={activeSitesCount}
+          total={filtered.length}
+        />
+      ) : (
       <div className="flex flex-wrap items-center gap-3">
         {/* Tasks Completed Card */}
         <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
@@ -789,6 +800,7 @@ export function DailyReportsPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Modern Filter Toolbar Container - Sticky on scroll */}
       <div className="sticky top-0 z-20 rounded-xl border border-border bg-card/95 backdrop-blur-md p-3 shadow-sm space-y-3">

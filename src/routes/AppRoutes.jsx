@@ -7,7 +7,7 @@ import RoleRoute from '../components/layout/RoleRoute';
 import AppShell from '../components/layout/AppShell';
 
 import LoginPage from '../pages/LoginPage';
-import DashboardPage from '../pages/DashboardPage';
+import DashboardPage from '../pages/RoleDashboard';
 import UsersPage from '../pages/UsersPage';
 import NewRolePage from '../pages/NewRolePage';
 import ClientsPage from '../pages/ClientsPage';
@@ -16,12 +16,12 @@ import ProjectsPage from '../pages/ProjectsPage';
 import ProjectDetailPage from '../pages/ProjectDetailPage';
 import NewProjectPage from '../pages/NewProjectPage';
 import AgenciesPage from '../pages/AgenciesPage';
-import AttendancePage from '../pages/AttendancePage';
+import AttendancePage from '../pages/RoleAttendance';
 import TasksPage from '../pages/TasksPage';
 import DailyReportsPage from '../pages/DailyReportsPage';
 import PaymentsPage from '../pages/PaymentsPage';
 import LeavePayslipsPage from '../pages/LeavePayslipsPage';
-import LeaveRequestsPage from '../pages/LeaveRequestsPage';
+import LeaveRequestsPage from '../pages/RoleLeaveRequests';
 import LeaveTypesPage from '../pages/LeaveTypesPage';
 import HolidayListsPage from '../pages/HolidayListsPage';
 import PayslipsPage from '../pages/PayslipsPage';
@@ -171,7 +171,7 @@ export function AppRoutes() {
         <Route
           path="leave/types"
           element={
-            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+            <RoleRoute permissions={['leave.approve', 'attendance.viewBoard']}>
               <LeaveTypesPage />
             </RoleRoute>
           }
@@ -179,7 +179,7 @@ export function AppRoutes() {
         <Route
           path="leave/holidays"
           element={
-            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+            <RoleRoute permissions={['leave.approve', 'attendance.viewBoard']}>
               <HolidayListsPage />
             </RoleRoute>
           }
@@ -187,7 +187,7 @@ export function AppRoutes() {
         <Route
           path="leave/holidays/new"
           element={
-            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+            <RoleRoute permissions={['leave.approve', 'attendance.viewBoard']}>
               <HolidayListsPage />
             </RoleRoute>
           }
@@ -195,7 +195,7 @@ export function AppRoutes() {
         <Route
           path="leave-types"
           element={
-            <RoleRoute permissions={['leave.apply', 'leave.approve', 'attendance.viewBoard']}>
+            <RoleRoute permissions={['leave.approve', 'attendance.viewBoard']}>
               <LeaveTypesPage />
             </RoleRoute>
           }

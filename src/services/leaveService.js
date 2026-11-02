@@ -3,6 +3,9 @@
  * Decoupled from attendance regularization requests.
  */
 
+import { apiClient } from './apiClient';
+import { withBackend } from './serviceMode';
+
 const STORAGE_KEY = 'osm_leave_applications_v2';
 
 export const initialLeaveApplications = [
@@ -138,7 +141,7 @@ function setStored(data) {
   }
 }
 
-export const leaveService = {
+const mockLeaveService = {
   getLeaveRequests() {
     return getStored();
   },
@@ -189,5 +192,73 @@ export const leaveService = {
     return { success: true };
   },
 };
+
+// ----------------------------------------------------------------------------------------------------------------
+// Live (backend) implementation: /api/v1/leave/. The pages read the list synchronously and refresh on the
+// `osm_leave_applications_updated` event, so the live service keeps the last list in memory, returns it at once, and
+// announces the event whenever a fresh list arrives (first read, after every change, and when the tab regains focus).
+// ----------------------------------------------------------------------------------------------------------------
+const LEAVE_URL = '/leave/requests/';
+let cache = [];
+let loaded = false;
+let loading = null;
+let watching = false;
+
+/** What the pages expect: the mock's field names, plus paid/LWP days (the pay rules are not decided yet). */
+function fromApi(row) {
+  return { ...row, paidDays: row.durationDays, lwpDays: 0 };
+}
+
+async function refresh() {
+  const rows = await apiClient.getAll(LEAVE_URL);
+  // a withdrawn request is the person's own business; managers only follow pending and decided ones
+  cache = rows.filter((r) => r.status !== 'withdrawn').map(fromApi);
+  loaded = true;
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('osm_leave_applications_updated', { detail: cache }));
+  return cache;
+}
+
+const liveLeaveService = {
+  getLeaveRequests() {
+    if (typeof window !== 'undefined' && !watching) {
+      watching = true;
+      window.addEventListener('focus', () => refresh().catch(() => {}));
+    }
+    if (!loaded && !loading) {
+      loading = refresh()
+        .catch((err) => console.warn('Could not load leave requests', err))
+        .finally(() => {
+          loading = null;
+        });
+    }
+    return cache;
+  },
+
+  /** Asks for leave for the signed-in person (the server only accepts your own). */
+  async applyLeave(req) {
+    const created = await apiClient.post(LEAVE_URL, {
+      leaveType: req.leaveType,
+      startDate: req.startDate,
+      ...(req.endDate && req.endDate !== req.startDate ? { endDate: req.endDate } : {}),
+      reason: (req.reason || '').trim(),
+    });
+    await refresh();
+    return fromApi(created);
+  },
+
+  async decideLeave(id, decision) {
+    await apiClient.post(`${LEAVE_URL}${id}/${decision === 'approve' ? 'approve' : 'reject'}/`, {});
+    await refresh();
+    return { success: true };
+  },
+
+  async deleteLeave(id) {
+    await apiClient.delete(`${LEAVE_URL}${id}/`);
+    await refresh();
+    return { success: true };
+  },
+};
+
+export const leaveService = withBackend(mockLeaveService, liveLeaveService);
 
 export default leaveService;

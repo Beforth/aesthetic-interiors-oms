@@ -154,6 +154,12 @@ export const SYSTEM_PERMISSIONS = [
     group: 'Task Assignment & Tracking',
   },
   {
+    id: 'tasks.createOwn',
+    label: 'Create Own Tasks',
+    hint: 'Create tasks for yourself only (a site worker)',
+    group: 'Task Assignment & Tracking',
+  },
+  {
     id: 'tasks.viewAll',
     label: 'View All Tasks',
     hint: 'Search, audit, and filter tasks across all assignees (FR-TSK-06)',
@@ -164,6 +170,20 @@ export const SYSTEM_PERMISSIONS = [
     label: 'Update Assigned Tasks',
     hint: 'Update status and upload photo proof of completion (FR-TSK-03, 04)',
     group: 'Task Assignment & Tracking',
+  },
+
+  // --- DASHBOARD ---
+  {
+    id: 'dashboard.birthdays',
+    label: 'Dashboard: Birthdays',
+    hint: 'Show the Birthdays card on the dashboard',
+    group: 'Dashboard',
+  },
+  {
+    id: 'dashboard.hrOverview',
+    label: 'Dashboard: Workforce & HR',
+    hint: 'Show the Workforce and HR section (new joiners, staff, leaves, holidays) on the dashboard',
+    group: 'Dashboard',
   },
 
   // --- MODULE 3.8: DAILY SITE REPORTS (DSR) ---
@@ -319,10 +339,13 @@ export const permissionMatrix = {
 
   // --- MODULE 3.7: TASK ASSIGNMENT & TRACKING ---
   'tasks.create': [A, M, S],
+  'tasks.createOwn': [W],
   'tasks.viewAll': [A, M],
   'tasks.updateOwn': [A, M, S, W],
 
   // --- MODULE 3.8: DAILY SITE REPORTS (DSR) ---
+  'dashboard.birthdays': [A, M],
+  'dashboard.hrOverview': [A, M],
   'dsr.submit': [A, M, S, W],
   'dsr.viewAll': [A, M],
   'dsr.manageClientLink': [A, M],

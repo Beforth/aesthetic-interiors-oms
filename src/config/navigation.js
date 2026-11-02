@@ -92,10 +92,12 @@ export const navigationItems = [
       {
         label: 'Type',
         path: '/leave/types',
+        permission: 'leave.approve',
       },
       {
         label: 'Holiday List',
         path: '/leave/holidays',
+        permission: 'leave.approve',
       },
     ],
   },
@@ -144,15 +146,20 @@ export const navigationItems = [
  */
 export function getNavigationForUser(hasPermission) {
   if (typeof hasPermission !== 'function') return [];
-  return navigationItems.filter((item) => {
-    if (item.permission) {
-      return hasPermission(item.permission);
-    }
-    if (item.permissions && Array.isArray(item.permissions)) {
-      return item.permissions.some((p) => hasPermission(p));
-    }
-    return true;
-  });
+  return navigationItems
+    .filter((item) => {
+      if (item.permission) {
+        return hasPermission(item.permission);
+      }
+      if (item.permissions && Array.isArray(item.permissions)) {
+        return item.permissions.some((p) => hasPermission(p));
+      }
+      return true;
+    })
+    .map((item) =>
+      // sub-items may carry their own permission (for example Leave > Type is only for people who approve leave)
+      item.items ? { ...item, items: item.items.filter((sub) => !sub.permission || hasPermission(sub.permission)) } : item
+    );
 }
 
 /**

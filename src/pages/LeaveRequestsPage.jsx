@@ -137,27 +137,39 @@ export function LeaveRequestsPage() {
     }
   };
 
-  const handleApprove = (id, name) => {
-    leaveService.decideLeave(id, 'approve');
-    toast.success(`Leave request for ${name} approved`);
+  const handleApprove = async (id, name) => {
+    try {
+      await leaveService.decideLeave(id, 'approve');
+      toast.success(`Leave request for ${name} approved`);
+    } catch (err) {
+      toast.error(err.message || 'Could not approve the request');
+    }
     setOpenActionId(null);
   };
 
-  const handleReject = (id, name) => {
-    leaveService.decideLeave(id, 'reject');
-    toast.success(`Leave request for ${name} rejected`);
+  const handleReject = async (id, name) => {
+    try {
+      await leaveService.decideLeave(id, 'reject');
+      toast.success(`Leave request for ${name} rejected`);
+    } catch (err) {
+      toast.error(err.message || 'Could not reject the request');
+    }
     setOpenActionId(null);
   };
 
-  const handleDelete = (id, name) => {
+  const handleDelete = async (id, name) => {
     if (window.confirm(`Are you sure you want to delete leave application for ${name}?`)) {
-      leaveService.deleteLeave(id);
-      toast.success(`Leave application deleted`);
+      try {
+        await leaveService.deleteLeave(id);
+        toast.success(`Leave application deleted`);
+      } catch (err) {
+        toast.error(err.message || 'Could not delete the request');
+      }
       setOpenActionId(null);
     }
   };
 
-  const handleApplySubmit = (e) => {
+  const handleApplySubmit = async (e) => {
     e.preventDefault();
     if (!applyForm.startDate) {
       toast.error('Start date is required');
@@ -176,12 +188,17 @@ export function LeaveRequestsPage() {
     const paid = Number(applyForm.paidDays) || 0;
     const lwp = Number(applyForm.lwpDays) || 0;
 
-    leaveService.applyLeave({
-      ...applyForm,
-      durationDays: diffDays,
-      paidDays: paid,
-      lwpDays: lwp,
-    });
+    try {
+      await leaveService.applyLeave({
+        ...applyForm,
+        durationDays: diffDays,
+        paidDays: paid,
+        lwpDays: lwp,
+      });
+    } catch (err) {
+      toast.error(err.message || 'Could not submit the leave application');
+      return;
+    }
 
     toast.success(`Leave application submitted successfully for ${applyForm.employeeName}`);
     setIsApplyModalOpen(false);
