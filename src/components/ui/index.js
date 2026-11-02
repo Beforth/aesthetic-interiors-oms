@@ -55,3 +55,5 @@ export {
 export { default as SidebarDemo } from './SidebarDemo';
 export { Kanban } from './kanban';
 export { default as KanbanDemo } from './KanbanDemo';
+
+export { TimePicker, formatTo12HourTime, normalizeTo24HourTime } from './TimePicker';

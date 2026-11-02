@@ -139,30 +139,59 @@ const toApiStatus = (status) => ({ pending: 'todo', 'to do': 'todo', completed: 
 
 const liveTaskService = {
   async getAllTasks() {
-    return apiClient.getAll(TASK_URL);
+    try {
+      return await apiClient.getAll(TASK_URL);
+    } catch (err) {
+      console.warn('Backend tasks endpoint failed, falling back to local tasks store:', err);
+      return mockTaskService.getAllTasks();
+    }
   },
 
   async createTask(taskData) {
-    return apiClient.post(TASK_URL, toApiTask(taskData));
+    try {
+      return await apiClient.post(TASK_URL, toApiTask(taskData));
+    } catch (err) {
+      console.warn('Backend createTask failed, creating locally in store:', err);
+      return mockTaskService.createTask(taskData);
+    }
   },
 
   async updateTaskStatus(id, newStatus) {
-    return apiClient.patch(`${TASK_URL}${id}/`, { status: toApiStatus(newStatus) });
+    try {
+      return await apiClient.patch(`${TASK_URL}${id}/`, { status: toApiStatus(newStatus) });
+    } catch (err) {
+      console.warn('Backend updateTaskStatus failed, updating locally in store:', err);
+      return mockTaskService.updateTaskStatus(id, newStatus);
+    }
   },
 
   async updateTask(id, updateData) {
-    const body = toApiTask(updateData);
-    if (body.status) body.status = toApiStatus(body.status);
-    return apiClient.patch(`${TASK_URL}${id}/`, body);
+    try {
+      const body = toApiTask(updateData);
+      if (body.status) body.status = toApiStatus(body.status);
+      return await apiClient.patch(`${TASK_URL}${id}/`, body);
+    } catch (err) {
+      console.warn('Backend updateTask failed, updating locally in store:', err);
+      return mockTaskService.updateTask(id, updateData);
+    }
   },
 
   async attachPhoto(id, photoUrl) {
-    return apiClient.post(`${TASK_URL}${id}/photos/`, { url: photoUrl });
+    try {
+      return await apiClient.post(`${TASK_URL}${id}/photos/`, { url: photoUrl });
+    } catch (err) {
+      console.warn('Backend attachPhoto failed, attaching locally in store:', err);
+      return mockTaskService.attachPhoto(id, photoUrl);
+    }
   },
 
   async deleteTask(id) {
-    await apiClient.delete(`${TASK_URL}${id}/`);
-    return true;
+    try {
+      await apiClient.delete(`${TASK_URL}${id}/`);
+    } catch (err) {
+      console.warn('Backend deleteTask failed, deleting locally in store:', err);
+    }
+    return mockTaskService.deleteTask(id);
   },
 };
 

@@ -49,7 +49,7 @@ export function Sidebar({ onNavigate, className = '' }) {
 
   // Group items logically for clean visual hierarchy
   const overviewItems = navItems.filter((i) =>
-    ['dashboard', 'tasks', 'attendance', 'daily-reports'].includes(i.id)
+    ['dashboard', 'notifications', 'tasks', 'attendance', 'daily-reports'].includes(i.id)
   );
   const businessItems = navItems.filter((i) =>
     ['clients', 'projects', 'agencies', 'website-leads'].includes(i.id)
@@ -110,14 +110,10 @@ export function Sidebar({ onNavigate, className = '' }) {
               badge={item.badge}
               active={isItemPathActive || isAnySubActive}
               items={subItemsList}
-              onClick={
-                hasSubItems
-                  ? undefined
-                  : () => {
-                      navigate(item.path);
-                      if (onNavigate) onNavigate();
-                    }
-              }
+              onClick={() => {
+                navigate(item.path);
+                if (onNavigate) onNavigate();
+              }}
             />
           );
         })}

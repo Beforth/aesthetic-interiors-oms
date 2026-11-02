@@ -239,7 +239,7 @@ export function LeaveRequestsPage() {
         <button
           type="button"
           onClick={() => setIsApplyModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-colors shadow-2xs cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer self-start sm:self-auto"
         >
           <PlusIcon className="size-3.5" />
           <span>Apply for Leave</span>
@@ -807,7 +807,7 @@ export function LeaveRequestsPage() {
               <button
                 type="button"
                 onClick={() => setSelectedLeaveDetails(null)}
-                className="px-5 py-2 text-xs font-semibold rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-colors cursor-pointer shadow-2xs"
+                className="px-5 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-2xs"
               >
                 Close
               </button>
