@@ -14,6 +14,8 @@ import {
   CalendarIcon,
   CalendarDaysIcon,
   TrashIcon,
+  EditIcon,
+  BadgeCheckIcon,
   SaveIcon,
   BoxIcon,
   SearchIcon,
@@ -63,6 +65,9 @@ export function HolidayListsPage() {
   // Quick single custom holiday adder
   const [customDate, setCustomDate] = useState('');
   const [customName, setCustomName] = useState('');
+  const [editingRow, setEditingRow] = useState(null);
+  const [editingRowName, setEditingRowName] = useState('');
+  const [editingRowIsWorking, setEditingRowIsWorking] = useState(false);
   const [tableSearch, setTableSearch] = useState('');
 
   // Auto reload when local storage changes
@@ -246,6 +251,65 @@ export function HolidayListsPage() {
     setCustomName('');
   };
 
+  // Toggle Work ON / Weekly Off for a specific day (e.g. employee works on Sunday)
+  const handleToggleWorkDay = (id) => {
+    setBuilderHolidays((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const willBeWorking = !item.isWorkingDay;
+        const currentName = item.name || '';
+        let newName = currentName;
+        if (willBeWorking) {
+          if (!currentName.includes('Work ON')) {
+            newName = currentName.replace(' (Weekly Off)', '') + ' (Work ON)';
+          }
+        } else {
+          newName = currentName.replace(' (Work ON)', '').replace(' (Work ON - Overridden)', '') + ' (Weekly Off)';
+        }
+        return {
+          ...item,
+          isWorkingDay: willBeWorking,
+          status: willBeWorking ? 'ON' : 'WEEKLY_OFF',
+          name: newName,
+        };
+      })
+    );
+
+    const target = builderHolidays.find((h) => h.id === id);
+    if (target) {
+      if (!target.isWorkingDay) {
+        toast.success(`${target.dayOfWeek || 'Day'} (${formatDateDisplay(target.date)}) marked as Work ON (Employees will work)`);
+      } else {
+        toast.info(`${target.dayOfWeek || 'Day'} (${formatDateDisplay(target.date)}) reverted to Weekly Off`);
+      }
+    }
+  };
+
+  // Open modal to edit single schedule row
+  const handleOpenEditRowModal = (item) => {
+    setEditingRow(item);
+    setEditingRowName(item.name || '');
+    setEditingRowIsWorking(!!item.isWorkingDay);
+  };
+
+  // Save row edit
+  const handleSaveRowEdit = () => {
+    if (!editingRow) return;
+    setBuilderHolidays((prev) =>
+      prev.map((item) => {
+        if (item.id !== editingRow.id) return item;
+        return {
+          ...item,
+          name: editingRowName.trim() || item.name,
+          isWorkingDay: editingRowIsWorking,
+          status: editingRowIsWorking ? 'ON' : (item.type === 'weekly_off' ? 'WEEKLY_OFF' : 'OFF'),
+        };
+      })
+    );
+    toast.success('Schedule entry updated successfully');
+    setEditingRow(null);
+  };
+
   // Remove single row from builder
   const handleRemoveBuilderRow = (id) => {
     setBuilderHolidays((prev) => prev.filter((h) => h.id !== id));
@@ -404,7 +468,7 @@ export function HolidayListsPage() {
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full h-9 px-3 text-xs rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
                 />
               </div>
 
@@ -416,7 +480,7 @@ export function HolidayListsPage() {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full h-9 px-3 text-xs rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
                 />
               </div>
 
@@ -474,7 +538,7 @@ export function HolidayListsPage() {
                   type="date"
                   value={customDate}
                   onChange={(e) => setCustomDate(e.target.value)}
-                  className="h-8.5 px-2.5 text-xs rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono cursor-pointer"
+                  className="h-8.5 px-2.5 text-xs rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer"
                   title="Pick custom holiday date"
                   data-tooltip="Pick holiday date"
                 />
@@ -751,13 +815,13 @@ export function HolidayListsPage() {
                           </td>
 
                           {/* Valid Period */}
-                          <td className="py-3 px-4 font-mono text-muted-foreground whitespace-nowrap">
+                          <td className="py-3 px-4 font-medium text-muted-foreground whitespace-nowrap">
                             {formatDateDisplay(list.fromDate)} — {formatDateDisplay(list.toDate)}
                           </td>
 
                           {/* Total Holidays / Days */}
                           <td className="py-3 px-4 whitespace-nowrap">
-                            <span className="font-mono font-bold text-foreground inline-flex items-center gap-1">
+                            <span className="font-semibold text-foreground inline-flex items-center gap-1">
                               {list.totalHolidays || list.holidays?.length || 0} Days
                             </span>
                           </td>

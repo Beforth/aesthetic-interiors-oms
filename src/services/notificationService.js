@@ -395,6 +395,40 @@ export function addAnnouncement({ title, description, category = 'announcements'
   return newRecord;
 }
 
+
+/**
+ * Generic helper to add a system or attendance notification
+ */
+export function addNotification({ title, description, category = 'attendance', badge = 'Notice', badgeVariant = 'default', path = '/attendance', userId = null }) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const hours = now.getHours();
+  const isPM = hours >= 12;
+  const h12 = hours % 12 || 12;
+  const timeStr = `${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()}, ${pad(h12)}:${pad(now.getMinutes())} ${isPM ? 'pm' : 'am'}`;
+
+  const newRecord = {
+    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    title: title.trim(),
+    category,
+    permission: 'notifications.attendance',
+    badge,
+    badgeVariant,
+    description: description.trim(),
+    time: timeStr,
+    timestamp: now.getTime(),
+    unread: true,
+    path,
+    userId,
+  };
+
+  const list = getStoredNotifications();
+  const updated = [newRecord, ...list];
+  saveNotifications(updated);
+  return newRecord;
+}
+
 export const notificationService = {
   getStoredNotifications,
   getVisibleNotifications,
@@ -404,6 +438,7 @@ export const notificationService = {
   deleteNotifications,
   deleteAllNotifications,
   addAnnouncement,
+  addNotification,
   EVENT_NAME,
 };
 

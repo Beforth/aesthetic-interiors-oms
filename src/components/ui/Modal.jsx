@@ -9,6 +9,7 @@ export function Modal({
   onClose,
   title,
   subtitle,
+  badge,
   size = 'md',
   children,
   footer,
@@ -58,12 +59,13 @@ export function Modal({
 
       {/* Modal Dialog Content */}
       <div
-        className={`relative w-full ${sizeClasses[size] || sizeClasses.md} bg-card text-card-foreground border border-border rounded-xl shadow-2xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150 my-auto ${className}`}
+        className={`relative w-full ${sizeClasses[size] || sizeClasses.md} max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3.5rem)] flex flex-col bg-card text-card-foreground border border-border rounded-xl shadow-2xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150 my-auto ${className}`}
       >
         {/* Header */}
-        {(title || subtitle) && (
-          <div className="flex items-start justify-between px-5 py-4 border-b border-border/80 bg-muted/20">
+        {(title || subtitle || badge) && (
+          <div className="flex items-start justify-between px-5 py-3.5 sm:py-4 border-b border-border/80 bg-muted/20 shrink-0">
             <div>
+              {badge && <div className="mb-1.5">{badge}</div>}
               {title && (
                 <h2 id="modal-title" className="text-base font-semibold tracking-tight text-text-main">
                   {title}
@@ -84,11 +86,11 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className={`p-5 max-h-[calc(90vh-70px)] overflow-y-auto ${bodyClassName}`}>{children}</div>
+        <div className={`p-5 flex-1 min-h-0 overflow-y-auto ${bodyClassName}`}>{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border/80 bg-muted/20">
+          <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-border/80 bg-muted/20 shrink-0">
             {footer}
           </div>
         )}

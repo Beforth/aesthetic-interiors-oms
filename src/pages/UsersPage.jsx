@@ -10,6 +10,16 @@ import { useToast } from '../context/ToastContext';
 import { formatDate } from '../utils/formatters';
 import { validatePhone, sanitizePhone, validateEmail, validateRequired, validatePassword } from '../utils/validators';
 
+export function formatDobToPassword(dob) {
+  if (!dob) return '';
+  const clean = String(dob).trim();
+  const ymd = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    return `${ymd[3]}-${ymd[2]}-${ymd[1]}`;
+  }
+  return clean;
+}
+
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Tabs from '../components/ui/Tabs';

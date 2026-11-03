@@ -889,6 +889,25 @@ export function AttendancePage({ defaultTab }) {
     );
   };
 
+  const handleOpenOfficeSettings = () => {
+    setOfficeForm({
+      name: officeLocation.name || 'Head Office',
+      lat: officeLocation.lat,
+      lng: officeLocation.lng,
+      radiusMeters: officeLocation.radiusMeters,
+      officeStartTime: officeLocation.officeStartTime || '10:00',
+      officeEndTime: officeLocation.officeEndTime || '18:30',
+      lunchStartTime: officeLocation.lunchStartTime || '13:00',
+      lunchEndTime: officeLocation.lunchEndTime || '14:00',
+      gracePeriodMinutes: officeLocation.gracePeriodMinutes ?? 15,
+      halfDayStart: officeLocation.halfDayStart || officeLocation.firstHalfEnd || '10:30',
+      halfDayEnd: officeLocation.halfDayEnd || officeLocation.secondHalfStart || '14:00',
+      firstHalfEnd: officeLocation.halfDayStart || officeLocation.firstHalfEnd || '10:30',
+      secondHalfStart: officeLocation.halfDayEnd || officeLocation.secondHalfStart || '14:00',
+    });
+    setIsOfficeSettingsOpen(true);
+  };
+
   const handleSaveOfficeSettings = async (e) => {
     if (e) e.preventDefault();
     const nameErr = validateRequired(officeForm.name, 'Office name', 3);
@@ -1315,7 +1334,7 @@ export function AttendancePage({ defaultTab }) {
               variant="outline"
               size="sm"
               leadingIcon="settings"
-              onClick={() => setIsOfficeSettingsOpen(true)}
+              onClick={handleOpenOfficeSettings}
             >
               Office Settings
             </Button>
@@ -2067,20 +2086,26 @@ export function AttendancePage({ defaultTab }) {
       <Modal
         isOpen={isOfficeSettingsOpen}
         onClose={() => setIsOfficeSettingsOpen(false)}
-        title="Office Location Settings"
+        badge={
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border border-success/30 bg-success/10 text-success">
+            <ShieldIcon className="size-3 text-success" />
+            <span>Office Geofence ({officeForm.radiusMeters || 0}m)</span>
+          </span>
+        }
+        title="Office Settings"
         size="lg"
-        bodyClassName="p-6 max-h-[92vh] overflow-y-visible"
+        bodyClassName="p-6"
       >
         <form onSubmit={handleSaveOfficeSettings} className="space-y-4 text-xs">
           {/* Office Name / Project Site Dropdown */}
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
               Office / Project Site Name
             </label>
             <select
               value={officeForm.name}
               onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })}
-              className="w-full px-3 py-2 border-2 border-emerald-500/80 rounded-lg text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-card cursor-pointer"
+              className="w-full h-9 px-3 border border-border rounded-lg text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary bg-background cursor-pointer text-xs"
             >
               <option value="Main Office (BeForth Nashik)">Main Office (BeForth Nashik)</option>
               <option value="Head Office">Head Office</option>
@@ -2098,14 +2123,11 @@ export function AttendancePage({ defaultTab }) {
                   <option value={officeForm.name}>{officeForm.name}</option>
                 )}
             </select>
-            <p className="text-[11px] text-muted-foreground">
-              Select an active project site or headquarters for GPS geofenced attendance.
-            </p>
           </div>
 
           {/* Latitude & Longitude */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Latitude
               </label>
@@ -2114,10 +2136,10 @@ export function AttendancePage({ defaultTab }) {
                 step="any"
                 value={officeForm.lat}
                 onChange={(e) => setOfficeForm({ ...officeForm, lat: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-card"
+                className="w-full h-9 px-3 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-background text-xs"
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Longitude
               </label>
@@ -2126,33 +2148,23 @@ export function AttendancePage({ defaultTab }) {
                 step="any"
                 value={officeForm.lng}
                 onChange={(e) => setOfficeForm({ ...officeForm, lng: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-card"
+                className="w-full h-9 px-3 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-background text-xs"
               />
             </div>
           </div>
 
-          {/* Use My Current Location Button (Screenshot 3) */}
-          <div>
-            <button
-              type="button"
-              onClick={handleUseCurrentLocationForOffice}
-              className="w-full py-2.5 px-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-semibold border border-primary/20 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
-            >
-              <NavigationIcon className="size-4 text-primary" />
-              <span>Use My Current Location (saves immediately)</span>
-            </button>
-            <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-              Do this while standing at the office, on a phone if possible. A computer can save the wrong pin (often ~2 km off). Staff then pull-to-refresh the app.
-            </p>
-          </div>
-
-          {/* Geo-Fence Radius Slider & Input (Screenshot 3) */}
+          {/* Geo-Fence Radius Slider & Input */}
           <div className="space-y-2 pt-2 border-t border-border">
-            <div className="flex items-center justify-between">
-              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Geo-Fence Radius
-              </label>
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Geo-Fence Radius
+                </label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Type an exact value in the box for a tight fence (e.g. 1m or 2m), or drag to adjust.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
                 <input
                   type="number"
                   min="0"
@@ -2165,7 +2177,7 @@ export function AttendancePage({ defaultTab }) {
                       radiusMeters: val === '' ? '' : parseInt(val, 10) || 0,
                     });
                   }}
-                  className="w-20 px-2 py-1 text-center font-bold text-sm border border-border rounded-lg text-foreground bg-card"
+                  className="w-20 h-8 px-2 text-center font-bold text-xs border border-border rounded-lg text-foreground bg-background"
                   placeholder="0"
                 />
                 <span className="text-xs text-muted-foreground font-medium">m</span>
@@ -2185,51 +2197,164 @@ export function AttendancePage({ defaultTab }) {
                   radiusMeters: val === '' ? '' : parseInt(val, 10) || 0,
                 });
               }}
-              className="w-full accent-emerald-600 cursor-pointer"
+              className="w-full accent-primary cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
               <span>0m</span>
               <span>5000m</span>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Type an exact value in the box for a tight fence (e.g. 1m or 2m), or drag to adjust.
-            </p>
           </div>
 
-          {/* Info callout matching Screenshot 3 */}
-          <div className="p-3 rounded-xl bg-muted/50 border border-border text-[11px] text-muted-foreground leading-relaxed">
-            Employees must be within <strong className="text-foreground">{officeForm.radiusMeters || 0}m</strong> of{' '}
-            <strong className="text-foreground">{officeForm.name}</strong> to punch in/out. Admins and managers can override this for manual attendance marking.
+          {/* Shift Timing & Attendance Policies */}
+          <div className="pt-3 border-t border-border space-y-3">
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+              Shift Timing & Attendance Policies
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Office Timing */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-border bg-card">
+                <label className="block text-[11px] font-bold text-foreground">
+                  Office Timing
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground font-medium block mb-1">Start Time</span>
+                    <input
+                      type="time"
+                      value={officeForm.officeStartTime}
+                      onChange={(e) => setOfficeForm({ ...officeForm, officeStartTime: e.target.value })}
+                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground font-medium block mb-1">End Time</span>
+                    <input
+                      type="time"
+                      value={officeForm.officeEndTime}
+                      onChange={(e) => setOfficeForm({ ...officeForm, officeEndTime: e.target.value })}
+                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Lunch Time */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-border bg-card">
+                <label className="block text-[11px] font-bold text-foreground">
+                  Lunch Time
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground font-medium block mb-1">Lunch Start</span>
+                    <input
+                      type="time"
+                      value={officeForm.lunchStartTime}
+                      onChange={(e) => setOfficeForm({ ...officeForm, lunchStartTime: e.target.value })}
+                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground font-medium block mb-1">Lunch End</span>
+                    <input
+                      type="time"
+                      value={officeForm.lunchEndTime}
+                      onChange={(e) => setOfficeForm({ ...officeForm, lunchEndTime: e.target.value })}
+                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Grace Period */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-border bg-card">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-foreground">
+                    Grace Period
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">Late punch buffer</span>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={officeForm.gracePeriodMinutes}
+                    onChange={(e) =>
+                      setOfficeForm({
+                        ...officeForm,
+                        gracePeriodMinutes: e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0,
+                      })
+                    }
+                    className="w-20 h-8 px-2 text-center text-xs font-bold rounded-md bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <span className="text-xs text-muted-foreground font-medium">minutes</span>
+                </div>
+              </div>
+
+              {/* Half Day (First half, Second half) */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-border bg-card">
+                <label className="block text-[11px] font-bold text-foreground">
+                  Half Day
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground font-medium block mb-1">Start</span>
+                    <input
+                      type="time"
+                      value={officeForm.halfDayStart || officeForm.firstHalfEnd || '10:30'}
+                      onChange={(e) => setOfficeForm({ ...officeForm, halfDayStart: e.target.value, firstHalfEnd: e.target.value })}
+                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      data-tooltip="Half day start time"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground font-medium block mb-1">End</span>
+                    <input
+                      type="time"
+                      value={officeForm.halfDayEnd || officeForm.secondHalfStart || '14:00'}
+                      onChange={(e) => setOfficeForm({ ...officeForm, halfDayEnd: e.target.value, secondHalfStart: e.target.value })}
+                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      data-tooltip="Half day end time"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Geofence status indicator */}
-          <div className="flex items-center justify-between pt-1">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-              <ShieldIcon className="size-3.5 text-emerald-700 dark:text-emerald-400" />
-              <span>Office Geofence Enforcement ({officeForm.radiusMeters || 0}m)</span>
-            </span>
-            
-          </div>
-
-          {/* Footer Buttons (Screenshot 3) */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsOfficeSettingsOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <CheckIcon className="size-3.5 mr-1" />
-              <span>Save Settings</span>
-            </Button>
+          {/* Footer Buttons with moved "Use Current Location" button placed near flex items-center justify-end gap-2 pt-4 border-t border-border at right side */}
+          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-card border-t border-border z-20 flex items-center justify-end gap-2 shadow-xs">
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleUseCurrentLocationForOffice}
+                className="gap-1.5 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10"
+                data-tooltip="Pin office GPS to device location"
+              >
+                <NavigationIcon className="size-3.5 text-primary" />
+                <span>Use Current Location</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsOfficeSettingsOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="gap-1.5"
+              >
+                <CheckIcon className="size-3.5" />
+                <span>Save Settings</span>
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>

@@ -96,6 +96,22 @@ export const navigationItems = [
     ],
   },
   {
+    id: 'expenses',
+    label: 'Expenses',
+    path: '/expenses',
+    icon: 'receipt',
+    permissions: ['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn'],
+    roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
+  },
+  {
+    id: 'incentives',
+    label: 'Incentives',
+    path: '/incentives',
+    icon: 'incentives',
+    permissions: ['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn'],
+    roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
+  },
+  {
     id: 'leave',
     label: 'Leave',
     path: '/leave',

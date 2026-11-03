@@ -25,6 +25,8 @@ import LeaveRequestsPage from '../pages/RoleLeaveRequests';
 import LeaveTypesPage from '../pages/LeaveTypesPage';
 import HolidayListsPage from '../pages/HolidayListsPage';
 import PayslipsPage from '../pages/PayslipsPage';
+import IncentivesPage from '../pages/IncentivesPage';
+import ExpensesPage from '../pages/ExpensesPage';
 import ReportsPage from '../pages/ReportsPage';
 import NotificationsPage from '../pages/NotificationsPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
@@ -214,9 +216,28 @@ export function AppRoutes() {
           }
         />
 
-        {/* Payslips Route */}
+        {/* Expenses Route */}
         <Route
-          path="payslips"
+          path="expenses"
+          element={
+            <RoleRoute permissions={['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn']}>
+              <ExpensesPage />
+            </RoleRoute>
+          }
+        />
+        <Route path="finance/expenses" element={<Navigate to="/expenses" replace />} />
+
+        {/* Payslips Route */}
+                <Route
+          path="incentives"
+          element={
+            <RoleRoute permissions={['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn']}>
+              <IncentivesPage />
+            </RoleRoute>
+          }
+        />
+        <Route path="finance/incentives" element={<Navigate to="/incentives" replace />} />
+        <Route path="payslips"
           element={
             <RoleRoute permissions={['payslips.viewOwn', 'leave.approve']}>
               <PayslipsPage />

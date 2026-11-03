@@ -12,7 +12,11 @@ import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
 import { SidebarTrigger } from '../ui/sidebar';
 import TaskAllocationModal from '../common/TaskAllocationModal';
-import { XIcon, CheckIcon, TrashIcon } from '../ui/icons';
+import { XIcon, CheckIcon, TrashIcon, LockIcon, EyeIcon, EyeOffIcon } from '../ui/icons';
+import Modal from '../ui/Modal';
+import Input from '../ui/Input';
+import Button from '../ui/Button';
+import { useToast } from '../../context/ToastContext';
 import { useNotifications } from '../../hooks/useNotifications';
 
 /**
@@ -75,6 +79,48 @@ export function Topbar({ onToggleMobileMenu }) {
 
   // Task Allocation modal state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+
+  // Change Password Modal States
+  const toast = useToast();
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [passwordErrors, setPasswordErrors] = useState({});
+
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    const errs = {};
+    if (!passwordForm.newPassword || passwordForm.newPassword.length < 8) {
+      errs.newPassword = 'Password must be at least 8 characters long';
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      errs.confirmPassword = 'Passwords do not match';
+    }
+    if (Object.keys(errs).length > 0) {
+      setPasswordErrors(errs);
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      await userService.updateUser(currentUser.id, { password: passwordForm.newPassword });
+      toast.success('Your password has been changed successfully!');
+      setIsChangePasswordOpen(false);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordErrors({});
+    } catch (err) {
+      toast.error(err.message || 'Failed to update password');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   // Global search state
   const [searchQuery, setSearchQuery] = useState('');

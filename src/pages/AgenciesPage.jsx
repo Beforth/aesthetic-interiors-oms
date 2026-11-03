@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
 
 import PageHeader from '../components/ui/PageHeader';
+import StarRating from '../components/ui/StarRating';
 import DataToolbar from '../components/ui/DataToolbar';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
