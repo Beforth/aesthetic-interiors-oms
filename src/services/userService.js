@@ -1,3 +1,14 @@
+
+export function formatDobToPassword(dob) {
+  if (!dob) return '';
+  const clean = String(dob).trim();
+  const ymd = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    return `${ymd[3]}-${ymd[2]}-${ymd[1]}`;
+  }
+  return clean;
+}
+
 import { apiClient, USER_KEY } from './apiClient';
 import { isDebug } from '../config/env';
 import { getPermissionsForRole } from '../config/permissions';
@@ -162,7 +173,7 @@ const baseUserService = {
         name: userData.name,
         email: userData.email,
         username: userData.username || userData.email.split('@')[0],
-        password: userData.password || 'demo123',
+        password: userData.password || (userData.birthday || userData.birthdate ? formatDobToPassword(userData.birthday || userData.birthdate) : 'demo123'),
         phone: userData.phone || '',
         role: userData.role || 'worker',
         title: userData.title || 'Staff Member',

@@ -303,6 +303,8 @@ export function DailyReportsPage() {
   });
   const [deletingPhoto, setDeletingPhoto] = useState(null); // { entry, photo }
   const detailFileInputRef = useRef(null);
+  const detailPhotoInputRef = useRef(null);
+  const detailPdfInputRef = useRef(null);
   const tableUploadInputRef = useRef(null);
   const dsrImportInputRef = useRef(null);
   const [selectedUploadTarget, setSelectedUploadTarget] = useState(null);

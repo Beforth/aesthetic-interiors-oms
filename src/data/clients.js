@@ -8,6 +8,8 @@ export const mockClients = [
     notes: 'Villa client; demands highest quality smoked oak veneer and imported Italian marble finishes.',
     type: 'new',
     userId: 'u5',
+    siteType: 'Residential',
+    areaSqFt: 3800,
     createdAt: '2024-04-10',
   },
   {
@@ -18,6 +20,8 @@ export const mockClients = [
     address: 'B-304, Prestige Ferns, Sector 2, HSR Layout, Bengaluru',
     notes: 'Repeat client; trusted Aesthetic Interiors for both residential apartment (P2) and design studio (P4).',
     type: 'old',
+    siteType: 'Residential',
+    areaSqFt: 2200,
     createdAt: '2023-05-15',
   },
   {
@@ -29,6 +33,8 @@ export const mockClients = [
     notes: 'Penthouse renovation client; customized acoustic ceiling and double-glazed fluted glass partitions.',
     type: 'new',
     userId: 'u5',
+    siteType: 'Residential',
+    areaSqFt: 4500,
     createdAt: '2024-05-20',
   },
   {
@@ -39,6 +45,8 @@ export const mockClients = [
     address: '88, 3rd Block, Koramangala, Bengaluru',
     notes: 'Old client; clinic renovation completed in 2024; retained for ongoing property maintenance.',
     type: 'old',
+    siteType: 'Commercial',
+    areaSqFt: 1850,
     createdAt: '2023-08-10',
   },
   {
@@ -49,6 +57,8 @@ export const mockClients = [
     address: 'Villa 14, Palm Meadows, Whitefield, Bengaluru',
     notes: 'New luxury villa inquiry; architectural 3D drawings approved; awaiting possession certificate.',
     type: 'new',
+    siteType: 'Villa / Farmhouse',
+    areaSqFt: 5200,
     createdAt: '2024-08-14',
   },
   {
@@ -59,6 +69,8 @@ export const mockClients = [
     address: '102, 4th Cross, Malleshwaram, Bengaluru',
     notes: 'Old commercial client; past office space fit-out delivered on time with zero defect snags.',
     type: 'old',
+    siteType: 'Commercial',
+    areaSqFt: 6400,
     createdAt: '2023-11-01',
   },
 ];

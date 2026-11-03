@@ -1,3 +1,4 @@
+import { addNotification } from './notificationService';
 import { apiClient } from './apiClient';
 import { withBackend } from './serviceMode';
 import {
@@ -31,6 +32,93 @@ export function cleanLocationName(str) {
     .replace(/neom[ea]d/gi, 'Head Office')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+
+/**
+ * Parses a time string (12-hour AM/PM, 24-hour, or ISO) into total minutes from midnight.
+ */
+export function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  if (timeStr instanceof Date) {
+    return timeStr.getHours() * 60 + timeStr.getMinutes();
+  }
+  const s = String(timeStr).trim();
+  if (s.includes('T')) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
+  }
+  const m12 = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (m12) {
+    let hours = parseInt(m12[1], 10);
+    const mins = parseInt(m12[2], 10);
+    const meridiem = m12[3].toUpperCase();
+    if (meridiem === 'PM' && hours < 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + mins;
+  }
+  const m24 = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m24) {
+    const hours = parseInt(m24[1], 10);
+    const mins = parseInt(m24[2], 10);
+    return hours * 60 + mins;
+  }
+  return null;
+}
+
+/**
+ * Calculates attendance status based on office timing:
+ * - <= 10:00: On time (present)
+ * - 10:00 to 10:15: Grace period (present, isGrace: true)
+ * - 10:15 to 10:30: Late with penalty (late, penalty: true)
+ * - > 10:30: Half Day (half-day, penalty: true)
+ */
+export function calculateAttendanceStatus(checkInTime, officeSettings = {}) {
+  const mins = parseTimeToMinutes(checkInTime);
+  if (mins === null) return { status: 'present', penalty: false, isGrace: false };
+
+  // Office start time, default 10:00 AM (600 mins)
+  const officeStartMins = parseTimeToMinutes(officeSettings.officeStartTime || '10:00') ?? 600;
+  const graceMins = Number(officeSettings.gracePeriodMinutes ?? 15); // e.g. 15 mins -> 10:15 (615 mins)
+  const graceCutoff = officeStartMins + graceMins; // 615 mins (10:15)
+  const penaltyCutoff = graceCutoff + 15; // 630 mins (10:30)
+
+  if (mins <= officeStartMins) {
+    return {
+      status: 'present',
+      penalty: false,
+      isGrace: false,
+      message: 'On Time',
+    };
+  }
+
+  if (mins <= graceCutoff) {
+    return {
+      status: 'present',
+      penalty: false,
+      isGrace: true,
+      message: 'Grace period (10:00 AM – 10:15 AM)',
+    };
+  }
+
+  if (mins <= penaltyCutoff) {
+    const lateMinutes = mins - officeStartMins;
+    return {
+      status: 'late',
+      penalty: true,
+      penaltyAmount: 100,
+      lateMinutes,
+      message: 'Late arrival between 10:15 AM and 10:30 AM. Penalty applies.',
+    };
+  }
+
+  return {
+    status: 'half-day',
+    penalty: true,
+    penaltyAmount: 250,
+    lateMinutes: mins - officeStartMins,
+    message: 'Checked in after 10:30 AM. Marked as Half Day.',
+  };
 }
 
 export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -214,6 +302,13 @@ const mockAttendanceService = {
         lng: Number(settings.lng ?? current.lng),
         radiusMeters: Number(settings.radiusMeters ?? current.radiusMeters),
         geofenceMode: settings.geofenceMode || (settings.radiusMeters === 0 ? 'anywhere' : 'office'),
+        officeStartTime: settings.officeStartTime || current.officeStartTime || '09:30',
+        officeEndTime: settings.officeEndTime || current.officeEndTime || '18:30',
+        lunchStartTime: settings.lunchStartTime || current.lunchStartTime || '13:00',
+        lunchEndTime: settings.lunchEndTime || current.lunchEndTime || '14:00',
+        gracePeriodMinutes: settings.gracePeriodMinutes !== undefined ? Number(settings.gracePeriodMinutes) : (current.gracePeriodMinutes ?? 15),
+        firstHalfEnd: settings.firstHalfEnd || current.firstHalfEnd || '13:30',
+        secondHalfStart: settings.secondHalfStart || current.secondHalfStart || '14:00',
       };
       saveOfficeLocation(updated);
       return updated;
@@ -803,6 +898,13 @@ function toApiOffice(settings) {
   if (settings.lng !== undefined) body.lng = Number(settings.lng);
   if (settings.radiusMeters !== undefined) body.radiusMeters = Number(settings.radiusMeters);
   if (settings.geofenceMode) body.geofenceMode = settings.geofenceMode;
+  if (settings.officeStartTime) body.officeStartTime = settings.officeStartTime;
+  if (settings.officeEndTime) body.officeEndTime = settings.officeEndTime;
+  if (settings.lunchStartTime) body.lunchStartTime = settings.lunchStartTime;
+  if (settings.lunchEndTime) body.lunchEndTime = settings.lunchEndTime;
+  if (settings.gracePeriodMinutes !== undefined) body.gracePeriodMinutes = Number(settings.gracePeriodMinutes);
+  if (settings.firstHalfEnd) body.firstHalfEnd = settings.firstHalfEnd;
+  if (settings.secondHalfStart) body.secondHalfStart = settings.secondHalfStart;
   return body;
 }
 

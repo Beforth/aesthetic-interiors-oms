@@ -22,9 +22,17 @@ function getStoredClients() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((c) => {
+        const defaultTypes = ['Residential', 'Commercial', 'Residential', 'Commercial', 'Villa / Farmhouse', 'Industrial'];
+        const defaultAreas = [3800, 2200, 4500, 1850, 5200, 3200];
+        return parsed.map((c, idx) => {
           const t = c.type || c.status || 'new';
-          return { ...c, type: t, status: t };
+          return {
+            ...c,
+            type: t,
+            status: t,
+            siteType: c.siteType || defaultTypes[idx % defaultTypes.length] || 'Residential',
+            areaSqFt: c.areaSqFt || defaultAreas[idx % defaultAreas.length] || 2400,
+          };
         });
       }
     }
@@ -34,7 +42,13 @@ function getStoredClients() {
   if (mockClients && mockClients.length > 0) {
     const initialized = mockClients.map((c) => {
       const t = c.type || c.status || 'new';
-      return { ...c, type: t, status: t };
+      return {
+        ...c,
+        type: t,
+        status: t,
+        siteType: c.siteType || 'Residential',
+        areaSqFt: c.areaSqFt || 2400,
+      };
     });
     saveClients(initialized);
     return initialized;

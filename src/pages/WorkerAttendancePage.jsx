@@ -330,6 +330,49 @@ export function WorkerAttendancePage() {
         }
       />
 
+      {/* Late / Penalty / Half Day Individual Notice */}
+      {checkedIn && todayRecord?.status === 'late' && (
+        <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive flex items-start gap-3 animate-in fade-in slide-in-from-top-1 duration-300">
+          <AlertCircleIcon className="size-5 shrink-0 mt-0.5 text-destructive" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-destructive">
+              Late Arrival Notice: Penalty Applied
+            </p>
+            <p className="text-xs text-destructive/90 leading-relaxed">
+              You checked in at <strong className="font-mono">{formatIndianTime(todayRecord.checkInTime)}</strong> (after the 10:15 AM grace cutoff). You have been marked <strong>Late</strong> and a late penalty applies.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {checkedIn && todayRecord?.status === 'half-day' && (
+        <div className="p-4 rounded-xl border border-warning/30 bg-warning/10 text-warning flex items-start gap-3 animate-in fade-in slide-in-from-top-1 duration-300">
+          <AlertIcon className="size-5 shrink-0 mt-0.5 text-warning" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-warning">
+              Half Day Marked
+            </p>
+            <p className="text-xs text-warning/90 leading-relaxed">
+              You checked in at <strong className="font-mono">{formatIndianTime(todayRecord.checkInTime)}</strong> (after 10:30 AM). Your attendance for today has been recorded as <strong>Half Day</strong>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {checkedIn && todayRecord?.isGrace && (
+        <div className="p-4 rounded-xl border border-info/30 bg-info/10 text-info flex items-start gap-3 animate-in fade-in slide-in-from-top-1 duration-300">
+          <ClockIcon className="size-5 shrink-0 mt-0.5 text-info" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-info">
+              Grace Period Arrival
+            </p>
+            <p className="text-xs text-info/90 leading-relaxed">
+              You checked in at <strong className="font-mono">{formatIndianTime(todayRecord.checkInTime)}</strong> within the 15-minute grace period (10:00 AM – 10:15 AM). No penalty applied.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Today at a glance: the first thing the worker sees on this page */}
       <div className="p-5 rounded-xl bg-card border border-border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
         <div className="flex items-center gap-5 sm:gap-8 flex-wrap">

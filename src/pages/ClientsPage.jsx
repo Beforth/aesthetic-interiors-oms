@@ -149,6 +149,7 @@ export function ClientsPage() {
         (c.phone && c.phone.includes(query)) ||
         (c.address && c.address.toLowerCase().includes(query)) ||
         (c.email && c.email.toLowerCase().includes(query)) ||
+        (c.siteType && c.siteType.toLowerCase().includes(query)) ||
         (c.notes && c.notes.toLowerCase().includes(query));
 
       // Status / Type filter

@@ -10,7 +10,14 @@ export const mockOfficeLocation = {
   lat: 19.967048,
   lng: 73.754104,
   radiusMeters: 500,
-  geofenceMode: 'office', // 'office' | 'anywhere'
+  geofenceMode: 'office',
+  officeStartTime: '10:00',
+  officeEndTime: '18:30',
+  lunchStartTime: '13:00',
+  lunchEndTime: '14:00',
+  gracePeriodMinutes: 15,
+  halfDayStart: '10:30', firstHalfEnd: '10:30',
+  halfDayEnd: '14:00', secondHalfStart: '14:00',
 };
 
 export const mockGeofenceSites = [
