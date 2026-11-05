@@ -821,7 +821,6 @@ export function ClientsPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingClient ? `Edit Client: ${editingClient.name}` : 'Add New Client'}
-        subtitle="Manage client contact records, residential site address, and account status"
         footer={
           <>
             <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
@@ -839,7 +838,6 @@ export function ClientsPage() {
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e.g. Priya Sharma"
             error={formErrors.name}
           />
 
@@ -860,9 +858,7 @@ export function ClientsPage() {
                   }));
                 }
               }}
-              placeholder="10-digit mobile (e.g. 9845012345)"
               error={formErrors.phone}
-              helperText="Only 10 digits allowed"
             />
 
             <Input
@@ -879,9 +875,7 @@ export function ClientsPage() {
                   }));
                 }
               }}
-              placeholder="e.g. client@example.com"
               error={formErrors.email}
-              helperText="Must include @ and valid domain"
             />
           </div>
 
@@ -900,7 +894,6 @@ export function ClientsPage() {
             rows={2}
             value={formData.address}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-            placeholder="e.g. Plot 42, 12th Main, HAL 2nd Stage, Indiranagar, Bengaluru"
           />
 
           <Textarea
@@ -908,7 +901,6 @@ export function ClientsPage() {
             rows={2}
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            placeholder="Special client preferences, design themes, material choices..."
           />
 
           {!editingClient && (
@@ -990,10 +982,8 @@ export function ClientsPage() {
                   <Input
                     label="Quotation Amount (₹)"
                     type="number"
-                    placeholder="e.g. 1500000"
                     value={formData.quotation}
                     onChange={(e) => setFormData({ ...formData, quotation: e.target.value })}
-                    helperText="Contract value or approved quotation"
                   />
                 </div>
               )}
@@ -1004,7 +994,6 @@ export function ClientsPage() {
                   <Input
                     label="Project Name"
                     required
-                    placeholder="e.g. Indiranagar 4BHK Luxury Villa"
                     value={formData.newProjectName}
                     onChange={(e) => {
                       setFormData({ ...formData, newProjectName: e.target.value });
@@ -1018,10 +1007,8 @@ export function ClientsPage() {
                   <Input
                     label="Quotation / Total Cost (₹)"
                     type="number"
-                    placeholder="e.g. 2500000"
                     value={formData.quotation}
                     onChange={(e) => setFormData({ ...formData, quotation: e.target.value })}
-                    helperText="Project budget or finalized quotation value"
                   />
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

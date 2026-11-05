@@ -283,6 +283,8 @@ export function AttendancePage({ defaultTab }) {
   const [requestSortOrder, setRequestSortOrder] = useState('desc'); // 'desc' (newest first) | 'asc'
   const [selectedViewRequest, setSelectedViewRequest] = useState(null);
   const [requestTypeFilter, setRequestTypeFilter] = useState('ALL');
+  const [requestCurrentPage, setRequestCurrentPage] = useState(1);
+  const requestPageSize = 10;
 
   const [recordPendingDelete, setRecordPendingDelete] = useState(null);
   const [deleteRecordLoading, setDeleteRecordLoading] = useState(false);
@@ -429,6 +431,18 @@ export function AttendancePage({ defaultTab }) {
       return requestSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
     });
   }, [filteredRequests, requestSortOrder]);
+
+  // Pagination for attendance requests (10 per page)
+  const paginatedRequests = useMemo(() => {
+    const start = (requestCurrentPage - 1) * requestPageSize;
+    return sortedRequests.slice(start, start + requestPageSize);
+  }, [sortedRequests, requestCurrentPage, requestPageSize]);
+
+  const requestTotalPages = Math.ceil(sortedRequests.length / requestPageSize) || 1;
+
+  useEffect(() => {
+    setRequestCurrentPage(1);
+  }, [requestSearch, requestStatusFilter, requestFromDate, requestToDate, requestTypeFilter, requestSortOrder]);
 
   const hasActiveRequestFilters = Boolean(
     requestSearch.trim() ||
@@ -1965,7 +1979,7 @@ export function AttendancePage({ defaultTab }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {sortedRequests.length === 0 ? (
+                  {paginatedRequests.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="p-12 text-center text-muted-foreground">
                         <div className="flex flex-col items-center justify-center">
@@ -1982,7 +1996,7 @@ export function AttendancePage({ defaultTab }) {
                       </td>
                     </tr>
                   ) : (
-                    sortedRequests.map((req) => {
+                    paginatedRequests.map((req) => {
                       const isPending = (req.status || '').toLowerCase() === 'pending';
                       const isApproved = (req.status || '').toLowerCase() === 'approved';
                       const isRejected = (req.status || '').toLowerCase() === 'rejected';
@@ -2078,6 +2092,36 @@ export function AttendancePage({ defaultTab }) {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls for Requests */}
+            {sortedRequests.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 py-2.5 bg-card border border-border rounded-xl mt-3">
+                <span className="text-xs text-muted-foreground">
+                  Showing <strong className="text-foreground">{(requestCurrentPage - 1) * requestPageSize + (paginatedRequests.length > 0 ? 1 : 0)}</strong> to <strong className="text-foreground">{Math.min(requestCurrentPage * requestPageSize, sortedRequests.length)}</strong> of <strong className="text-foreground">{sortedRequests.length}</strong> requests
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={requestCurrentPage <= 1}
+                    onClick={() => setRequestCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    ‹ Previous
+                  </Button>
+                  <span className="text-xs font-semibold px-2 text-foreground font-mono">
+                    {requestCurrentPage} / {requestTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={requestCurrentPage >= requestTotalPages}
+                    onClick={() => setRequestCurrentPage((p) => Math.min(requestTotalPages, p + 1))}
+                  >
+                    Next ›
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}

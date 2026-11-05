@@ -271,14 +271,17 @@ export function SidebarItem({
   const hasSubItems = items && items.length > 0;
   const isAnySubActive = hasSubItems && items.some((it) => it.active);
 
-  // Auto-expand submenu if any sub-item is active
+  // Auto-expand submenu if any sub-item is active on mount
   const [expanded, setExpanded] = React.useState<boolean>(() => Boolean(active || isAnySubActive));
 
+  // Auto-expand when navigating into a sub-item from outside
+  const prevActiveRef = React.useRef(isAnySubActive);
   React.useEffect(() => {
-    if (active || isAnySubActive) {
+    if (isAnySubActive && !prevActiveRef.current) {
       setExpanded(true);
     }
-  }, [active, isAnySubActive]);
+    prevActiveRef.current = isAnySubActive;
+  }, [isAnySubActive]);
 
   const handleClick = (e: React.MouseEvent) => {
     if (isCollapsed) {
@@ -287,7 +290,12 @@ export function SidebarItem({
       return;
     }
     if (hasSubItems) {
-      setExpanded((prev) => !prev);
+      const nextExpanded = !expanded;
+      setExpanded(nextExpanded);
+      // If opening and not already on one of its sub-routes, navigate to primary default path
+      if (nextExpanded && onClick && !isAnySubActive) {
+        onClick();
+      }
     } else {
       if (onClick) onClick();
       if (isMobile) setOpenMobile(false);

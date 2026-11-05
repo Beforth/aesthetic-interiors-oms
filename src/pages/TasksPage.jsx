@@ -85,7 +85,7 @@ export function TasksPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    projectId: 'P1',
+    projectId: '',
     assignedToIds: [],
     type: 'on-site',
     priority: 'medium',
@@ -115,12 +115,12 @@ export function TasksPage() {
       setProjects(Array.isArray(allProjects) ? allProjects : []);
       setUsers(Array.isArray(allUsers) ? allUsers : []);
       if (Array.isArray(allProjects) && allProjects.length > 0) {
+        const firstNumeric = allProjects.find((p) => /^\d+$/.test(String(p?.id ?? '')));
         setFormData((prev) => ({
           ...prev,
-          // keep the choice only while it is still a real project (the first form value may be a mock id)
-          projectId: allProjects.some((p) => String(p.id) === String(prev.projectId))
+          projectId: allProjects.some((p) => String(p.id) === String(prev.projectId) && /^\d+$/.test(String(p.id)))
             ? prev.projectId
-            : String(allProjects[0]?.id ?? ''),
+            : (firstNumeric ? String(firstNumeric.id) : (allProjects[0]?.id && /^\d+$/.test(String(allProjects[0].id)) ? String(allProjects[0].id) : '')),
         }));
       }
     } catch (e) {
@@ -309,7 +309,8 @@ export function TasksPage() {
     const handleCreateTask = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const titleErr = validateRequired(formData.title, 'Task Title', 2);
-    const projErr = validateRequired(formData.projectId, 'Assigned Project');
+    const hasNumericProj = formData.projectId && /^\d+$/.test(String(formData.projectId).trim());
+    const projErr = !hasNumericProj ? 'Please select a valid project' : null;
     const assigneesErr =
       !formData.assignedToIds || formData.assignedToIds.length === 0
         ? 'Please select at least one assignee'
@@ -355,10 +356,11 @@ export function TasksPage() {
 
       toast.success(`Task "${formData.title}" created successfully`);
       setIsModalOpen(false);
+      const defaultProj = projects.find((p) => /^\d+$/.test(String(p?.id ?? ''))) || projects[0];
       setFormData({
         title: '',
         description: '',
-        projectId: projects[0]?.id || 'P1',
+        projectId: defaultProj?.id && /^\d+$/.test(String(defaultProj.id)) ? String(defaultProj.id) : '',
         assignedToIds: [],
         type: 'on-site',
         priority: 'medium',
@@ -366,7 +368,7 @@ export function TasksPage() {
       });
       loadData();
     } catch (err) {
-      toast.error('Failed to create task');
+      toast.error(err.message || 'Failed to create task');
     } finally {
       setCreatingTask(false);
     }
@@ -375,10 +377,11 @@ export function TasksPage() {
 
   const handleOpenCreateModal = () => {
     setFormErrors({});
+    const defaultProj = projects.find((p) => /^\d+$/.test(String(p?.id ?? ''))) || projects[0];
     setFormData({
       title: '',
       description: '',
-      projectId: projects[0]?.id || 'P1',
+      projectId: defaultProj?.id && /^\d+$/.test(String(defaultProj.id)) ? String(defaultProj.id) : '',
       assignedToIds: [],
       type: 'on-site',
       priority: 'medium',
@@ -529,7 +532,7 @@ export function TasksPage() {
     } catch (err) {
       toast.error('Failed to attach photo');
     }
-  };
+  };
 
   return (
     <div className="space-y-4">
@@ -728,6 +731,7 @@ export function TasksPage() {
             onChange={handleBoardChange}
             density={cardDensity}
             columnClassName="w-80 sm:w-96 md:flex-1 shrink-0"
+            getCardClassName={() => 'border-foreground/25 hover:border-foreground/45 shadow-xs'}
             onAdd={canCreate ? handleOpenCreateModal : undefined}
             renderCard={(t) => {
               const assigneesList = Array.isArray(t.assignedToNames) && t.assignedToNames.length > 0
@@ -1106,6 +1110,7 @@ export function TasksPage() {
             <Select
               label="Assigned Project"
               required
+              placeholder="Select project..."
               error={formErrors.projectId}
               value={formData.projectId}
               onChange={(e) => {
