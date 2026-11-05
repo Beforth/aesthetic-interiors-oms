@@ -169,6 +169,14 @@ export function AppRoutes() {
             </RoleRoute>
           }
         />
+        <Route
+          path="payments/settings"
+          element={
+            <RoleRoute permissions={['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage']}>
+              <PaymentsPage mode="settings" />
+            </RoleRoute>
+          }
+        />
 
         {/* Full Notifications & Updates Page */}
         <Route path="notifications" element={<NotificationsPage />} />
@@ -186,7 +194,7 @@ export function AppRoutes() {
         <Route
           path="leave/types"
           element={
-            <RoleRoute permissions={['leave.approve', 'attendance.viewBoard']}>
+            <RoleRoute permissions={['attendance.markOwn', 'attendance.viewBoard', 'leave.apply', 'leave.approve']}>
               <LeaveTypesPage />
             </RoleRoute>
           }
@@ -194,7 +202,7 @@ export function AppRoutes() {
         <Route
           path="leave/holidays"
           element={
-            <RoleRoute permissions={['leave.approve', 'attendance.viewBoard']}>
+            <RoleRoute permissions={['attendance.markOwn', 'attendance.viewBoard', 'leave.apply', 'leave.approve']}>
               <HolidayListsPage />
             </RoleRoute>
           }
@@ -216,16 +224,25 @@ export function AppRoutes() {
           }
         />
 
-        {/* Expenses Route */}
+        {/* Expenses Routes */}
+        <Route path="expenses" element={<Navigate to="/expenses/claims" replace />} />
         <Route
-          path="expenses"
+          path="expenses/claims"
           element={
             <RoleRoute permissions={['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn']}>
-              <ExpensesPage />
+              <ExpensesPage mode="claims" />
             </RoleRoute>
           }
         />
-        <Route path="finance/expenses" element={<Navigate to="/expenses" replace />} />
+        <Route
+          path="expenses/advances"
+          element={
+            <RoleRoute permissions={['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn']}>
+              <ExpensesPage mode="advances" />
+            </RoleRoute>
+          }
+        />
+        <Route path="finance/expenses" element={<Navigate to="/expenses/claims" replace />} />
 
         {/* Payslips Route */}
                 <Route
@@ -237,13 +254,18 @@ export function AppRoutes() {
           }
         />
         <Route path="finance/incentives" element={<Navigate to="/incentives" replace />} />
-        <Route path="payslips"
+        {/* Payroll / Payslips Routes */}
+        <Route
+          path="payroll"
           element={
             <RoleRoute permissions={['payslips.viewOwn', 'leave.approve']}>
               <PayslipsPage />
             </RoleRoute>
           }
         />
+        <Route path="payslips" element={<Navigate to="/payroll" replace />} />
+        <Route path="finance/payroll" element={<Navigate to="/payroll" replace />} />
+        <Route path="finance/payslips" element={<Navigate to="/payroll" replace />} />
 
         {/* 9. Leave & Payslips Legacy Fallback */}
         <Route

@@ -149,7 +149,7 @@ export function Kanban<T extends { id: string }>({
                       onDragEnd={() => { setDragId(null); setOver(null); }}
                       onKeyDown={(e) => onKey(e, it.id, ci, ri)}
                       className={cn(
-                        'cursor-grab rounded-lg border bg-card text-[13px] shadow-2xs outline-none transition-[opacity,box-shadow,background-color,border-color] active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring/40',
+                        'cursor-grab rounded-lg border border-foreground/20 hover:border-foreground/35 bg-card text-[13px] shadow-2xs outline-none transition-[opacity,box-shadow,background-color,border-color] active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring/40',
                         density === 'compact' ? 'p-2' : 'p-3',
                         getCardClassName?.(it),
                         moving && 'opacity-40'

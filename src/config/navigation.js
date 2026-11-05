@@ -93,15 +93,29 @@ export const navigationItems = [
         label: 'Pay',
         path: '/payments/pay',
       },
+      {
+        label: 'Settings',
+        path: '/payments/settings',
+      },
     ],
   },
   {
     id: 'expenses',
     label: 'Expenses',
-    path: '/expenses',
+    path: '/expenses/claims',
     icon: 'receipt',
     permissions: ['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn'],
     roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
+    items: [
+      {
+        label: 'Business Claims',
+        path: '/expenses/claims',
+      },
+      {
+        label: 'Salary Advances',
+        path: '/expenses/advances',
+      },
+    ],
   },
   {
     id: 'incentives',
@@ -114,7 +128,7 @@ export const navigationItems = [
   {
     id: 'leave',
     label: 'Leave',
-    path: '/leave',
+    path: '/leave/requests',
     icon: 'leave',
     permissions: ['leave.apply', 'leave.approve', 'attendance.viewBoard'],
     roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
@@ -126,19 +140,17 @@ export const navigationItems = [
       {
         label: 'Type',
         path: '/leave/types',
-        permission: 'leave.approve',
       },
       {
         label: 'Holiday List',
         path: '/leave/holidays',
-        permission: 'leave.approve',
       },
     ],
   },
   {
-    id: 'payslips',
-    label: 'Payslips',
-    path: '/payslips',
+    id: 'payroll',
+    label: 'Payroll',
+    path: '/payroll',
     icon: 'leave-payslips',
     permissions: ['payslips.viewOwn', 'leave.approve'],
     roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],

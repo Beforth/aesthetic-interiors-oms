@@ -228,40 +228,48 @@ export default function NewProjectPage() {
       return;
     }
 
-    const start = new Date(formData.startDate);
-    const end = new Date(formData.endDate);
-    const diffMs = end.getTime() - start.getTime();
+    const [sY, sM, sD] = formData.startDate.split('-').map(Number);
+    const [eY, eM, eD] = formData.endDate.split('-').map(Number);
+    const startUtc = new Date(Date.UTC(sY, sM - 1, sD));
+    const endUtc = new Date(Date.UTC(eY, eM - 1, eD));
+    const diffMs = endUtc.getTime() - startUtc.getTime();
     const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays <= 0) {
-      toast.error('Project End Date must be after Start Date to calculate phases.');
+    if (diffDays < 0) {
+      toast.error('Project End Date must be on or after Start Date to calculate phases.');
       return;
     }
 
     if (phases.length === 0) return;
 
-    const daysPerPhase = Math.max(1, Math.floor(diffDays / phases.length));
-    let runningDate = new Date(start);
+    const numPhases = phases.length;
+
+    const toYMD = (date) => {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
+    const addDays = (baseUtc, days) => {
+      const res = new Date(baseUtc.getTime());
+      res.setUTCDate(res.getUTCDate() + days);
+      return res;
+    };
 
     const updated = phases.map((phase, idx) => {
-      const pStart = new Date(runningDate);
-      let pEnd;
+      const startOffset = Math.round((idx * diffDays) / numPhases);
+      const endOffset = idx === numPhases - 1
+        ? diffDays
+        : Math.round(((idx + 1) * diffDays) / numPhases);
 
-      if (idx === phases.length - 1) {
-        pEnd = new Date(end);
-      } else {
-        pEnd = new Date(pStart);
-        pEnd.setDate(pEnd.getDate() + daysPerPhase);
-      }
-
-      // Next phase starts next day
-      runningDate = new Date(pEnd);
-      runningDate.setDate(runningDate.getDate() + 1);
+      const pStart = addDays(startUtc, startOffset);
+      const pEnd = addDays(startUtc, endOffset);
 
       return {
         ...phase,
-        startDate: pStart.toISOString().split('T')[0],
-        endDate: pEnd.toISOString().split('T')[0],
+        startDate: toYMD(pStart),
+        endDate: toYMD(pEnd),
       };
     });
 

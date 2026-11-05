@@ -1098,20 +1098,15 @@ const liveAttendanceService = {
   },
 
   async punchAttendance({ user, coordinates, action = 'check-in' }) {
-    try {
-      const record = await apiClient.post(`${BASE}/punch/`, {
-        action,
-        punch_type: action === 'check-out' ? 'out' : 'in',
-        punchType: action === 'check-out' ? 'out' : 'in',
-        latitude: coordinates?.lat,
-        longitude: coordinates?.lng,
-        accuracy: coordinates?.accuracy ?? undefined,
-      });
-      return fromApiRecord(record);
-    } catch (liveErr) {
-      console.warn('Backend punch failed, falling back to local storage:', liveErr);
-      return mockAttendanceService.punchAttendance({ user, coordinates, action });
-    }
+    const record = await apiClient.post(`${BASE}/punch/`, {
+      action,
+      punch_type: action === 'check-out' ? 'out' : 'in',
+      punchType: action === 'check-out' ? 'out' : 'in',
+      latitude: coordinates?.lat,
+      longitude: coordinates?.lng,
+      accuracy: coordinates?.accuracy ?? undefined,
+    });
+    return fromApiRecord(record);
   },
 
   async deleteAttendanceRecord(id) {

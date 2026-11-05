@@ -128,7 +128,10 @@ function toApiTask(data) {
     if (data[key] !== undefined) body[key] = data[key];
   });
   if (data.dueDate !== undefined) body.dueDate = data.dueDate || null;
-  if (data.projectId !== undefined) body.projectId = data.projectId ? String(data.projectId) : null;
+  if (data.projectId !== undefined) {
+    const raw = String(data.projectId ?? '').trim();
+    body.projectId = /^\d+$/.test(raw) ? Number(raw) : null;
+  }
   const ids = data.assignedToIds ?? (data.assignedToId ? [data.assignedToId] : undefined);
   if (ids !== undefined) body.assignedToIds = ids.map(Number).filter((n) => Number.isFinite(n));
   return body;
@@ -148,12 +151,7 @@ const liveTaskService = {
   },
 
   async createTask(taskData) {
-    try {
-      return await apiClient.post(TASK_URL, toApiTask(taskData));
-    } catch (err) {
-      console.warn('Backend createTask failed, creating locally in store:', err);
-      return mockTaskService.createTask(taskData);
-    }
+    return await apiClient.post(TASK_URL, toApiTask(taskData));
   },
 
   async updateTaskStatus(id, newStatus) {

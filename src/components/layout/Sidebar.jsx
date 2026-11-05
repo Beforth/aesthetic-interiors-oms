@@ -55,7 +55,7 @@ export function Sidebar({ onNavigate, className = '' }) {
     ['clients', 'projects', 'agencies', 'website-leads'].includes(i.id)
   );
   const financeItems = navItems.filter((i) =>
-    ['payments', 'expenses', 'incentives', 'leave', 'payslips', 'leave-payslips', 'reports'].includes(i.id)
+    ['payments', 'expenses', 'incentives', 'leave', 'payroll', 'payslips', 'leave-payslips', 'reports'].includes(i.id)
   );
   const settingsItems = navItems.filter((i) =>
     ['settings'].includes(i.id)

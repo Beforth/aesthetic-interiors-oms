@@ -432,7 +432,7 @@ export function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedClientId, setSelectedClientId] = useState('ALL');
-  const [sortBy, setSortBy] = useState('due_asc');
+  const [sortBy, setSortBy] = useState('newest');
 
   // Hover Popover State (matching the user's reference screenshot)
   const [hoveredCardId, setHoveredCardId] = useState(null);
@@ -541,6 +541,9 @@ export function ProjectsPage() {
 
     // 4. Sorting
     list.sort((a, b) => {
+      if (sortBy === 'newest') {
+        return 0;
+      }
       if (sortBy === 'due_asc') {
         const dateA = parseDateSafe(a.endDate || a.dueDate) || new Date(9999, 11, 31);
         const dateB = parseDateSafe(b.endDate || b.dueDate) || new Date(9999, 11, 31);
@@ -588,14 +591,14 @@ export function ProjectsPage() {
     search.trim() ||
     selectedClientId !== 'ALL' ||
     statusFilter !== 'ALL' ||
-    sortBy !== 'due_asc'
+    sortBy !== 'newest'
   );
 
   const handleClearFilters = () => {
     setSearch('');
     setSelectedClientId('ALL');
     setStatusFilter('ALL');
-    setSortBy('due_asc');
+    setSortBy('newest');
   };
 
   // Card Mouse Hover Handlers (Fluid 180ms debounce matching the screenshot)
@@ -821,6 +824,7 @@ export function ProjectsPage() {
                 onChange={(e) => setSortBy(e.target.value)}
                 className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground shadow-2xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
               >
+                <option value="newest">Newest First</option>
                 <option value="due_asc">Due Date</option>
                 <option value="name_asc">Project Name (A-Z)</option>
                 <option value="cost_desc">Budget (High to Low)</option>
