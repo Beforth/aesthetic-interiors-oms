@@ -16,14 +16,6 @@ export const navigationItems = [
     bottomNavPriority: 1,
   },
   {
-    id: 'notifications',
-    label: 'Notifications',
-    path: '/notifications',
-    icon: 'bell',
-    permissions: ['tasks.updateOwn', 'attendance.markOwn', 'tasks.viewAll'],
-    roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER, ROLES.CLIENT],
-  },
-  {
     id: 'clients',
     label: 'Clients',
     path: '/clients',
@@ -155,6 +147,22 @@ export const navigationItems = [
     permissions: ['payslips.viewOwn', 'leave.approve'],
     roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
     bottomNavPriority: 5,
+  },
+  {
+    id: 'approvals',
+    label: 'Approvals',
+    path: '/approvals',
+    icon: 'shield',
+    permission: 'approvals.view',
+    roles: permissionMatrix['approvals.view'],
+  },
+  {
+    id: 'estimates',
+    label: 'Estimates',
+    path: '/estimates',
+    icon: 'file-text',
+    permission: 'estimates.manage',
+    roles: permissionMatrix['estimates.manage'],
   },
   {
     id: 'reports',

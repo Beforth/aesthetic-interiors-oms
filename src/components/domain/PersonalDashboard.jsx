@@ -86,11 +86,13 @@ function StatCard({ label, value, note, Icon, to }) {
       to={to}
       className="group block rounded-2xl border border-border bg-card p-4 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
     >
-      <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <Icon className="size-[18px]" />
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-2xl font-extrabold leading-tight tracking-tight text-primary">{value}</div>
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:size-3.5">
+          <Icon />
+        </div>
       </div>
-      <div className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-primary">{value}</div>
-      <div className="mt-0.5 text-xs font-semibold text-text-main">{label}</div>
+      <div className="mt-2 text-xs font-semibold text-text-main">{label}</div>
       <p className="mt-0.5 truncate text-[11px] text-text-muted">{note}</p>
     </Link>
   );

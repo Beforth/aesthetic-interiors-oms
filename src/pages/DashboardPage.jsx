@@ -1,21 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ROLE_LABELS } from '../config/roles';
 import { projectService } from '../services/projectService';
-import { taskService } from '../services/taskService';
 import { attendanceService } from '../services/attendanceService';
 import { userService } from '../services/userService';
 import { dashboardService } from '../services/dashboardService';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 import { calculateProgress } from '../utils/progress';
-import { useToast } from '../context/ToastContext';
 import { cn } from '../lib/utils';
 import { mockUsers } from '../data/users';
 
-import ProgressBar from '../components/ui/ProgressBar';
 import Icon from '../components/ui/Icon';
-import StatusBadge from '../components/ui/StatusBadge';
 import Button from '../components/ui/Button';
 import { Avatar } from '../components/ui/avatar';
 import Modal from '../components/ui/Modal';
@@ -25,13 +20,13 @@ import { Building2Icon, CalendarCheckIcon, CakeIcon } from '../components/ui/ico
 import OverallProgressGraph from '../components/domain/OverallProgressGraph';
 import HRWorkforceOverview from '../components/domain/HRWorkforceOverview';
 
+const HEADER_ACTION_CLASS =
+  'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors shadow-2xs cursor-pointer';
+
 export function DashboardPage() {
   const { currentUser, role, hasPermission } = useAuth();
   const navigate = useNavigate();
-  const toast = useToast();
-
   const [projects, setProjects] = useState([]);
-  const [tasks, setTasks] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [users, setUsers] = useState(mockUsers);
   const [loading, setLoading] = useState(true);
@@ -41,15 +36,13 @@ export function DashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const [projList, taskList, attList, userList, summary] = await Promise.all([
+      const [projList, attList, userList, summary] = await Promise.all([
         projectService.getAllProjects(currentUser),
-        taskService.getAllTasks(),
         attendanceService.getTodayAttendance(),
         userService.getAllUsers(),
         dashboardService.getSummary().catch(() => null),
       ]);
       setProjects(projList || []);
-      setTasks(taskList || []);
       setAttendance(attList || []);
       // Merge birthdays from summary or user profile
       const birthdays = new Map((summary?.birthdays || []).map((b) => [String(b.userId), b.birthday]));
@@ -101,18 +94,6 @@ export function DashboardPage() {
     };
   }, []);
 
-  // Quick toggle task status
-  const handleToggleTaskStatus = async (taskId, currentStatus) => {
-    const nextStatus = currentStatus === 'done' ? 'in progress' : 'done';
-    try {
-      await taskService.updateTask(taskId, { status: nextStatus });
-      toast.success(nextStatus === 'done' ? 'Task marked as completed!' : 'Task moved to in progress');
-      loadDashboardData();
-    } catch (e) {
-      toast.error('Failed to update task');
-    }
-  };
-
   // Metric computations
   const activeProjects = useMemo(() => {
     return projects.filter((p) => p.status !== 'completed' && p.status !== 'done');
@@ -121,14 +102,6 @@ export function DashboardPage() {
   const completedProjects = useMemo(() => {
     return projects.filter((p) => p.status === 'completed' || p.status === 'done');
   }, [projects]);
-
-  const totalContractValuation = useMemo(() => {
-    return activeProjects.reduce((acc, p) => acc + (p.totalCost || p.budget || 0), 0);
-  }, [activeProjects]);
-
-  const pendingTasks = useMemo(() => {
-    return tasks.filter((t) => t.status !== 'done');
-  }, [tasks]);
 
   const totalStaffCount = useMemo(() => {
     return attendance.length > 0 ? attendance.length : users.filter((u) => u.role !== 'client').length;
@@ -145,8 +118,6 @@ export function DashboardPage() {
   const absentCount = useMemo(() => {
     return Math.max(0, totalStaffCount - presentCount);
   }, [totalStaffCount, presentCount]);
-
-  const onDutyPercentage = totalStaffCount > 0 ? Math.round((presentCount / totalStaffCount) * 100) : 0;
 
   const currentMonth = new Date().getMonth();
   const currentMonthName = new Date().toLocaleString('en-US', { month: 'long' });
@@ -275,7 +246,7 @@ export function DashboardPage() {
           <button
             type="button"
             onClick={() => setIsTaskModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-brand-800 hover:bg-brand-700 text-white border border-brand-700 transition-colors shadow-2xs cursor-pointer"
+            className={HEADER_ACTION_CLASS}
           >
             <Icon name="plus" size={14} />
             <span>Allocate Task</span>
@@ -285,9 +256,9 @@ export function DashboardPage() {
           {hasPermission('attendance.markOwn') && (
           <Link
             to="/attendance"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white transition-colors shadow-2xs cursor-pointer"
+            className={HEADER_ACTION_CLASS}
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
+            <span className="size-2 rounded-full bg-success animate-pulse" />
             <span>Mark Attendance</span>
           </Link>
           )}
@@ -295,7 +266,7 @@ export function DashboardPage() {
           {hasPermission('projects.create') && (
           <Link
             to="/projects"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white text-brand-900 hover:bg-brand-50 transition-colors shadow-2xs cursor-pointer"
+            className={HEADER_ACTION_CLASS}
           >
             <Icon name="plus" size={14} />
             <span>New Site</span>
@@ -308,7 +279,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Card 1: Active Projects (Brand Indigo) */}
         {hasPermission('projects.viewAll') && (
-        <div className="p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all">
+        <div className="flex flex-col p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
               Total Projects
@@ -319,11 +290,8 @@ export function DashboardPage() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black text-text-main">{projects.length}</span>
-            <span className="text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-1.5 py-0.5 rounded-full">
-              {activeProjects.length} Active
-            </span>
           </div>
-          <p className="text-[11px] text-text-muted mt-1 truncate">
+          <p className="text-[11px] text-text-muted mt-auto pt-1 truncate">
             {activeProjects.length} live sites • {completedProjects.length} delivered
           </p>
         </div>
@@ -331,7 +299,7 @@ export function DashboardPage() {
 
         {/* Card 2: Today's Attendance (Emerald) */}
         {hasPermission('attendance.viewBoard') && (
-        <div className="p-4 rounded-2xl bg-surface border border-border hover:border-emerald-300 shadow-2xs transition-all">
+        <div className="flex flex-col p-4 rounded-2xl bg-surface border border-border hover:border-emerald-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
               Today's Attendance
@@ -341,26 +309,18 @@ export function DashboardPage() {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">{presentCount} Present</span>
-            <span className="text-xs text-text-muted font-medium">/ {totalStaffCount} Staff</span>
-            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
-              onDutyPercentage >= 80
-                ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-                : 'text-amber-700 bg-amber-50 border border-amber-200'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${onDutyPercentage >= 80 ? 'bg-emerald-600' : 'bg-amber-600'} animate-pulse`} />
-              {onDutyPercentage}% On-Duty
-            </span>
+            <span className="text-2xl font-black text-text-main">{presentCount}</span>
+            <span className="text-xs text-text-muted font-medium">Present / {totalStaffCount} Staff</span>
           </div>
-          <p className="text-[11px] text-text-muted mt-1 truncate">
-            {presentCount} on-duty, {absentCount} absent from attendance muster
+          <p className="text-[11px] text-text-muted mt-auto pt-1 truncate">
+            {absentCount} absent from attendance muster
           </p>
         </div>
         )}
 
-        {/* Card 3: Upcoming Employee Birthdays (This Month) */}
+        {/* Card 3: Upcoming Employee Birthdays */}
         {hasPermission('dashboard.birthdays') && (
-        <div className="p-4 rounded-2xl bg-surface border border-border hover:border-pink-300 shadow-2xs transition-all">
+        <div className="flex flex-col p-4 rounded-2xl bg-surface border border-border hover:border-pink-300 shadow-2xs transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
               Birthdays ({currentMonthName})
@@ -373,11 +333,8 @@ export function DashboardPage() {
             <span className="text-2xl font-black text-text-main">
               {monthlyBirthdays.length}
             </span>
-            <span className="text-xs font-semibold text-pink-700 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-full">
-              This Month
-            </span>
           </div>
-          <div className="mt-1 text-[11px] text-text-muted truncate">
+          <div className="mt-auto pt-1 text-[11px] text-text-muted truncate">
             {monthlyBirthdays.length > 0 ? (
               <div className="flex items-center gap-1.5 truncate">
                 <span className="font-semibold text-text-main truncate">
@@ -413,11 +370,8 @@ export function DashboardPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-3">
               <div>
                 <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
+                  <span className="size-2.5 rounded-full bg-primary" />
                   <span>Project Tracker</span>
-                  <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
-                    {activeProjects.length} Live Sites
-                  </span>
                 </h3>
                 <p className="text-xs text-text-muted mt-0.5">
                   Real-time milestone velocity ranking, progress bars, and hand-off status
@@ -480,7 +434,7 @@ export function DashboardPage() {
       <div className="border-t border-border/80 pt-6 space-y-4">
         <div>
           <h2 className="text-base font-bold text-text-main flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-600" />
+            <span className="size-2.5 rounded-full bg-info" />
             <span>Workforce & HR Operations</span>
           </h2>
           <p className="text-xs text-text-muted mt-0.5">
@@ -523,7 +477,7 @@ export function DashboardPage() {
         <div className="space-y-2.5 max-h-[350px] overflow-y-auto scrollbar-thin pr-1 text-xs">
           {monthlyBirthdays.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-4">
-              No birthdays found for ${currentMonthName}.
+              No birthdays found for {currentMonthName}.
             </p>
           ) : (
             monthlyBirthdays.map((u) => {

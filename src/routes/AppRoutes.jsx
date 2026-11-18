@@ -28,9 +28,12 @@ import PayslipsPage from '../pages/PayslipsPage';
 import IncentivesPage from '../pages/IncentivesPage';
 import ExpensesPage from '../pages/ExpensesPage';
 import ReportsPage from '../pages/ReportsPage';
+import ApprovalsPage from '../pages/ApprovalsPage';
+import EstimatesPage from '../pages/EstimatesPage';
 import NotificationsPage from '../pages/NotificationsPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
+import WebsiteLeadsPage from '../pages/WebsiteLeadsPage';
 
 export function AppRoutes() {
   const { hasPermission } = useAuth();
@@ -287,6 +290,26 @@ export function AppRoutes() {
           }
         />
 
+        {/* 10b. Approvals (Admin only) - what managers decided, and what is still pending */}
+        <Route
+          path="approvals"
+          element={
+            <RoleRoute permission="approvals.view">
+              <ApprovalsPage />
+            </RoleRoute>
+          }
+        />
+
+        {/* 10c. Estimates (Admin & Manager) - client requirement/cost sheets with a PDF download */}
+        <Route
+          path="estimates"
+          element={
+            <RoleRoute permission="estimates.manage">
+              <EstimatesPage />
+            </RoleRoute>
+          }
+        />
+
         {/* 11. Settings & Sub-routes: open to anyone with users.manage, roles.change or settings.stageTemplate
               (the page itself shows only the tabs each permission allows; mirrors backend accounts/defaults.py) */}
         <Route path="settings" element={<Navigate to="/settings/users" replace />} />
@@ -313,12 +336,7 @@ export function AppRoutes() {
           path="website-leads"
           element={
             <RoleRoute permission="leads.manage">
-              <PlaceholderPage
-                title="Website & Leads"
-                subtitle="Inbound inquiries from website, portfolio showcase analytics, and lead qualification pipeline"
-                icon="website-leads"
-                phase="Phase 4"
-              />
+              <WebsiteLeadsPage />
             </RoleRoute>
           }
         />

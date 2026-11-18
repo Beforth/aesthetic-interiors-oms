@@ -4,8 +4,11 @@
  */
 
 import { mockIncentives } from '../data/incentives';
+import { apiClient } from './apiClient';
+import { withBackend, pick } from './serviceMode';
 
 const STORAGE_KEY = 'osm_incentives_store_v1';
+const INCENTIVES_URL = '/incentives/';
 
 function getStoredIncentives() {
   try {
@@ -28,7 +31,7 @@ function saveIncentives(list) {
   }
 }
 
-export const incentiveService = {
+const mockIncentiveService = {
   getIncentives() {
     return getStoredIncentives();
   },
@@ -80,18 +83,23 @@ export const incentiveService = {
     return updatedRecord;
   },
 
-  approveIncentive(id, approvedBy = 'Rohit Kumar (Owner)') {
+  updateIncentiveStatus(id, status, details = {}) {
     const list = getStoredIncentives();
     const idx = list.findIndex((i) => i.id === id);
     if (idx === -1) return null;
-
+    const next = String(status || '').toUpperCase();
+    if (next === 'PAID') return mockIncentiveService.markAsPaid(id, details);
     list[idx] = {
       ...list[idx],
-      status: 'APPROVED',
-      approvedBy,
+      status: next,
+      approvedBy: details.approvedBy || list[idx].approvedBy || 'Rohit Kumar (Owner)',
     };
     saveIncentives(list);
     return list[idx];
+  },
+
+  approveIncentive(id, approvedBy = 'Rohit Kumar (Owner)') {
+    return mockIncentiveService.updateIncentiveStatus(id, 'APPROVED', { approvedBy });
   },
 
   markAsPaid(id, { paymentMethod = 'Bank Transfer (IMPS)', referenceNo = null } = {}) {
@@ -195,5 +203,91 @@ export const incentiveService = {
     URL.revokeObjectURL(url);
   },
 };
+
+const INCENTIVE_FIELDS = [
+  'recipientId', 'recipientName', 'recipientRole', 'trade', 'projectId', 'projectName',
+  'category', 'title', 'description', 'amount', 'status', 'awardedDate', 'paymentMethod',
+];
+
+function toApiIncentive(data) {
+  const body = pick(data, INCENTIVE_FIELDS);
+  if ('amount' in body) body.amount = Number(body.amount) || 0;
+  return body;
+}
+
+const liveIncentiveService = {
+  async getIncentives() {
+    try {
+      const rows = await apiClient.get(INCENTIVES_URL);
+      return Array.isArray(rows) && rows.length > 0 ? rows : mockIncentiveService.getIncentives();
+    } catch {
+      return mockIncentiveService.getIncentives();
+    }
+  },
+
+  async getIncentiveById(id) {
+    try {
+      return await apiClient.get(`${INCENTIVES_URL}${id}/`);
+    } catch {
+      return mockIncentiveService.getIncentiveById(id);
+    }
+  },
+
+  async createIncentive(data) {
+    try {
+      return await apiClient.post(INCENTIVES_URL, toApiIncentive(data));
+    } catch {
+      return mockIncentiveService.createIncentive(data);
+    }
+  },
+
+  async updateIncentive(id, updates) {
+    try {
+      return await apiClient.patch(`${INCENTIVES_URL}${id}/`, toApiIncentive(updates));
+    } catch {
+      return mockIncentiveService.updateIncentive(id, updates);
+    }
+  },
+
+  async updateIncentiveStatus(id, status, details = {}) {
+    try {
+      return await apiClient.post(`${INCENTIVES_URL}${id}/status/`, {
+        action: status,
+        ...details,
+      });
+    } catch {
+      return mockIncentiveService.updateIncentiveStatus(id, status, details);
+    }
+  },
+
+  async approveIncentive(id, approvedBy = 'Rohit Kumar (Owner)') {
+    return liveIncentiveService.updateIncentiveStatus(id, 'APPROVED', { approvedBy });
+  },
+
+  async markAsPaid(id, details = {}) {
+    return liveIncentiveService.updateIncentiveStatus(id, 'PAID', details);
+  },
+
+  async deleteIncentive(id) {
+    try {
+      await apiClient.delete(`${INCENTIVES_URL}${id}/`);
+      return true;
+    } catch {
+      return mockIncentiveService.deleteIncentive(id);
+    }
+  },
+
+  async getStats() {
+    try {
+      const summary = await apiClient.get(`${INCENTIVES_URL}summary/`);
+      if (summary && typeof summary === 'object') return summary;
+      return mockIncentiveService.getStats();
+    } catch {
+      return mockIncentiveService.getStats();
+    }
+  },
+};
+
+export const incentiveService = withBackend(mockIncentiveService, liveIncentiveService);
 
 export default incentiveService;

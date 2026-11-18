@@ -21,6 +21,9 @@ export function TooltipManager() {
     const showTooltip = (el) => {
       if (!el) return;
 
+      // Explicit opt-out for controls that should not show a tooltip
+      if (el.hasAttribute('data-no-tooltip')) return;
+
       // Sidebar collapsed items have their own inline dedicated rail tooltip
       if (el.closest('.group\\/sidebar-item')) return;
 

@@ -7,7 +7,11 @@
  * - Dynamic upcoming holidays provider for Dashboard
  */
 
+import { apiClient } from './apiClient';
+import { withBackend, pick } from './serviceMode';
+
 const STORAGE_KEY = 'osm_holiday_lists_v1';
+const HOLIDAYS_URL = '/holidays/';
 
 // Standard 2026-2027 Indian Gazetted & National Calendar
 export const FIXED_INDIAN_HOLIDAYS_2026 = [
@@ -160,7 +164,17 @@ function saveStoredLists(lists, notify = true) {
   }
 }
 
-export const holidayService = {
+function toApiList(data) {
+  const body = pick(data, ['name', 'fromDate', 'toDate', 'weeklyOffDay']);
+  if (Array.isArray(data.holidays)) {
+    body.holidays = data.holidays.map((holiday) =>
+      pick(holiday, ['id', 'date', 'name', 'type', 'dayOfWeek'])
+    );
+  }
+  return body;
+}
+
+const mockHolidayService = {
   getHolidayLists() {
     return getStoredLists();
   },
@@ -307,6 +321,11 @@ export const holidayService = {
     return results;
   },
 
+  // Name used by the holiday editor; kept as an alias for the fixed calendar helper.
+  getFixedIndianHolidays(fromDate, toDate) {
+    return mockHolidayService.getFixedNationalHolidays(fromDate, toDate);
+  },
+
   /**
    * Dynamic Upcoming Holidays for the Dashboard.
    * Returns sorted future holidays formatted for the dashboard card.
@@ -369,5 +388,62 @@ export const holidayService = {
     });
   },
 };
+
+const liveHolidayService = {
+  async getHolidayLists() {
+    try {
+      const rows = await apiClient.get(`${HOLIDAYS_URL}lists/`);
+      return Array.isArray(rows) && rows.length > 0 ? rows : mockHolidayService.getHolidayLists();
+    } catch {
+      return mockHolidayService.getHolidayLists();
+    }
+  },
+
+  async getHolidayListById(id) {
+    try {
+      return await apiClient.get(`${HOLIDAYS_URL}lists/${id}/`);
+    } catch {
+      return mockHolidayService.getHolidayListById(id);
+    }
+  },
+
+  async createHolidayList(data) {
+    try {
+      return await apiClient.post(`${HOLIDAYS_URL}lists/`, toApiList(data));
+    } catch {
+      return mockHolidayService.createHolidayList(data);
+    }
+  },
+
+  async updateHolidayList(id, patch) {
+    try {
+      return await apiClient.patch(`${HOLIDAYS_URL}lists/${id}/`, toApiList(patch));
+    } catch {
+      return mockHolidayService.updateHolidayList(id, patch);
+    }
+  },
+
+  async deleteHolidayList(id) {
+    try {
+      await apiClient.delete(`${HOLIDAYS_URL}lists/${id}/`);
+      mockHolidayService.deleteHolidayList(id);
+      return true;
+    } catch {
+      return mockHolidayService.deleteHolidayList(id);
+    }
+  },
+
+  async setDefaultList(id) {
+    try {
+      const rows = await apiClient.post(`${HOLIDAYS_URL}lists/${id}/default/`, {});
+      mockHolidayService.setDefaultList(id);
+      return Array.isArray(rows) ? rows : mockHolidayService.getHolidayLists();
+    } catch {
+      return mockHolidayService.setDefaultList(id);
+    }
+  },
+};
+
+export const holidayService = withBackend(mockHolidayService, liveHolidayService);
 
 export default holidayService;

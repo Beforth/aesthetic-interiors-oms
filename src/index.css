@@ -1,10 +1,10 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root, .light {
-    --background: #ffffff;
+    --background: #f8f9fa;
     --foreground: #0f172a;
     --card: #ffffff;
     --card-foreground: #0f172a;
@@ -54,23 +54,38 @@
   }
 
   body {
-    @apply bg-brand-canvas text-text-main font-sans min-h-screen antialiased;
-    color: #0f172a;
-    background-color: #f8fafc;
+    @apply bg-background text-foreground font-sans min-h-screen antialiased;
   }
 
-  /* Smooth scroll and mobile touch optimizations */
   html {
     -webkit-tap-highlight-color: transparent;
   }
 
-  /*
-   * While the authenticated app shell is mounted, the viewport is owned by
-   * AppShell: the document must never scroll, only the inner content pane.
-   * This keeps the sidebar and topbar fixed even if a stray absolutely
-   * positioned element (e.g. an `sr-only` input) overflows a page.
-   * Login/standalone pages are unaffected.
-   */
+  /* Native selects follow the same BefUI dropdown language as the shared Select. */
+  select {
+    @apply h-9 appearance-none rounded-lg border border-border bg-background px-3 pr-9 text-sm text-foreground shadow-sm outline-none transition-[border,box-shadow] cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+  }
+
+  select:hover {
+    @apply border-muted-foreground;
+  }
+
+  select:focus {
+    @apply border-ring;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent);
+  }
+
+  select:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .dark select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b94a5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  }
+
   html.app-shell-root,
   html.app-shell-root body,
   html.app-shell-root #root {
@@ -78,7 +93,6 @@
     overflow: hidden;
   }
 
-  /* Custom subtle scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -92,5 +106,29 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: #4f46e5;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  .print-payslip, .print-payslip * {
+    visibility: visible !important;
+  }
+  .print-payslip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
   }
 }

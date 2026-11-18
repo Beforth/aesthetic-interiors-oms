@@ -588,7 +588,7 @@ export function TasksPage() {
       />
 
       {/* Interconnected Filter Toolbar (All BefUI standard Select dropdowns with live search) */}
-      <Card className="overflow-visible relative z-30" bodyClassName="p-3 sm:p-3.5">
+      <div className="relative z-30 py-2">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* 1. Live Search Input */}
           <div className="relative flex items-center">
@@ -720,7 +720,7 @@ export function TasksPage() {
             </button>
           </div>
         )}
-      </Card>
+      </div>
 
       {/* VIEW 1: BefUI Kanban Board View */}
       {viewMode === 'board' ? (

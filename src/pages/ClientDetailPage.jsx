@@ -19,8 +19,15 @@ import Textarea from '../components/ui/Textarea';
 import Select from '../components/ui/Select';
 import EmptyState from '../components/ui/EmptyState';
 import PermissionGate from '../components/ui/PermissionGate';
-import Icon from '../components/ui/Icon';
-import { TrashIcon } from '../components/ui/icons';
+import { Badge } from '../components/ui/Badge';
+import StatCard from '../components/ui/StatCard';
+import {
+  TrashIcon,
+  FolderIcon,
+  BuildingIcon,
+  CheckCircleIcon,
+  IndianRupeeIcon,
+} from '../components/ui/icons';
 import { Kanban } from '../components/ui/kanban';
 import StatusBadge from '../components/ui/StatusBadge';
 import { calculateProgress } from '../utils/progress';
@@ -362,15 +369,15 @@ export function ClientDetailPage() {
     return (
       <div
         onClick={() => navigate(`/projects/${project.id}`)}
-        className="space-y-2 select-none group cursor-pointer"
+        className="flex w-full flex-col gap-2 select-none group cursor-pointer"
         title={`Open project: ${project.name}`}
       >
         {/* 1. Project Name, Status Badge & Delete Button */}
         <div className="flex items-start justify-between gap-2">
-          <h5 className="font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors truncate">
+          <h5 className="min-w-0 flex-1 truncate text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
             {project.name}
           </h5>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex shrink-0 items-center gap-1.5">
             <StatusBadge status={project.status || 'in progress'} size="sm" />
             <button
               type="button"
@@ -378,7 +385,7 @@ export function ClientDetailPage() {
                 e.stopPropagation();
                 setProjectToDelete(project);
               }}
-              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive cursor-pointer"
               title={`Delete project "${project.name}"`}
             >
               <TrashIcon className="size-3.5" />
@@ -387,14 +394,12 @@ export function ClientDetailPage() {
         </div>
 
         {/* 2. Progress */}
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="truncate">
-              Progress ({stageName})
-            </span>
-            <span className="font-semibold text-foreground font-mono">{progress}%</span>
+            <span className="truncate">{stageName}</span>
+            <span className="font-mono font-semibold text-foreground">{progress}%</span>
           </div>
-          <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-300',
@@ -406,11 +411,11 @@ export function ClientDetailPage() {
         </div>
 
         {/* 3. Total Cost */}
-        <div className="flex items-center justify-between pt-1.5 border-t border-border/60 text-xs">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-            Total Cost
+        <div className="flex items-center justify-between border-t border-border/60 pt-2 text-xs">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Cost
           </span>
-          <span className="font-bold text-foreground font-mono">
+          <span className="font-mono font-semibold text-foreground">
             {formatCurrency(project.totalCost || project.budget || 0)}
           </span>
         </div>
@@ -429,41 +434,35 @@ export function ClientDetailPage() {
   const isOld = client.type === 'old' || client.status === 'old';
 
   const detailItems = [
-    { label: 'Phone Number', value: client.phone || 'None on record', icon: 'phone' },
-    { label: 'Email Address', value: client.email || 'None on record', icon: 'mail' },
-    {
-      label: 'Registered On',
-      value: formatDate(client.createdAt),
-      icon: 'calendar',
-    },
+    { label: 'Phone Number', value: client.phone || 'None on record' },
+    { label: 'Email Address', value: client.email || 'None on record' },
+    { label: 'Registered On', value: formatDate(client.createdAt) },
     {
       label: 'Associated Projects',
       value: (
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-text-main">
+          <span className="font-semibold text-foreground">
             {clientProjects.length} {clientProjects.length === 1 ? 'Site' : 'Sites'}
           </span>
           {clientProjects.length > 0 && (
-            <span className="text-xs text-text-muted">
+            <span className="text-xs text-muted-foreground">
               ({activeWorkingProjects.length} active • {previousCompletedProjects.length} completed)
             </span>
           )}
         </div>
       ),
-      icon: 'projects',
     },
     {
       label: 'Primary Site Address',
       value: client.address || 'Bengaluru, Karnataka',
-      icon: 'mapPin',
       fullWidth: true,
     },
     {
       label: 'Architectural & Design Notes',
       value: (
-        <div className="p-2.5 rounded-lg bg-accent/30 border border-border text-xs text-foreground leading-relaxed max-w-md">
+        <span className="text-xs leading-relaxed text-foreground">
           {client.notes || 'No custom notes provided.'}
-        </div>
+        </span>
       ),
       fullWidth: true,
     },
@@ -487,22 +486,11 @@ export function ClientDetailPage() {
       {/* Page Header with Client Name & Prominent Status Badge */}
       <PageHeader
         title={
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <span>{client.name}</span>
-            <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                isOld
-                  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              }`}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                  isOld ? 'bg-blue-600' : 'bg-emerald-600'
-                }`}
-              />
-              {isOld ? 'Old Client' : 'New Client'}
-            </span>
+            <Badge variant={isOld ? 'neutral' : 'success'} size="sm" dot>
+              {isOld ? 'Existing Client' : 'New Client'}
+            </Badge>
           </div>
         }
         subtitle={`Client ID: ${client.id}`}
@@ -522,7 +510,7 @@ export function ClientDetailPage() {
 
       {/* Client Overview Card */}
       <Card title="Client Information">
-        <DetailList items={detailItems} columns={4} />
+        <DetailList items={detailItems} columns={3} />
       </Card>
 
       {/* Associated Projects Section: Working & Previous Projects */}
@@ -552,43 +540,36 @@ export function ClientDetailPage() {
           </PermissionGate>
         </div>
 
-        {/* Executive Multi-Project Summary Bar when multiple projects exist */}
+        {/* Inline project summary — only when multiple projects exist */}
         {clientProjects.length > 1 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-muted/60 p-3.5 rounded-xl border border-border">
-            <div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                Total Fit-outs
-              </div>
-              <div className="text-base font-bold text-foreground mt-0.5">
-                {clientProjects.length} Sites
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                Active Working
-              </div>
-              <div className="text-base font-bold text-emerald-700 mt-0.5">
-                {activeWorkingProjects.length} Live Sites
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider flex items-center gap-1">
-                <Icon name="check" size={12} className="stroke-[2.5]" />
-                Delivered
-              </div>
-              <div className="text-base font-bold text-blue-700 mt-0.5">
-                {previousCompletedProjects.length} Completed
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                Combined Investment
-              </div>
-              <div className="text-base font-bold text-foreground mt-0.5">
-                {formatCurrency(totalBudget)}
-              </div>
-            </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              variant="inline"
+              label="Total Fit-outs"
+              value={clientProjects.length}
+              icon={<FolderIcon className="size-5" />}
+              tone="primary"
+            />
+            <StatCard
+              variant="inline"
+              label="Active Sites"
+              value={activeWorkingProjects.length}
+              icon={<BuildingIcon className="size-5" />}
+              tone="success"
+            />
+            <StatCard
+              variant="inline"
+              label="Delivered"
+              value={previousCompletedProjects.length}
+              icon={<CheckCircleIcon className="size-5" />}
+              tone="primary"
+            />
+            <StatCard
+              variant="inline"
+              label="Combined Investment"
+              value={formatCurrency(totalBudget)}
+              icon={<IndianRupeeIcon className="size-5" />}
+            />
           </div>
         )}
 
@@ -628,7 +609,7 @@ export function ClientDetailPage() {
               columnClassName="bg-secondary/40 border border-border/70"
               listClassName="min-h-[110px]"
               getCardClassName={() =>
-                'hover:border-primary/50 hover:shadow-xs transition-all cursor-pointer'
+                'flex min-h-[108px] flex-col p-3 hover:border-primary/50 hover:shadow-xs transition-all cursor-pointer'
               }
               density="compact"
               renderCard={renderCompactProjectCard}

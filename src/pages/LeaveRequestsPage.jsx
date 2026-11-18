@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { leaveService } from '../services/leaveService';
 import { formatDate } from '../utils/formatters';
 import { cn } from '../lib/utils';
+import Pagination from '../components/ui/Pagination';
+import { usePagination } from '../hooks/usePagination';
 
 // BefUI Components
 import Button from '../components/ui/Button';
@@ -127,6 +129,9 @@ export function LeaveRequestsPage() {
         return 0;
       });
   }, [requests, search, statusFilter, typeFilter, fromDate, toDate, sortField, sortAsc]);
+
+  // Client-side pagination (10 / 25 / 30 rows per page, default 10)
+  const pager = usePagination(filteredRequests);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -376,7 +381,7 @@ export function LeaveRequestsPage() {
             </thead>
             <tbody className="divide-y divide-border text-xs">
               {filteredRequests.length > 0 ? (
-                filteredRequests.map((item) => {
+                pager.paginatedItems.map((item) => {
                   const status = item.status?.toLowerCase();
                   const isPending = status === 'pending';
                   const isApproved = status === 'approved';
@@ -532,6 +537,12 @@ export function LeaveRequestsPage() {
             </tbody>
           </table>
         </div>
+
+        {filteredRequests.length > 0 && (
+          <div className="border-t border-border px-4 py-3">
+            <Pagination {...pager.pagination} />
+          </div>
+        )}
       </div>
 
       {/* 4. Apply For Leave Modal */}

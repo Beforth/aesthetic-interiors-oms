@@ -8,6 +8,8 @@ import { cn } from '../lib/utils';
 import Button from '../components/ui/Button';
 import { Badge } from '../components/ui/badge';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Pagination from '../components/ui/Pagination';
+import { usePagination } from '../hooks/usePagination';
 import {
   PlusIcon,
   ArrowLeftIcon,
@@ -44,7 +46,7 @@ export function HolidayListsPage() {
   const location = useLocation();
   const toast = useToast();
 
-  const [holidayLists, setHolidayLists] = useState(() => holidayService.getHolidayLists());
+  const [holidayLists, setHolidayLists] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'INACTIVE'
   const [isCreating, setIsCreating] = useState(
@@ -70,12 +72,18 @@ export function HolidayListsPage() {
   const [editingRowIsWorking, setEditingRowIsWorking] = useState(false);
   const [tableSearch, setTableSearch] = useState('');
 
-  // Auto reload when local storage changes
-  const reloadLists = () => {
-    setHolidayLists(holidayService.getHolidayLists());
+  // Reload from the backend, with the local list as a fallback.
+  const reloadLists = async () => {
+    try {
+      const rows = await holidayService.getHolidayLists();
+      setHolidayLists(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      toast.error(error?.message || 'Failed to load holiday lists');
+    }
   };
 
   useEffect(() => {
+    reloadLists();
     window.addEventListener('osm_holidays_updated', reloadLists);
     return () => window.removeEventListener('osm_holidays_updated', reloadLists);
   }, []);
@@ -111,6 +119,10 @@ export function HolidayListsPage() {
       );
     });
   }, [builderHolidays, tableSearch]);
+
+  // Client-side pagination for both tables (10 / 25 / 30 rows per page, default 10)
+  const holidayPager = usePagination(filteredTableHolidays);
+  const listPager = usePagination(filteredLists);
 
   // Counts summary
   const counts = useMemo(() => {
@@ -316,7 +328,7 @@ export function HolidayListsPage() {
   };
 
   // Save new or updated Holiday List
-  const handleSaveHolidayList = () => {
+  const handleSaveHolidayList = async () => {
     if (!formName.trim()) {
       setNameError(true);
       toast.error('Please enter a name for the Holiday List.');
@@ -335,45 +347,58 @@ export function HolidayListsPage() {
       return;
     }
 
-    if (editingId) {
-      holidayService.updateHolidayList(editingId, {
-        name: formName.trim(),
-        fromDate,
-        toDate,
-        weeklyOffDay,
-        holidays: builderHolidays,
-      });
-      toast.success(`Holiday Schedule "${formName.trim()}" updated successfully!`);
-    } else {
-      const created = holidayService.createHolidayList({
-        name: formName.trim(),
-        fromDate,
-        toDate,
-        weeklyOffDay,
-        holidays: builderHolidays,
-      });
-      toast.success(`Holiday Schedule "${created.name}" created with ${created.totalHolidays} holidays!`);
+    try {
+      if (editingId) {
+        await holidayService.updateHolidayList(editingId, {
+          name: formName.trim(),
+          fromDate,
+          toDate,
+          weeklyOffDay,
+          holidays: builderHolidays,
+        });
+        toast.success(`Holiday Schedule "${formName.trim()}" updated successfully!`);
+      } else {
+        const created = await holidayService.createHolidayList({
+          name: formName.trim(),
+          fromDate,
+          toDate,
+          weeklyOffDay,
+          holidays: builderHolidays,
+        });
+        toast.success(`Holiday Schedule "${created?.name || formName.trim()}" created with ${created?.totalHolidays ?? builderHolidays.length} holidays!`);
+      }
+    } catch {
+      toast.error('Failed to save holiday schedule');
+      return;
     }
 
     setIsCreating(false);
     setEditingId(null);
-    reloadLists();
+    await reloadLists();
   };
 
   // Set Default Schedule
-  const handleSetDefault = (id, name) => {
-    holidayService.setDefaultList(id);
-    toast.success(`"${name}" is now the active company holiday schedule.`);
-    reloadLists();
+  const handleSetDefault = async (id, name) => {
+    try {
+      await holidayService.setDefaultList(id);
+      toast.success(`"${name}" is now the active company holiday schedule.`);
+      await reloadLists();
+    } catch {
+      toast.error('Failed to set default holiday schedule');
+    }
   };
 
   // Confirm Delete List
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!listPendingDelete) return;
-    holidayService.deleteHolidayList(listPendingDelete.id);
-    toast.success(`Holiday List "${listPendingDelete.name}" deleted.`);
-    setListPendingDelete(null);
-    reloadLists();
+    try {
+      await holidayService.deleteHolidayList(listPendingDelete.id);
+      toast.success(`Holiday List "${listPendingDelete.name}" deleted.`);
+      setListPendingDelete(null);
+      await reloadLists();
+    } catch {
+      toast.error('Failed to delete holiday list');
+    }
   };
 
   return (
@@ -565,7 +590,7 @@ export function HolidayListsPage() {
           {/* Card 2: Holidays Table */}
           <div className="bg-card border border-border rounded-xl shadow-2xs overflow-hidden">
             {/* Table Header Bar */}
-            <div className="p-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border bg-card">
+            <div className="p-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-bold text-foreground">Scheduled Holidays</span>
                 <Badge variant="outline" className="px-2 py-0.5 text-xs font-mono font-bold">
@@ -616,7 +641,7 @@ export function HolidayListsPage() {
                 </p>
               </div>
             ) : (
-              <div className="max-h-[460px] overflow-y-auto scrollbar-thin">
+              <>
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="sticky top-0 bg-card text-muted-foreground font-semibold uppercase tracking-wider text-[11px] border-b border-border z-10 shadow-2xs">
                     <tr>
@@ -628,7 +653,7 @@ export function HolidayListsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
-                    {filteredTableHolidays.map((item) => (
+                    {holidayPager.paginatedItems.map((item) => (
                       <tr key={item.id} className="hover:bg-muted/30 transition-colors">
                         <td className="py-2.5 px-4 font-mono font-medium text-foreground whitespace-nowrap">
                           {formatDateDisplay(item.date)}
@@ -672,7 +697,10 @@ export function HolidayListsPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                <div className="px-4 py-3 border-t border-border">
+                  <Pagination {...holidayPager.pagination} />
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -705,9 +733,9 @@ export function HolidayListsPage() {
           </div>
 
           {/* Single-Line Modern BefUI Filter Toolbar */}
-          <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+          <div className="py-2">
+            <div className="flex items-center justify-between gap-2.5 overflow-x-auto">
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
                 {/* Search Bar */}
                 <div className="relative flex-1 min-w-[200px] max-w-sm">
                   <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -716,7 +744,7 @@ export function HolidayListsPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search holiday lists by name, dates..."
-                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full h-9 pl-8 pr-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                   {searchQuery && (
                     <button
@@ -734,7 +762,7 @@ export function HolidayListsPage() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-8 px-2.5 text-xs font-semibold rounded-lg border border-border bg-background text-foreground hover:bg-muted/50 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="h-9 px-2.5 text-xs font-semibold rounded-lg border border-border bg-background text-foreground hover:bg-muted/50 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="ALL">All Schedules ({holidayLists.length})</option>
                     <option value="ACTIVE">Active Only</option>
@@ -750,7 +778,7 @@ export function HolidayListsPage() {
                       setSearchQuery('');
                       setStatusFilter('ALL');
                     }}
-                    className="h-8 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    className="h-9 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <XIcon className="size-3" />
                     <span>Clear Filter</span>
@@ -790,7 +818,7 @@ export function HolidayListsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filteredLists.map((list) => {
+                    {listPager.paginatedItems.map((list) => {
                       const isDefault = list.isDefault;
                       return (
                         <tr
@@ -894,6 +922,9 @@ export function HolidayListsPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
+              <div className="px-4 py-3 border-t border-border">
+                <Pagination {...listPager.pagination} />
               </div>
             </div>
           )}

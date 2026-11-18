@@ -3,7 +3,7 @@ import { authService } from '../services/authService';
 import { apiClient, getAuthToken } from '../services/apiClient';
 import { isDebug } from '../config/env';
 import { ROLES } from '../config/roles';
-import { getPermissionsForRole } from '../config/permissions';
+import { getPermissionsForRole, isOwnerOnlyPermission } from '../config/permissions';
 
 const AuthContext = createContext(null);
 
@@ -58,6 +58,9 @@ export function AuthProvider({ children }) {
         currentUser?.role === 'owner' ||
         currentUser?.role === 'admin';
       if (isOwner) return true;
+      // Owner-only oversight screens (such as Approvals) must stay hidden even if an older cached
+      // permission list still contains the codename. The backend also refuses these with a 403.
+      if (isOwnerOnlyPermission(permissionCodename)) return false;
       return Array.isArray(permissions) && permissions.includes(permissionCodename);
     },
     [permissions, currentUser]

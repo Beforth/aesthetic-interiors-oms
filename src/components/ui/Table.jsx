@@ -2,6 +2,7 @@ import React from 'react';
 import EmptyState from './EmptyState';
 import Skeleton from './Skeleton';
 import Pagination from './Pagination';
+import { cn } from '../../lib/utils';
 
 /**
  * Renders a table cell using the column's render function or raw property value.
@@ -33,6 +34,10 @@ function renderTableCell(col, row, rIdx) {
 
 /**
  * BefUI Table component conforming to https://befui.vercel.app/
+ *
+ * variant="default" — bordered card with a header band and row dividers.
+ * variant="clean"   — open table with one muted header band, horizontal-only
+ *                     row dividers and no outer box/shadow (reference style).
  */
 export function Table({
   columns = [],
@@ -43,13 +48,31 @@ export function Table({
   emptyTitle = 'No records found',
   emptyDescription = 'There are no entries to display at this moment.',
   pagination,
+  variant = 'default',
   className = '',
 }) {
+  const isClean = variant === 'clean';
+
   return (
-    <div className={`w-full rounded-xl border border-border overflow-hidden bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] ${className}`}>
+    <div
+      className={cn(
+        'w-full',
+        isClean
+          ? 'text-card-foreground'
+          : 'rounded-xl border border-border overflow-hidden bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)]',
+        className
+      )}
+    >
       <div className="relative w-full overflow-x-auto">
         <table className="w-full text-left border-collapse text-[13px]">
-          <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-xs border-b border-border/80">
+          <thead
+            className={cn(
+              'sticky top-0 z-10',
+              isClean
+                ? 'bg-muted/40 border-b border-border'
+                : 'bg-muted/95 backdrop-blur-xs border-b border-border/80'
+            )}
+          >
             <tr>
               {columns.map((col, idx) => (
                 <th
@@ -65,10 +88,10 @@ export function Table({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/60">
+          <tbody className={cn(isClean ? 'divide-y divide-border/70' : 'divide-y divide-border/60')}>
             {loading ? (
               Array.from({ length: 4 }).map((_, rIdx) => (
-                <tr key={`skel-${rIdx}`} className="border-b border-border/60">
+                <tr key={`skel-${rIdx}`} className={isClean ? '' : 'border-b border-border/60'}>
                   {columns.map((_, cIdx) => (
                     <td key={`skel-c-${cIdx}`} className="px-4 py-3">
                       <Skeleton className="h-4 w-3/4 rounded-md" />
@@ -79,7 +102,11 @@ export function Table({
             ) : data.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-10">
-                  <EmptyState title={emptyTitle} description={emptyDescription} />
+                  <EmptyState
+                    title={emptyTitle}
+                    description={emptyDescription}
+                    variant={isClean ? 'bare' : 'default'}
+                  />
                 </td>
               </tr>
             ) : (
@@ -87,9 +114,11 @@ export function Table({
                 <tr
                   key={row[keyField] || rIdx}
                   onClick={() => onRowClick?.(row)}
-                  className={`border-b border-border/60 transition-colors hover:bg-muted/70 ${
+                  className={cn(
+                    'transition-colors',
+                    isClean ? 'hover:bg-muted/60' : 'border-b border-border/60 hover:bg-muted/70',
                     onRowClick ? 'cursor-pointer' : ''
-                  }`}
+                  )}
                 >
                   {columns.map((col, cIdx) => (
                     <td
@@ -109,7 +138,7 @@ export function Table({
       </div>
 
       {pagination && !loading && data.length > 0 && (
-        <div className="border-t border-border/70 p-3 bg-muted/10">
+        <div className={cn(isClean ? 'p-3' : 'border-t border-border/70 p-3 bg-muted/10')}>
           <Pagination {...pagination} />
         </div>
       )}

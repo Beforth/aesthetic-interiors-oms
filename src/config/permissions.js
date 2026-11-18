@@ -305,6 +305,22 @@ export const SYSTEM_PERMISSIONS = [
     hint: 'Download reports and financial data sheets (FR-RPT-10)',
     group: 'Reports & Analytics',
   },
+
+  // --- MODULE 3.15: APPROVALS & OVERSIGHT ---
+  {
+    id: 'approvals.view',
+    label: 'View Approval Decisions',
+    hint: 'Owner-only oversight: see what managers approved, rejected or left pending, and settle anything still waiting (FR-USR-05)',
+    group: 'Approvals & Oversight',
+  },
+
+  // --- CLIENT COST ESTIMATES ---
+  {
+    id: 'estimates.manage',
+    label: 'Manage Client Cost Estimates',
+    hint: 'Fill client requirement sheets (space, quality, area, rate), save, edit, download PDF and delete',
+    group: 'Client Cost Estimates',
+  },
 ];
 
 /**
@@ -374,10 +390,34 @@ export const permissionMatrix = {
   'reports.view': [A, M],
   'reports.profitLoss': [A],
   'reports.export': [A, M],
+
+  // --- MODULE 3.15: APPROVALS & OVERSIGHT ---
+  'approvals.view': [A],
+
+  // --- CLIENT COST ESTIMATES ---
+  'estimates.manage': [A, M],
 };
 
 const STORAGE_ROLE_GRANTS_KEY = 'osm_role_grants';
 const STORAGE_CUSTOM_PERMISSIONS_KEY = 'osm_custom_role_permissions';
+
+/**
+ * Permissions reserved for the Owner/Admin. These are oversight tools (the Approvals tab) that must never
+ * be granted to a manager or any other role, even if an older cached grant or a custom role still lists
+ * them. Kept here as the single frontend source of truth; the backend enforces the same rule with a 403.
+ */
+export const OWNER_ONLY_PERMISSIONS = ['approvals.view'];
+
+export function isOwnerOnlyPermission(permissionKey) {
+  return OWNER_ONLY_PERMISSIONS.includes(permissionKey);
+}
+
+/** Removes owner-only codenames from any non-owner role's permission list (defensive, for stale caches). */
+function withoutOwnerOnlyPermissions(roleKey, permissions) {
+  if (!Array.isArray(permissions)) return permissions;
+  if (roleKey === ROLES.ADMIN) return permissions;
+  return permissions.filter((code) => !OWNER_ONLY_PERMISSIONS.includes(code));
+}
 
 /**
  * Derives default role grants dictionary from SRS permissionMatrix
@@ -420,6 +460,10 @@ export function getRoleGrants() {
       if (parsed && typeof parsed === 'object') {
         // Ensure owner has full access
         parsed[ROLES.ADMIN] = SYSTEM_PERMISSIONS.map((p) => p.id);
+        // Owner-only oversight codenames must never survive on another role from an older cache.
+        Object.keys(parsed).forEach((roleKey) => {
+          parsed[roleKey] = withoutOwnerOnlyPermissions(roleKey, parsed[roleKey]);
+        });
         return parsed;
       }
     }
@@ -433,7 +477,11 @@ export function getRoleGrants() {
   // Merge any legacy custom permissions
   const legacyCustom = getCustomRolePermissions();
   Object.entries(legacyCustom).forEach(([roleKey, perms]) => {
-    defaults[roleKey] = perms;
+    defaults[roleKey] = withoutOwnerOnlyPermissions(roleKey, perms);
+  });
+
+  Object.keys(defaults).forEach((roleKey) => {
+    defaults[roleKey] = withoutOwnerOnlyPermissions(roleKey, defaults[roleKey]);
   });
 
   return defaults;
@@ -450,6 +498,11 @@ export function saveRoleGrants(newGrants) {
     ...newGrants,
     [ROLES.ADMIN]: allPermKeys, // Super admin always retains full access
   };
+
+  // Never persist an owner-only oversight codename on a non-owner role.
+  Object.keys(sanitized).forEach((roleKey) => {
+    sanitized[roleKey] = withoutOwnerOnlyPermissions(roleKey, sanitized[roleKey]);
+  });
 
   try {
     localStorage.setItem(STORAGE_ROLE_GRANTS_KEY, JSON.stringify(sanitized));
@@ -512,7 +565,13 @@ export function getCustomRolePermissions() {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOM_PERMISSIONS_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        Object.keys(parsed).forEach((roleKey) => {
+          parsed[roleKey] = withoutOwnerOnlyPermissions(roleKey, parsed[roleKey]);
+        });
+      }
+      return parsed;
     }
   } catch (e) {
     console.error('Failed to read custom role permissions', e);
@@ -527,7 +586,8 @@ export function getCustomRolePermissions() {
  */
 export function saveCustomRolePermissions(roleKey, permissions) {
   const current = getCustomRolePermissions();
-  current[roleKey] = permissions;
+  const safePermissions = withoutOwnerOnlyPermissions(roleKey, permissions);
+  current[roleKey] = safePermissions;
   try {
     localStorage.setItem(STORAGE_CUSTOM_PERMISSIONS_KEY, JSON.stringify(current));
   } catch (e) {
@@ -536,7 +596,7 @@ export function saveCustomRolePermissions(roleKey, permissions) {
 
   // Also sync to main role grants
   const grants = getRoleGrants();
-  grants[roleKey] = permissions;
+  grants[roleKey] = safePermissions;
   saveRoleGrants(grants);
 
   return current;

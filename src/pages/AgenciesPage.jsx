@@ -8,13 +8,13 @@ import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
 
 import PageHeader from '../components/ui/PageHeader';
-import StarRating from '../components/ui/StarRating';
 import DataToolbar from '../components/ui/DataToolbar';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
 import IconButton from '../components/ui/IconButton';
 import Modal from '../components/ui/Modal';
 import Card from '../components/ui/Card';
+import StatCard from '../components/ui/StatCard';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Textarea from '../components/ui/Textarea';
@@ -23,19 +23,10 @@ import { Badge } from '../components/ui/Badge';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import {
   BuildingIcon,
-  UserIcon,
   UsersIcon,
-  PhoneIcon,
-  MailIcon,
-  MapPinIcon,
-  TagIcon,
   BriefcaseIcon,
-  EyeIcon,
-  ShieldCheckIcon,
   PlusIcon,
-  EditIcon,
-  TrashIcon,
-  CheckIcon,
+  StarIcon,
   XIcon,
   ArrowLeftIcon,
 } from '../components/ui/icons';
@@ -80,6 +71,19 @@ const PAYMENT_TERMS_OPTIONS = [
   { value: 'Milestone Completion', label: 'Milestone Completion' },
   { value: 'Net 15 Days', label: 'Net 15 Days' },
 ];
+
+function AgencyRatingBadge({ value, compact = false }) {
+  const rating = Number(value);
+  if (!Number.isFinite(rating) || rating <= 0) {
+    return <span className="text-[11px] italic text-muted-foreground">Not rated</span>;
+  }
+  return (
+    <Badge variant="warning" size="sm" title={`Agency rating: ${rating.toFixed(1)} / 5`}>
+      <StarIcon className="size-3" />
+      {rating.toFixed(1)}{!compact && <span className="text-muted-foreground"> / 5</span>}
+    </Badge>
+  );
+}
 
 const CUSTOM_TRADES_KEY = 'osm_custom_trades';
 
@@ -522,35 +526,31 @@ export function AgenciesPage() {
     {
       key: 'name',
       header: 'Agency & Owner',
-      width: '26%',
-      render: (a) => {
-        return (
-          <div className="space-y-1">
-            {/* Row 1: Agency Name */}
-            <div className="flex items-center gap-2">
-              <span
-                onClick={() => setViewingAgency(a)}
-                className="font-bold text-foreground hover:text-primary transition-colors cursor-pointer text-sm leading-tight hover:underline truncate"
-                title="Click to view full agency profile & 12-stage products"
-              >
-                {a.name}
-              </span>
-            </div>
-
-            {/* Row 2: Owner Name */}
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <UserIcon className="size-3 text-muted-foreground/80 shrink-0" />
-              <span>Owner:</span>
-              <span className="font-semibold text-foreground/90">{a.ownerName || a.contactPerson}</span>
-            </div>
+      width: '30%',
+      render: (a) => (
+        <div className="flex flex-col gap-0.5">
+          <button
+            type="button"
+            onClick={() => setViewingAgency(a)}
+            className="max-w-full truncate text-left text-sm font-semibold text-foreground hover:text-primary hover:underline transition-colors cursor-pointer"
+            title="View full agency profile"
+          >
+            {a.name}
+          </button>
+          <span className="truncate text-xs text-muted-foreground">
+            Owner: <span className="font-medium text-foreground">{a.ownerName || a.contactPerson}</span>
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Rating</span>
+            <AgencyRatingBadge value={a.rating} compact />
           </div>
-        );
-      },
+        </div>
+      ),
     },
     {
       key: 'stages',
       header: 'Work Stages',
-      width: '24%',
+      width: '26%',
       render: (a) => {
         const stagesList = [...(Array.isArray(a.stages) ? a.stages : [])].sort(
           (x, y) => (x.stageOrder || 0) - (y.stageOrder || 0)
@@ -565,16 +565,16 @@ export function AgenciesPage() {
         const remainingStages = stagesList.slice(2);
 
         return (
-          <div className="flex flex-wrap items-center gap-1.5 max-w-[240px]">
+          <div className="flex flex-wrap items-center gap-1.5">
             {stagesList.length > 0 ? (
               <>
                 {visibleStages.map((st) => (
                   <span
                     key={st.stageOrder}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 shadow-2xs whitespace-nowrap"
+                    className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary whitespace-nowrap"
                     title={`Stage ${st.stageOrder}: ${st.stageName} (${st.products?.length || 0} materials)`}
                   >
-                    <span className="font-bold opacity-80 font-mono text-[10px]">S{st.stageOrder}:</span>
+                    <span className="font-mono text-[10px] opacity-80">S{st.stageOrder}</span>
                     <span>{getShortStageName(st.stageName)}</span>
                   </span>
                 ))}
@@ -585,10 +585,10 @@ export function AgenciesPage() {
                       e.stopPropagation();
                       setStagesModalAgency(a);
                     }}
-                    className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-muted text-foreground hover:bg-muted/80 border border-border/80 transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
-                    title={`Click to view all ${stagesList.length} assigned stages`}
+                    className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer whitespace-nowrap"
+                    title={`View all ${stagesList.length} assigned stages`}
                   >
-                    +{remainingStages.length} more
+                    +{remainingStages.length}
                   </button>
                 )}
               </>
@@ -603,134 +603,96 @@ export function AgenciesPage() {
     },
     {
       key: 'contact',
-      header: 'Contact Numbers',
-      width: '18%',
+      header: 'Phone',
+      width: '16%',
       render: (a) => (
-        <div className="space-y-1 text-xs">
-          {/* Primary Phone & Alt Tag */}
-          <div className="flex items-center gap-1.5 font-medium text-foreground font-mono">
-            <a href={`tel:${a.phone}`} className="hover:text-primary transition-colors tracking-tight font-semibold">
-              {a.phone}
-            </a>
-            {a.alternatePhone && (
-              <span
-                className="text-[10px] font-semibold text-muted-foreground font-mono bg-muted px-1.5 py-0.2 rounded border border-border/80 cursor-help"
-                title={`Alternate Contact: ${a.alternatePhone}`}
-              >
-                ALT
-              </span>
-            )}
-          </div>
-
-          {/* Email */}
-          {a.email && (
-            <div className="text-muted-foreground text-[11px] truncate max-w-[180px]">
-              <a href={`mailto:${a.email}`} className="truncate hover:text-primary transition-colors" title={a.email}>
-                {a.email}
-              </a>
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'address',
-      header: 'Location',
-      width: '18%',
-      render: (a) => (
-        <div className="space-y-1 text-xs">
-          {/* City */}
-          <div className="flex items-center gap-1.5 font-semibold text-foreground">
-            <span>{a.city || 'Bangalore'}</span>
-          </div>
-
-          {/* Street Address */}
-          {a.address && (
-            <div
-              className="text-[11px] text-muted-foreground truncate max-w-[200px]"
-              title={a.address}
-            >
-              {a.address}
-            </div>
-          )}
-        </div>
+        <a
+          href={`tel:${a.phone}`}
+          className="font-mono text-xs font-medium text-foreground hover:text-primary transition-colors whitespace-nowrap"
+        >
+          {a.phone}
+        </a>
       ),
     },
     {
       key: 'activeProjects',
       header: 'Active Sites',
-      width: '8%',
+      width: '12%',
       align: 'center',
       render: (a) => {
         const count = a.activeProjects?.length || 0;
         return (
-          <div className="flex items-center justify-center">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (count > 0) handleOpenProjects(a);
-              }}
-              disabled={count === 0}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
-                count > 0
-                  ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 hover:border-primary/40 shadow-2xs cursor-pointer active:scale-95'
-                  : 'bg-muted/60 text-muted-foreground border-border/70 cursor-not-allowed opacity-60'
-              }`}
-              title={
-                count > 0
-                  ? (count === 1 ? 'Click to open project screen' : 'Click to view and open project screens')
-                  : 'No active sites allocated'
-              }
-            >
-              <BuildingIcon className="size-3 shrink-0" />
-              <span>{count} {count === 1 ? 'site' : 'sites'}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (count > 0) handleOpenProjects(a);
+            }}
+            disabled={count === 0}
+            className={
+              count > 0
+                ? 'rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors cursor-pointer'
+                : 'rounded-full px-2 py-0.5 text-xs text-muted-foreground/70 cursor-not-allowed'
+            }
+            title={
+              count > 0
+                ? count === 1
+                  ? 'Open project screen'
+                  : 'View and open project screens'
+                : 'No active sites allocated'
+            }
+          >
+            {count} {count === 1 ? 'site' : 'sites'}
+          </button>
         );
       },
     },
     {
       key: 'actions',
       header: 'Actions',
-      width: '6%',
+      width: '8%',
       align: 'right',
       render: (a) => (
-        <div className="flex items-center justify-end gap-1.5">
-          <button
-            type="button"
+        <div className="flex items-center justify-end gap-0.5">
+          <IconButton
+            icon="eye"
+            ariaLabel="View"
+            size="sm"
             onClick={() => setViewingAgency(a)}
-            className="p-1.5 text-text-muted hover:text-primary hover:bg-accent rounded-md transition-colors cursor-pointer"
-            data-tooltip="View" aria-label="View"
-          >
-            <EyeIcon className="size-3.5" />
-          </button>
+            className="hover:bg-primary/10 hover:text-primary"
+          />
           <PermissionGate permission="agencies.manage">
-            <button
-              type="button"
+            <IconButton
+              icon="edit"
+              ariaLabel="Edit"
+              size="sm"
               onClick={() => handleOpenEdit(a)}
-              className="p-1.5 text-text-muted hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors cursor-pointer"
-              data-tooltip="Edit" aria-label="Edit"
-            >
-              <EditIcon className="size-3.5" />
-            </button>
-            <button
-              type="button"
+              className="hover:bg-primary/10 hover:text-primary"
+            />
+            <IconButton
+              icon="trash"
+              ariaLabel="Delete"
+              size="sm"
               onClick={() => setDeleteTarget(a)}
-              className="p-1.5 text-text-muted hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-              data-tooltip="Delete" aria-label="Delete"
-            >
-              <TrashIcon className="size-3.5" />
-            </button>
+              className="hover:bg-destructive/10 hover:text-destructive"
+            />
           </PermissionGate>
         </div>
       ),
     },
   ];
 
-    const suggestedSkillsForTrade = useMemo(() => {
+  const suggestedSkillsForTrade = useMemo(() => {
     return TRADE_SKILLS_CATALOG[formData.trade] || [];
   }, [formData.trade]);
+
+  // Compact label/value row used inside the agency profile modal.
+  const renderModalRow = (label, value) => (
+    <div className="flex items-start justify-between gap-3 py-1.5">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-right font-medium text-foreground">{value}</span>
+    </div>
+  );
 
   // If user clicked "Register New Agency" or "Edit Agency", render the full page form view
   if (isFullFormOpen) {
@@ -1169,78 +1131,44 @@ export function AgenciesPage() {
         }
       />
 
-      {/* Sleek KPI Summary Cards - Prominently highlighted */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Total Agencies */}
-        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
-              Registered Agencies
-            </span>
-            <div className="size-6 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <BriefcaseIcon className="size-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
-              {stats.totalAgencies}
-            </span>
-            <span className="text-xs font-medium text-muted-foreground truncate">
-              12 fit-out stages
-            </span>
-          </div>
-        </div>
-
-        {/* Total Workforce */}
-        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
-              Total Workers
-            </span>
-            <div className="size-6 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-              <UsersIcon className="size-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
-              {stats.totalArtisans}
-            </span>
-            <span className="text-xs font-medium text-muted-foreground truncate">
-              Active workers
-            </span>
-          </div>
-        </div>
-
-        {/* Active Sites Under Execution */}
-        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
-              Active Site Stages
-            </span>
-            <div className="size-6 rounded-md bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-              <BuildingIcon className="size-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
-              {stats.activeSites}
-            </span>
-            <span className="text-xs font-medium text-muted-foreground truncate">
-              Live projects
-            </span>
-          </div>
-        </div>
+      {/* Compact KPI summary */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard
+          variant="inline"
+          label="Registered Agencies"
+          value={stats.totalAgencies}
+          subtext="Across 12 fit-out stages"
+          icon={<BriefcaseIcon className="size-5" />}
+          tone="primary"
+        />
+        <StatCard
+          variant="inline"
+          label="Total Workers"
+          value={stats.totalArtisans}
+          subtext="Active workers on roll"
+          icon={<UsersIcon className="size-5" />}
+          tone="success"
+        />
+        <StatCard
+          variant="inline"
+          label="Active Site Stages"
+          value={stats.activeSites}
+          subtext="Live project allocations"
+          icon={<BuildingIcon className="size-5" />}
+        />
       </div>
 
       {/* Enhanced Data Toolbar with 12 Stages Filter - Sticky Toolbar */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md py-1">
         <DataToolbar
+          variant="clean"
+          layout="inline"
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search agency, owner name, products, stage, trade, phone..."
           totalCount={filteredAgencies.length}
           filters={
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {/* Filter by 12 Stages */}
               <div className="w-52">
                 <Select
@@ -1281,19 +1209,6 @@ export function AgenciesPage() {
                   ]}
                 />
               </div>
-
-              {/* Pagination Size Selector (10, 25, 30 per records) */}
-              <div className="w-28">
-                <Select
-                  value={String(pageSize)}
-                  onChange={(e) => setPageSize(Number(e.target.value))}
-                  options={[
-                    { value: '10', label: '10 / page' },
-                    { value: '25', label: '25 / page' },
-                    { value: '30', label: '30 / page' },
-                  ]}
-                />
-              </div>
             </div>
           }
         />
@@ -1301,6 +1216,7 @@ export function AgenciesPage() {
 
       {/* Agencies Data Table */}
       <Table
+        variant="clean"
         columns={columns}
         data={paginatedAgencies}
         loading={loading}
@@ -1310,6 +1226,10 @@ export function AgenciesPage() {
           totalItems: sortedAgencies.length,
           pageSize,
           onPageChange: setCurrentPage,
+          onPageSizeChange: (size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          },
         }}
         emptyTitle={
           search || tradeFilter !== 'ALL' || statusFilter !== 'ALL' || stageFilter !== 'ALL'
@@ -1332,304 +1252,260 @@ export function AgenciesPage() {
           subtitle={`Proprietor: ${viewingAgency.ownerName || viewingAgency.contactPerson} • ${viewingAgency.trade} Trade`}
           size="lg"
           footer={
-            <div className="flex items-center justify-between w-full">
-              <div className="text-xs text-muted-foreground">
-                Partner ID: <span className="font-mono">{viewingAgency.id}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setViewingAgency(null)}>
-                  Close
+            <>
+              <Button variant="outline" size="sm" onClick={() => setViewingAgency(null)}>
+                Close
+              </Button>
+              <PermissionGate permission="agencies.manage">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leadingIcon="edit"
+                  onClick={() => {
+                    const target = viewingAgency;
+                    setViewingAgency(null);
+                    handleOpenEdit(target);
+                  }}
+                >
+                  Edit Agency & Products
                 </Button>
-                <PermissionGate permission="agencies.manage">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    leadingIcon="edit"
-                    onClick={() => {
-                      const target = viewingAgency;
-                      setViewingAgency(null);
-                      handleOpenEdit(target);
-                    }}
-                  >
-                    Edit Agency & Products
-                  </Button>
-                </PermissionGate>
-              </div>
-            </div>
+              </PermissionGate>
+            </>
           }
         >
-          <div className="space-y-5">
-            {/* Top Identity Card */}
-            <div className="p-4 rounded-xl border border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-foreground">{viewingAgency.name}</h3>
-                  <Badge variant="secondary" size="md">
-                    {viewingAgency.trade}
-                  </Badge>
-                  {viewingAgency.status === 'active' ? (
-                    <Badge variant="success" size="sm" dot>
-                      Active
-                    </Badge>
-                  ) : viewingAgency.status === 'on_hold' ? (
-                    <Badge variant="warning" size="sm" dot>
-                      On Hold
-                    </Badge>
-                  ) : (
-                    <Badge variant="neutral" size="sm" dot>
-                      Inactive
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground flex items-center gap-2">
-                  <span>
-                    Contractor Owner: <strong className="text-foreground">{viewingAgency.ownerName || viewingAgency.contactPerson}</strong>
-                  </span>
-                  {viewingAgency.establishedYear && <span>• Est. {viewingAgency.establishedYear}</span>}
-                </div>
-              </div>
+          <div className="space-y-4">
+            {/* Compact meta — name, owner and trade already appear in the modal header */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+              {viewingAgency.status === 'active' ? (
+                <Badge variant="success" size="sm" dot>
+                  Active
+                </Badge>
+              ) : viewingAgency.status === 'on_hold' ? (
+                <Badge variant="warning" size="sm" dot>
+                  On Hold
+                </Badge>
+              ) : (
+                <Badge variant="neutral" size="sm" dot>
+                  Inactive
+                </Badge>
+              )}
+              <span>
+                Partner ID:{' '}
+                <span className="font-mono text-foreground">{viewingAgency.id}</span>
+              </span>
+              {viewingAgency.establishedYear && <span>Est. {viewingAgency.establishedYear}</span>}
+              <span className="ml-auto">
+                {viewingAgency.stages?.length || 0} of {FITOUT_12_STAGES.length} stages
+              </span>
             </div>
 
-            {/* 12 Fit-Out Milestone Stages & Supplied Products / Materials */}
-            <div className="p-4 rounded-xl border border-border bg-card space-y-3">
-              <div className="flex items-center justify-between border-b border-border pb-2">
-                <div className="flex items-center gap-2">
-                  <BuildingIcon className="size-4 text-primary" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                    12 Interior Fit-Out Stages & Supplied Products
-                  </span>
-                </div>
-                <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                  {viewingAgency.stages?.length || 0} stages covered
-                </span>
-              </div>
-
+            {/* Stage coverage — compact two-column list; full product names kept in the tooltip */}
+            <section className="space-y-2">
+              <h4 className="border-b border-border pb-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                Stage Coverage &amp; Supplied Products
+              </h4>
               {viewingAgency.stages && viewingAgency.stages.length > 0 ? (
-                <div className="space-y-3 pt-1">
+                <div className="grid grid-cols-1 gap-x-5 gap-y-2 sm:grid-cols-2">
                   {viewingAgency.stages.map((st) => (
-                    <div
-                      key={st.stageOrder}
-                      className="p-3 rounded-lg border border-border/80 bg-muted/25 space-y-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="size-5 rounded-full bg-primary text-primary-foreground font-bold text-[10px] flex items-center justify-center">
-                            {st.stageOrder}
+                    <div key={st.stageOrder} className="flex items-start gap-2">
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+                        {st.stageOrder}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span
+                            className="truncate text-xs font-medium text-foreground"
+                            title={st.stageName}
+                          >
+                            {st.stageName}
                           </span>
-                          <span className="text-xs font-bold text-foreground">
-                            Stage {st.stageOrder}: {st.stageName}
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {st.products?.length || 0} products
                           </span>
                         </div>
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          {st.products?.length || 0} products supplied
-                        </span>
+                        {st.products && st.products.length > 0 ? (
+                          <p
+                            className="mt-0.5 truncate text-[11px] text-muted-foreground"
+                            title={st.products.join(', ')}
+                          >
+                            {st.products.join(' · ')}
+                          </p>
+                        ) : (
+                          <p className="mt-0.5 text-[11px] italic text-muted-foreground">
+                            Standard stage items
+                          </p>
+                        )}
                       </div>
-
-                      {/* Products List */}
-                      {st.products && st.products.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {st.products.map((p, pIdx) => (
-                            <span
-                              key={pIdx}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-card text-foreground border border-border/80 shadow-2xs"
-                            >
-                              <CheckIcon className="size-3 text-emerald-500" />
-                              <span>{p}</span>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">
-                          Standard stage execution items.
-                        </span>
-                      )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground italic py-2">
-                  No specific stage products configured yet. Click Edit Agency to map stages.
-                </div>
+                <p className="py-1 text-xs italic text-muted-foreground">
+                  No stage products configured yet. Use “Edit Agency &amp; Products” to map stages.
+                </p>
               )}
-            </div>
+            </section>
 
-            {/* Grid 1: Contact Coordinates & Address */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <PhoneIcon className="size-3.5 text-primary" />
-                  <span>Contact Coordinates</span>
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between py-1 border-b border-border/50">
-                    <span className="text-muted-foreground">Primary Mobile:</span>
-                    <a
-                      href={`tel:${viewingAgency.phone}`}
-                      className="font-mono font-medium text-foreground hover:text-primary"
-                    >
-                      {viewingAgency.phone}
-                    </a>
-                  </div>
-                  {viewingAgency.alternatePhone && (
-                    <div className="flex items-center justify-between py-1 border-b border-border/50">
-                      <span className="text-muted-foreground">WhatsApp / Alternate:</span>
+            {/* Two-column detail grid: Contact | Commercial & Compliance */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="space-y-4">
+                <section className="space-y-1.5">
+                  <h4 className="border-b border-border pb-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                    Contact &amp; Location
+                  </h4>
+                  <div className="divide-y divide-border/70 text-xs">
+                    {renderModalRow(
+                      'Primary Mobile',
                       <a
-                        href={`tel:${viewingAgency.alternatePhone}`}
-                        className="font-mono font-medium text-foreground hover:text-primary"
+                        href={`tel:${viewingAgency.phone}`}
+                        className="font-mono text-foreground hover:text-primary"
                       >
-                        {viewingAgency.alternatePhone}
+                        {viewingAgency.phone}
                       </a>
-                    </div>
-                  )}
-                  {viewingAgency.email && (
-                    <div className="flex items-center justify-between py-1 border-b border-border/50">
-                      <span className="text-muted-foreground">Business Email:</span>
-                      <a
-                        href={`mailto:${viewingAgency.email}`}
-                        className="font-medium text-foreground hover:text-primary truncate max-w-[180px]"
-                      >
-                        {viewingAgency.email}
-                      </a>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-muted-foreground">Site Supervisor:</span>
-                    <span className="font-medium text-foreground">
-                      {viewingAgency.contactPerson || viewingAgency.ownerName}
-                    </span>
+                    )}
+                    {viewingAgency.alternatePhone &&
+                      renderModalRow(
+                        'WhatsApp / Alternate',
+                        <a
+                          href={`tel:${viewingAgency.alternatePhone}`}
+                          className="font-mono text-foreground hover:text-primary"
+                        >
+                          {viewingAgency.alternatePhone}
+                        </a>
+                      )}
+                    {viewingAgency.email &&
+                      renderModalRow(
+                        'Business Email',
+                        <a
+                          href={`mailto:${viewingAgency.email}`}
+                          className="break-all text-foreground hover:text-primary"
+                        >
+                          {viewingAgency.email}
+                        </a>
+                      )}
+                    {renderModalRow(
+                      'Site Supervisor',
+                      viewingAgency.contactPerson || viewingAgency.ownerName
+                    )}
+                    {renderModalRow('City', viewingAgency.city || 'Bangalore')}
+                    {viewingAgency.pincode &&
+                      renderModalRow(
+                        'Pincode',
+                        <span className="font-mono">{viewingAgency.pincode}</span>
+                      )}
                   </div>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <MapPinIcon className="size-3.5 text-primary" />
-                  <span>Workshop & Address</span>
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between py-1 border-b border-border/50">
-                    <span className="text-muted-foreground">City:</span>
-                    <span className="font-medium text-foreground">{viewingAgency.city || 'Bangalore'}</span>
-                  </div>
-                  {viewingAgency.pincode && (
-                    <div className="flex items-center justify-between py-1 border-b border-border/50">
-                      <span className="text-muted-foreground">Pincode:</span>
-                      <span className="font-mono font-medium text-foreground">{viewingAgency.pincode}</span>
-                    </div>
-                  )}
-                  <div className="py-1">
-                    <span className="text-muted-foreground block mb-0.5">Street Address:</span>
-                    <span className="font-medium text-foreground leading-relaxed">
+                  <div className="pt-2 text-xs">
+                    <span className="block text-muted-foreground">Street Address</span>
+                    <span className="mt-0.5 block leading-relaxed text-foreground">
                       {viewingAgency.address || 'Site office / workshop address not specified'}
                     </span>
                   </div>
-                </div>
+                </section>
+
+                <section className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 border-b border-border pb-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                      Trade Skills &amp; Specializations
+                    </h4>
+                    <span className="text-[11px] text-muted-foreground">
+                      {viewingAgency.skills?.length || 0} registered
+                    </span>
+                  </div>
+                  {viewingAgency.skills && viewingAgency.skills.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {viewingAgency.skills.map((skill, idx) => (
+                        <span
+                          key={idx}
+                          className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs italic text-muted-foreground">Standard trade capabilities.</p>
+                  )}
+                </section>
               </div>
-            </div>
 
-            {/* Trade Skills & Specializations */}
-            <div className="p-4 rounded-xl border border-border bg-card space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <TagIcon className="size-3.5 text-primary" />
-                  <span>Trade Skills & Workmanship Specializations</span>
-                </div>
-                <span className="text-[11px] text-muted-foreground">
-                  {viewingAgency.skills?.length || 0} registered skills
-                </span>
-              </div>
-
-              {viewingAgency.skills && viewingAgency.skills.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {viewingAgency.skills.map((skill, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-muted text-foreground border border-border/70"
-                    >
-                      <CheckIcon className="size-3 text-emerald-500" />
-                      <span>{skill}</span>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground italic">Standard trade capabilities.</div>
-              )}
-            </div>
-
-            {/* Grid 2: Commercials & Compliance */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <BriefcaseIcon className="size-3.5 text-primary" />
-                  <span>Commercial & Capacity</span>
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between py-1 border-b border-border/50">
-                    <span className="text-muted-foreground">Total Workers:</span>
-                    <span className="font-bold text-foreground">
-                      {viewingAgency.teamSize || 8} workers on roll
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 border-b border-border/50">
-                    <span className="text-muted-foreground">Standard Base Rate:</span>
-                    <span className="font-mono font-bold text-foreground">
-                      ₹{viewingAgency.baseRate || 0} / {viewingAgency.rateUnit || 'sqft'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 border-b border-border/50">
-                    <span className="text-muted-foreground">Payment Terms:</span>
-                    <span className="font-medium text-foreground">
-                      {viewingAgency.paymentTerms || 'Weekly Running Bill'}
-                    </span>
-                  </div>
-                  {viewingAgency.bankDetails && (
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-muted-foreground">UPI / Payout ID:</span>
-                      <span className="font-mono text-foreground font-medium">
-                        {viewingAgency.bankDetails}
+              <div className="space-y-5">
+                <section className="space-y-1.5">
+                  <h4 className="border-b border-border pb-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                    Commercial &amp; Capacity
+                  </h4>
+                  <div className="divide-y divide-border/70 text-xs">
+                    {renderModalRow(
+                      'Total Workers',
+                      `${viewingAgency.teamSize || 8} on roll`
+                    )}
+                    {renderModalRow(
+                      'Standard Base Rate',
+                      <span className="font-mono">
+                        ₹{viewingAgency.baseRate || 0} / {viewingAgency.rateUnit || 'sqft'}
                       </span>
-                    </div>
-                  )}
-                </div>
-              </div>
+                    )}
+                    {renderModalRow(
+                      'Payment Terms',
+                      viewingAgency.paymentTerms || 'Weekly Running Bill'
+                    )}
+                    {renderModalRow(
+                      'Agency Rating',
+                      <AgencyRatingBadge value={viewingAgency.rating} />
+                    )}
+                    {viewingAgency.bankDetails &&
+                      renderModalRow(
+                        'UPI / Payout ID',
+                        <span className="font-mono">{viewingAgency.bankDetails}</span>
+                      )}
+                  </div>
+                </section>
 
-              <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <ShieldCheckIcon className="size-3.5 text-primary" />
-                  <span>Statutory & Compliance</span>
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between py-1 border-b border-border/50">
-                    <span className="text-muted-foreground">GSTIN Number:</span>
-                    <span className="font-mono font-medium text-foreground">
-                      {viewingAgency.gstin || 'Unregistered / Composite'}
-                    </span>
+                <section className="space-y-1.5">
+                  <h4 className="border-b border-border pb-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                    Statutory &amp; Compliance
+                  </h4>
+                  <div className="divide-y divide-border/70 text-xs">
+                    {renderModalRow(
+                      'GSTIN Number',
+                      <span className="font-mono">
+                        {viewingAgency.gstin || 'Unregistered / Composite'}
+                      </span>
+                    )}
+                    {viewingAgency.pan &&
+                      renderModalRow(
+                        'Business PAN',
+                        <span className="font-mono">{viewingAgency.pan}</span>
+                      )}
+                    {renderModalRow(
+                      'Active Allocated Sites',
+                      <button
+                        type="button"
+                        disabled={!viewingAgency.activeProjects?.length}
+                        onClick={() => {
+                          const target = viewingAgency;
+                          setViewingAgency(null);
+                          setProjectsModalAgency(target);
+                        }}
+                        className="font-medium text-primary hover:underline disabled:cursor-default disabled:text-muted-foreground disabled:no-underline cursor-pointer"
+                      >
+                        {viewingAgency.activeProjects?.length || 0} active site(s)
+                      </button>
+                    )}
                   </div>
-                  {viewingAgency.pan && (
-                    <div className="flex items-center justify-between py-1 border-b border-border/50">
-                      <span className="text-muted-foreground">Business PAN:</span>
-                      <span className="font-mono font-medium text-foreground">{viewingAgency.pan}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-muted-foreground">Active Allocated Sites:</span>
-                    <span className="font-semibold text-primary">
-                      {viewingAgency.activeProjects?.length || 0} active site(s)
-                    </span>
-                  </div>
-                </div>
+                </section>
+
+                {viewingAgency.notes && (
+                  <section className="space-y-1.5">
+                    <h4 className="border-b border-border pb-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                      Supervisor Notes &amp; Remarks
+                    </h4>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {viewingAgency.notes}
+                    </p>
+                  </section>
+                )}
               </div>
             </div>
-
-            {/* Quality & Workmanship Remarks */}
-            {viewingAgency.notes && (
-              <div className="p-3.5 rounded-xl border border-border bg-muted/20 text-xs">
-                <span className="font-semibold text-foreground block mb-1">
-                  Supervisor Notes & Remarks:
-                </span>
-                <p className="text-muted-foreground leading-relaxed">{viewingAgency.notes}</p>
-              </div>
-            )}
           </div>
         </Modal>
       )}
@@ -1755,7 +1631,7 @@ export function AgenciesPage() {
             </div>
           }
         >
-          <div className="space-y-2.5">
+          <div className="divide-y divide-border/70">
             {(projectsModalAgency.activeProjects || []).map((pId) => {
               const proj = mockProjects.find((p) => String(p.id).toLowerCase() === String(pId).toLowerCase());
               const address = proj?.siteAddress || `${proj?.name || pId}, Bengaluru`;
@@ -1768,30 +1644,25 @@ export function AgenciesPage() {
                     setProjectsModalAgency(null);
                     navigate(`/projects/${pId}`);
                   }}
-                  className="p-3 rounded-xl border border-border bg-card hover:bg-muted/50 hover:border-primary/40 transition-all flex items-center justify-between gap-3 cursor-pointer group shadow-2xs"
-                  title={`Click to open ${name} screen`}
+                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-2.5 group hover:bg-muted/50 transition-colors"
+                  title={`Open ${name}`}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
                         {pId}
                       </span>
-                      <span className="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
+                      <span className="truncate text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
                         {name}
                       </span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                       {address}
                     </p>
                   </div>
-
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    className="shrink-0 group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors pointer-events-none"
-                  >
-                    View Project â†’
-                  </Button>
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-2 py-1 text-xs font-medium text-primary group-hover:bg-primary/20 transition-colors">
+                    Open
+                  </span>
                 </div>
               );
             })}

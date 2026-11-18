@@ -722,10 +722,61 @@ const mockAttendanceService = {
 };
 
 // ----------------------------------------------------------------------------------------------------------------
-// Live (backend) implementation. Leave types stay on the mock side: they belong to the Leave tab, not Attendance.
+// Live (backend) implementation. Leave types use the editable /leave/type-definitions/ catalogue;
+// local storage remains the fallback for empty/unreachable reads and failed writes.
 // ----------------------------------------------------------------------------------------------------------------
 const BASE = '/attendance';
+const LEAVE_TYPE_DEFINITIONS_URL = '/leave/type-definitions/';
 const isNumericId = (value) => /^\d+$/.test(String(value ?? ''));
+
+/** Defaults for a leave type that only exists in the old string endpoint or local storage. */
+const DEFAULT_LEAVE_TYPE_VALUES = {
+  daysPerYear: 12,
+  carryForward: 'No',
+  description: '—',
+  status: 'Active',
+};
+
+/** Deterministic id for a leave type that has no persisted backend/local id yet. */
+function stableBackendLeaveTypeId(name) {
+  const key = String(name).trim();
+  const slug = key.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'leave';
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  }
+  return `lt-be-${slug}-${Math.abs(hash).toString(36)}`;
+}
+
+/** The catalogue endpoint already returns the page's object shape; tolerate older string rows too. */
+function normalizeLeaveType(row) {
+  if (typeof row === 'string') {
+    return { id: stableBackendLeaveTypeId(row), name: row.trim(), ...DEFAULT_LEAVE_TYPE_VALUES };
+  }
+  return {
+    id: String(row?.id ?? stableBackendLeaveTypeId(row?.name || '')),
+    name: String(row?.name || '').trim(),
+    daysPerYear: Number(row?.daysPerYear ?? DEFAULT_LEAVE_TYPE_VALUES.daysPerYear) || DEFAULT_LEAVE_TYPE_VALUES.daysPerYear,
+    carryForward: row?.carryForward || DEFAULT_LEAVE_TYPE_VALUES.carryForward,
+    description: row?.description || DEFAULT_LEAVE_TYPE_VALUES.description,
+    status: row?.status || DEFAULT_LEAVE_TYPE_VALUES.status,
+  };
+}
+
+/** Only numeric ids are persisted rows; local-only ids stay in the localStorage fallback. */
+function isPersistedLeaveTypeId(id) {
+  return isNumericId(id);
+}
+
+function toApiLeaveType(payload) {
+  return {
+    name: String(payload.name || '').trim(),
+    daysPerYear: Number(payload.daysPerYear) || 12,
+    carryForward: payload.carryForward || 'No',
+    description: payload.description && payload.description !== '—' ? payload.description : '',
+    status: payload.status || 'Active',
+  };
+}
 
 /** The backend sends 24-hour clock text ('18:05'); the page shows and sends '06:05 PM'. */
 export function formatIndianTime(val) {
@@ -986,6 +1037,71 @@ const liveAttendanceService = {
     return apiClient.getAllCached(`${BASE}/sites/`);
   },
 
+  /**
+   * The editable catalogue lives at GET /leave/type-definitions/ and already uses the page's
+   * object shape. Local rows with a different name (including mock-only entries) are preserved,
+   * and an empty or unreachable backend returns the full local list.
+   */
+  async getLeaveTypes() {
+    try {
+      const rows = await apiClient.get(LEAVE_TYPE_DEFINITIONS_URL);
+      const backendTypes = (Array.isArray(rows) ? rows : [])
+        .map(normalizeLeaveType)
+        .filter((row) => row.name);
+
+      if (backendTypes.length === 0) return mockAttendanceService.getLeaveTypes();
+
+      const seen = new Set(backendTypes.map((row) => row.name.toLowerCase()));
+      const result = [...backendTypes];
+
+      // Keep local-only additions. Backend rows are authoritative for names they provide.
+      [...getStoredLeaveTypes(), ...mockLeaveTypes].forEach((local) => {
+        if (!local || typeof local.name !== 'string') return;
+        const key = local.name.trim().toLowerCase();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        result.push({ ...local });
+      });
+
+      return result;
+    } catch (err) {
+      console.warn('Backend getLeaveTypes failed, falling back to the local leave types:', err);
+      return mockAttendanceService.getLeaveTypes();
+    }
+  },
+
+  async addLeaveType(leaveType) {
+    try {
+      const row = await apiClient.post(LEAVE_TYPE_DEFINITIONS_URL, toApiLeaveType(leaveType));
+      return normalizeLeaveType(row);
+    } catch (err) {
+      console.warn('Backend addLeaveType failed, falling back to local storage:', err);
+      return mockAttendanceService.addLeaveType(leaveType);
+    }
+  },
+
+  async updateLeaveType(id, data) {
+    if (!isPersistedLeaveTypeId(id)) return mockAttendanceService.updateLeaveType(id, data);
+    try {
+      const row = await apiClient.patch(`${LEAVE_TYPE_DEFINITIONS_URL}${id}/`, toApiLeaveType(data));
+      return normalizeLeaveType(row);
+    } catch (err) {
+      console.warn('Backend updateLeaveType failed, falling back to local storage:', err);
+      return mockAttendanceService.updateLeaveType(id, data);
+    }
+  },
+
+  async deleteLeaveType(id) {
+    if (!isPersistedLeaveTypeId(id)) return mockAttendanceService.deleteLeaveType(id);
+    try {
+      await apiClient.delete(`${LEAVE_TYPE_DEFINITIONS_URL}${id}/`);
+      return { success: true };
+    } catch (err) {
+      console.warn('Backend deleteLeaveType failed, falling back to local storage:', err);
+      return mockAttendanceService.deleteLeaveType(id);
+    }
+  },
+
   async getRequests() {
     try {
       const live = (await apiClient.getAll(`${BASE}/requests/`)).map(fromApiRequest);
@@ -1177,7 +1293,7 @@ const liveAttendanceService = {
   async getDailyAttendance({ date, department } = {}) {
     const rows = await apiClient.getAll(`${BASE}/daily/`, {
       date,
-      department: department && department !== 'All' ? department : undefined,
+      department: department && !['All', 'ALL'].includes(department) ? department : undefined,
     });
     return rows.map((row) => ({
       id: row.userId,
@@ -1199,7 +1315,7 @@ const liveAttendanceService = {
   async getAttendanceSummary({ month, department } = {}) {
     const rows = await apiClient.getAll(`${BASE}/summary/`, {
       month,
-      department: department && department !== 'All' ? department : undefined,
+      department: department && !['All', 'ALL'].includes(department) ? department : undefined,
     });
     return rows.map((row) => ({ ...row, id: row.userId }));
   },
