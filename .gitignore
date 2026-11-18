@@ -6,6 +6,10 @@ dev-dist/
 .vite/
 ae-oms-fe/
 
+# Package manager: this repo uses npm (package-lock.json)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
 # Environment files (secrets); commit only .env.example
 .env
 .env.*
