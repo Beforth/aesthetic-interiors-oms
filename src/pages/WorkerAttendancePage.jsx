@@ -5,6 +5,7 @@ import { isDebug } from '../config/env';
 import { apiClient } from '../services/apiClient';
 import { attendanceService, cleanLocationName, formatIndianTime } from '../services/attendanceService';
 import { cn } from '../lib/utils';
+import { usePagination } from '../hooks/usePagination';
 
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
@@ -12,6 +13,7 @@ import Button from '../components/ui/Button';
 import Tabs from '../components/ui/Tabs';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Pagination from '../components/ui/Pagination';
 import { ClockIcon, EyeIcon, MailIcon, MapPinIcon, TrashIcon, UndoIcon, XIcon } from '../components/ui/icons';
 
 const BASE = '/attendance';
@@ -310,6 +312,9 @@ export function WorkerAttendancePage() {
     [records, from, to]
   );
 
+  const recordsPager = usePagination(visibleRecords);
+  const requestsPager = usePagination(visibleRequests);
+
   const punchLabel = punching ? 'Verifying GPS...' : checkedOut ? 'Checked Out' : working ? 'Check Out' : 'Check In';
 
   return (
@@ -422,9 +427,6 @@ export function WorkerAttendancePage() {
               <span className="text-[11px] font-medium text-muted-foreground">To:</span>
               <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer" />
             </div>
-            <span className="text-xs text-muted-foreground ml-auto">
-              Showing <span className="font-bold text-foreground">{visibleRecords.length}</span> records
-            </span>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-border bg-card">
@@ -446,7 +448,7 @@ export function WorkerAttendancePage() {
                 ) : visibleRecords.length === 0 ? (
                   <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No attendance records in this period.</td></tr>
                 ) : (
-                  visibleRecords.map((r) => (
+                  recordsPager.paginatedItems.map((r) => (
                     <tr key={r.id} className="hover:bg-muted/40 transition-colors">
                       <td className="p-3 font-medium text-foreground whitespace-nowrap">{r.date}</td>
                       <td className="p-3 font-mono font-semibold text-foreground">{formatIndianTime(r.checkInTime)}</td>
@@ -475,6 +477,7 @@ export function WorkerAttendancePage() {
               </tbody>
             </table>
           </div>
+          <Pagination {...recordsPager.pagination} />
         </Card>
       )}
 
@@ -526,7 +529,7 @@ export function WorkerAttendancePage() {
                     </td>
                   </tr>
                 ) : (
-                  visibleRequests.map((req) => {
+                  requestsPager.paginatedItems.map((req) => {
                     const pending = String(req.status).toLowerCase() === 'pending';
                     return (
                       <tr key={req.id} className="hover:bg-muted/40 transition-colors">
@@ -573,6 +576,7 @@ export function WorkerAttendancePage() {
               </tbody>
             </table>
           </div>
+          <Pagination {...requestsPager.pagination} />
         </Card>
       )}
 

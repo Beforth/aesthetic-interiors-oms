@@ -4,12 +4,14 @@ import { useToast } from '../context/ToastContext';
 import { apiClient } from '../services/apiClient';
 import { formatDate } from '../utils/formatters';
 import { cn } from '../lib/utils';
+import { usePagination } from '../hooks/usePagination';
 
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Pagination from '../components/ui/Pagination';
 import { EyeIcon, MailIcon, TrashIcon, UndoIcon } from '../components/ui/icons';
 
 const BASE = '/leave';
@@ -104,6 +106,8 @@ export function WorkerLeavePage() {
         .filter((r) => statusFilter === 'ALL' || r.status === statusFilter),
     [requests, hidden, statusFilter]
   );
+
+  const pager = usePagination(visible);
 
   const openForm = () => {
     setForm({ leaveType: types[0] || FALLBACK_TYPES[0], startDate: isoDay(0), endDate: '', reason: '' });
@@ -238,7 +242,7 @@ export function WorkerLeavePage() {
                   </td>
                 </tr>
               ) : (
-                visible.map((r) => (
+                pager.paginatedItems.map((r) => (
                   <tr key={r.id} className="hover:bg-muted/40 transition-colors">
                     <td className="p-3.5 whitespace-nowrap text-foreground">{formatDate(r.appliedOn)}</td>
                     <td className="p-3.5 text-foreground">{r.leaveType}</td>
@@ -284,6 +288,7 @@ export function WorkerLeavePage() {
             </tbody>
           </table>
         </div>
+        <Pagination {...pager.pagination} />
       </Card>
 
       {/* New request */}

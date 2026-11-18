@@ -3,7 +3,6 @@ import StatusBadge from '../ui/StatusBadge';
 import Avatar from '../ui/Avatar';
 import {
   TrashIcon,
-  MapPinIcon,
   ArrowRightIcon,
   TriangleAlertIcon,
 } from '../ui/icons';
@@ -61,7 +60,7 @@ export function ProjectCard({
       onDragEnd={onDragEnd}
       onClick={onClick}
       className={cn(
-        'group relative flex flex-col justify-between rounded-xl border border-border bg-card p-4 transition-all duration-200',
+        'group relative flex flex-col justify-between rounded-lg border border-border bg-card p-3.5 transition-all duration-200',
         'hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5',
         draggable ? 'cursor-grab active:cursor-grabbing' : onClick ? 'cursor-pointer' : ''
       )}
@@ -71,7 +70,7 @@ export function ProjectCard({
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm sm:text-base font-bold text-foreground group-hover:text-primary transition-colors truncate">
+              <h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                 {project.name}
               </h4>
               {isDelayed && (
@@ -106,20 +105,19 @@ export function ProjectCard({
         </div>
 
         {/* Site Location Address */}
-        <div className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5 truncate">
-          <MapPinIcon className="size-3.5 text-primary shrink-0" />
-          <span className="truncate">{project.siteAddress || 'No site address provided'}</span>
+        <div className="text-[11px] text-muted-foreground mb-3 truncate">
+          {project.siteAddress || 'No site address provided'}
         </div>
 
-        {/* Polished Progress Bar Container */}
-        <div className="mb-4 bg-muted/30 rounded-lg p-2.5 border border-border/50">
+        {/* Progress */}
+        <div className="mb-3">
           <div className="flex items-center justify-between text-xs mb-1.5">
             <span className="text-[11px] font-medium text-muted-foreground truncate">
-              Progress ({currentStage ? currentStage.name : 'Staging'})
+              {currentStage ? currentStage.name : 'Staging'}
             </span>
             <span className="text-xs font-bold font-mono text-foreground">{progress}%</span>
           </div>
-          <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+          <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-300',

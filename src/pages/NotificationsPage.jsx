@@ -1,30 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { notificationService } from '../services/notificationService';
-import Card from '../components/ui/Card';
+import Tabs from '../components/ui/Tabs';
 import Button from '../components/ui/Button';
-import IconButton from '../components/ui/IconButton';
 import Input from '../components/ui/Input';
 import Textarea from '../components/ui/Textarea';
 import Select from '../components/ui/Select';
 import Checkbox from '../components/ui/Checkbox';
 import Badge from '../components/ui/badge';
 import Modal from '../components/ui/Modal';
+import Pagination from '../components/ui/Pagination';
+import { usePagination } from '../hooks/usePagination';
 import {
-  BellIcon,
   SearchIcon,
   PlusIcon,
   TrashIcon,
-  CheckIcon,
-  CalendarIcon,
-  ClockIcon,
-  UsersIcon,
-  FileSpreadsheetIcon,
-  WalletIcon,
   CheckCircleIcon,
   ChevronRightIcon,
 } from '../components/ui/icons';
@@ -33,18 +27,24 @@ import {
  * Filter tabs matching user's reference screenshot (Image 1)
  */
 const FILTER_TABS = [
-  { id: 'all', label: 'All', icon: BellIcon },
-  { id: 'attendance', label: 'Attendance', icon: CheckIcon },
-  { id: 'shifts', label: 'Shifts', icon: CalendarIcon },
-  { id: 'leave', label: 'Leave', icon: ClockIcon },
-  { id: 'expenses', label: 'Expenses', icon: WalletIcon },
-  { id: 'payroll', label: 'Payroll', icon: FileSpreadsheetIcon },
+  { id: 'all', label: 'All' },
+  { id: 'attendance', label: 'Attendance' },
+  { id: 'shifts', label: 'Shifts' },
+  { id: 'leave', label: 'Leave' },
+  { id: 'expenses', label: 'Expenses' },
+  { id: 'payroll', label: 'Payroll' },
 ];
 
 export function NotificationsPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { currentUser, hasPermission } = useAuth();
+
+  // The toast object is recreated by its provider; a ref keeps async callbacks current
+  // without making the load callback change on every render.
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  const mountedRef = useRef(true);
 
   // Active filter tab
   const [activeTab, setActiveTab] = useState('all');
@@ -67,11 +67,26 @@ export function NotificationsPage() {
   });
 
   // Sync notifications from notificationService factoring role permissions
-  const loadNotifications = useCallback(() => {
-    if (!currentUser) return;
-    const list = notificationService.getVisibleNotifications(currentUser, hasPermission);
-    setNotifications(list);
+  const loadNotifications = useCallback(async () => {
+    if (!currentUser) return [];
+    try {
+      const list = await notificationService.getVisibleNotifications(currentUser, hasPermission);
+      if (mountedRef.current) {
+        setNotifications(Array.isArray(list) ? list : []);
+      }
+      return list;
+    } catch (error) {
+      toastRef.current.error(error?.message || 'Unable to load notifications');
+      return [];
+    }
   }, [currentUser, hasPermission]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     loadNotifications();
@@ -112,43 +127,92 @@ export function NotificationsPage() {
     });
   }, [notifications, activeTab, searchQuery]);
 
+  const notificationPager = usePagination(filteredNotifications);
+
+  // Report a failed action with the existing toast and re-sync either way.
+  const showActionError = (error, fallbackMessage) => {
+    toast.error(error?.message || fallbackMessage);
+    loadNotifications();
+  };
+
   // Handle single item deletion
-  const handleDeleteSingle = (id, e) => {
+  const handleDeleteSingle = async (id, e) => {
     e?.stopPropagation();
-    notificationService.deleteNotification(id);
-    setSelectedIds((prev) => prev.filter((i) => i !== id));
-    toast.success('Notification removed');
+    try {
+      await notificationService.deleteNotification(id);
+      setSelectedIds((prev) => prev.filter((i) => i !== id));
+      await loadNotifications();
+      toast.success('Notification removed');
+    } catch (error) {
+      showActionError(error, 'Unable to remove notification');
+    }
   };
 
   // Handle Delete All / Clear
-  const handleDeleteAll = () => {
+  const handleDeleteAll = async () => {
     if (filteredNotifications.length === 0) return;
-    notificationService.deleteAllNotifications(activeTab);
-    setSelectedIds([]);
-    toast.success(
-      activeTab === 'all'
-        ? 'All notifications cleared'
-        : `All ${activeTab} notifications cleared`
-    );
+    try {
+      await notificationService.deleteAllNotifications(activeTab);
+      setSelectedIds([]);
+      await loadNotifications();
+      toast.success(
+        activeTab === 'all'
+          ? 'All notifications cleared'
+          : `All ${activeTab} notifications cleared`
+      );
+    } catch (error) {
+      showActionError(error, 'Unable to clear notifications');
+    }
   };
 
   // Handle batch deletion
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
-    notificationService.deleteNotifications(selectedIds);
-    setSelectedIds([]);
-    toast.success(`Removed ${selectedIds.length} notification(s)`);
+    const count = selectedIds.length;
+    try {
+      await notificationService.deleteNotifications(selectedIds);
+      setSelectedIds([]);
+      await loadNotifications();
+      toast.success(`Removed ${count} notification(s)`);
+    } catch (error) {
+      showActionError(error, 'Unable to remove notifications');
+    }
   };
 
   // Handle batch mark as read
-  const handleMarkSelectedAsRead = () => {
+  const handleMarkSelectedAsRead = async () => {
     if (selectedIds.length === 0) return;
-    const updated = notifications.map((n) =>
-      selectedIds.includes(n.id) ? { ...n, unread: false } : n
-    );
-    notificationService.saveNotifications(updated);
-    setSelectedIds([]);
-    toast.success(`Marked ${selectedIds.length} notification(s) as read`);
+    const ids = [...selectedIds];
+    try {
+      await Promise.all(ids.map((id) => notificationService.markNotificationAsRead(id)));
+      setSelectedIds([]);
+      await loadNotifications();
+      toast.success(`Marked ${ids.length} notification(s) as read`);
+    } catch (error) {
+      showActionError(error, 'Unable to mark notifications as read');
+    }
+  };
+
+  // Handle "Mark all as read" in the feed header
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationService.markAllNotificationsAsRead();
+      await loadNotifications();
+      toast.success('All marked as read');
+    } catch (error) {
+      showActionError(error, 'Unable to mark all as read');
+    }
+  };
+
+  // Mark a row as read, then follow its link
+  const handleOpenNotification = async (notif) => {
+    try {
+      await notificationService.markNotificationAsRead(notif.id);
+      await loadNotifications();
+    } catch (error) {
+      showActionError(error, 'Unable to mark notification as read');
+    }
+    if (notif.path) navigate(notif.path);
   };
 
   // Checkbox toggle single item
@@ -172,7 +236,7 @@ export function NotificationsPage() {
   };
 
   // Handle posting new announcement
-  const handleCreateAnnouncement = (e) => {
+  const handleCreateAnnouncement = async (e) => {
     e.preventDefault();
     if (!announcementForm.title.trim()) {
       toast.error('Announcement title is required');
@@ -183,14 +247,19 @@ export function NotificationsPage() {
       return;
     }
 
-    notificationService.addAnnouncement(announcementForm);
-    toast.success('Announcement broadcasted successfully to all staff!');
-    setIsAnnouncementModalOpen(false);
-    setAnnouncementForm({
-      title: '',
-      category: 'announcements',
-      description: '',
-    });
+    try {
+      await notificationService.addAnnouncement(announcementForm);
+      await loadNotifications();
+      toast.success('Announcement broadcasted successfully to all staff!');
+      setIsAnnouncementModalOpen(false);
+      setAnnouncementForm({
+        title: '',
+        category: 'announcements',
+        description: '',
+      });
+    } catch (error) {
+      showActionError(error, 'Unable to post announcement');
+    }
   };
 
   return (
@@ -224,35 +293,18 @@ export function NotificationsPage() {
         </Button>
       </div>
 
-      {/* Controls Bar: Filter Pills & Search / Delete (matching screenshot) */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1">
-        {/* Filter Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-          {FILTER_TABS.map((tab) => {
-            const IconComponent = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setSelectedIds([]);
-                }}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground shadow-2xs'
-                    : 'bg-card text-muted-foreground border border-border hover:bg-muted hover:text-foreground'
-                }`}
-              >
-                <IconComponent className="size-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Controls: minimal tab bar + outlined search */}
+      <Tabs
+        tabs={FILTER_TABS}
+        activeTab={activeTab}
+        onChange={(id) => {
+          setActiveTab(id);
+          setSelectedIds([]);
+        }}
+      />
 
-        {/* Right Search Input & Delete All */}
+      {/* Search / Delete All */}
+      <div className="pt-3">
         <div className="flex items-center gap-2.5">
           <div className="relative min-w-[220px] flex-1 sm:flex-initial">
             <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -280,7 +332,7 @@ export function NotificationsPage() {
 
       {/* Bulk Selection Actions Banner */}
       {selectedIds.length > 0 && (
-        <div className="p-2.5 rounded-xl border border-border bg-card shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs animate-fadeIn">
+        <div className="py-2 flex flex-wrap items-center justify-between gap-2 text-xs animate-fadeIn">
           <div className="flex items-center gap-2">
             <span className="font-bold text-foreground">{selectedIds.length} selected</span>
             <span className="text-muted-foreground">across this view</span>
@@ -315,10 +367,10 @@ export function NotificationsPage() {
         </div>
       )}
 
-      {/* Notifications List Container Card */}
-      <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
-        {/* Table / List Header */}
-        <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+      {/* Notifications feed — open list, no surrounding box */}
+      <div className="pt-1">
+        {/* Feed meta row */}
+        <div className="pb-2 border-b border-border flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
           <div className="flex items-center gap-3">
             <Checkbox
               id="select-all-notifications"
@@ -335,10 +387,7 @@ export function NotificationsPage() {
           {filteredNotifications.some((n) => n.unread) && (
             <button
               type="button"
-              onClick={() => {
-                notificationService.markAllNotificationsAsRead();
-                toast.success('All marked as read');
-              }}
+              onClick={handleMarkAllRead}
               className="text-primary hover:underline font-semibold cursor-pointer"
             >
               Mark all as read
@@ -361,22 +410,19 @@ export function NotificationsPage() {
               </p>
             </div>
           ) : (
-            filteredNotifications.map((notif) => {
+            notificationPager.paginatedItems.map((notif) => {
               const isSelected = selectedIds.includes(notif.id);
 
               return (
                 <div
                   key={notif.id}
-                  onClick={() => {
-                    notificationService.markNotificationAsRead(notif.id);
-                    if (notif.path) navigate(notif.path);
-                  }}
-                  className={`px-4 py-3.5 flex items-start sm:items-center justify-between gap-3 transition-colors cursor-pointer group ${
+                  onClick={() => handleOpenNotification(notif)}
+                  className={`px-3 py-3.5 flex items-start justify-between gap-3 border-l-2 transition-colors cursor-pointer group ${
                     isSelected
-                      ? 'bg-primary/5'
+                      ? 'border-l-primary bg-primary/5'
                       : notif.unread
-                        ? 'bg-muted/20 hover:bg-muted/40'
-                        : 'hover:bg-muted/30'
+                        ? 'border-l-primary bg-muted/20 hover:bg-muted/40'
+                        : 'border-l-transparent hover:bg-muted/30'
                   }`}
                 >
                   {/* Left: Checkbox & Content */}
@@ -394,6 +440,11 @@ export function NotificationsPage() {
                     </div>
 
                     <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80 mb-1">
+                        <span>{notif.category || 'update'}</span>
+                        <span className="size-0.5 rounded-full bg-muted-foreground/50" />
+                        <span className="font-mono normal-case tracking-normal">{notif.time}</span>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span
                           className={`text-xs truncate ${
@@ -426,12 +477,8 @@ export function NotificationsPage() {
                     </div>
                   </div>
 
-                  {/* Right: Timestamp & Delete Icon Button */}
-                  <div className="flex items-center gap-3 shrink-0 self-center">
-                    <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap hidden sm:inline">
-                      {notif.time}
-                    </span>
-
+                  {/* Right: Delete */}
+                  <div className="flex items-center shrink-0 self-center">
                     <button
                       type="button"
                       title="Delete notification"
@@ -446,6 +493,12 @@ export function NotificationsPage() {
             })
           )}
         </div>
+
+        {filteredNotifications.length > 0 && (
+          <div className="border-t border-border/70 px-3 py-3">
+            <Pagination {...notificationPager.pagination} />
+          </div>
+        )}
       </div>
 
       {/* MODAL: Post New Announcement */}

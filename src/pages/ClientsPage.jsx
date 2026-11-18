@@ -5,15 +5,12 @@ import { projectService } from '../services/projectService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
-import { formatDate } from '../utils/formatters';
 import { validatePhone, sanitizePhone, validateEmail, validateRequired } from '../utils/validators';
 import { cn } from '../lib/utils';
 
 import PageHeader from '../components/ui/PageHeader';
-import DataToolbar from '../components/ui/DataToolbar';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
-import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import Textarea from '../components/ui/Textarea';
@@ -21,7 +18,6 @@ import Select from '../components/ui/Select';
 import FileImportDialog from '../components/ui/FileImportDialog';
 import PermissionGate from '../components/ui/PermissionGate';
 import Avatar from '../components/ui/Avatar';
-import Pagination from '../components/ui/Pagination';
 import Icon from '../components/ui/Icon';
 import IconButton from '../components/ui/IconButton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -450,20 +446,17 @@ export function ClientsPage() {
     {
       key: 'name',
       header: 'Client Name',
-      width: '260px',
-      className: 'w-[260px] max-w-[280px]',
-      cellClassName: 'max-w-[280px]',
+      width: '280px',
+      className: 'w-[280px] max-w-[300px]',
+      cellClassName: 'max-w-[300px]',
       render: (c) => (
-        <div className="flex items-start gap-3 w-full max-w-[260px]">
-          <Avatar name={c.name} size="sm" className="shrink-0 mt-0.5" />
+        <div className="flex items-center gap-3 w-full max-w-[280px]">
+          <Avatar name={c.name} size="sm" className="shrink-0" />
           <div className="min-w-0 flex-1">
-            <div
-              className="font-semibold text-text-main leading-snug break-words [overflow-wrap:anywhere]"
-              title={c.name}
-            >
+            <div className="font-semibold text-foreground leading-snug truncate" title={c.name}>
               {c.name}
             </div>
-            <div className="text-xs text-text-muted truncate mt-0.5" title={c.email || ''}>
+            <div className="text-xs text-muted-foreground truncate mt-0.5" title={c.email || ''}>
               {c.email || 'No email registered'}
             </div>
           </div>
@@ -472,9 +465,9 @@ export function ClientsPage() {
     },
     {
       key: 'phone',
-      header: 'Phone Number',
-      className: 'whitespace-nowrap w-[130px]',
-      cellClassName: 'whitespace-nowrap w-[130px]',
+      header: 'Phone',
+      className: 'whitespace-nowrap w-[140px]',
+      cellClassName: 'whitespace-nowrap w-[140px]',
       render: (c) => (
         <a
           href={`tel:${c.phone}`}
@@ -486,27 +479,15 @@ export function ClientsPage() {
       ),
     },
     {
-      key: 'address',
-      header: 'Site Address',
-      width: '180px',
-      className: 'max-w-[190px]',
-      cellClassName: 'max-w-[190px]',
-      render: (c) => (
-        <span className="text-xs text-muted-foreground truncate max-w-[180px] block" title={c.address}>
-          {c.address || 'Bengaluru, Karnataka'}
-        </span>
-      ),
-    },
-    {
       key: 'projects',
-      header: 'Associated Projects',
+      header: 'Projects',
       align: 'center',
-      className: 'whitespace-nowrap text-center w-[130px]',
-      cellClassName: 'whitespace-nowrap text-center w-[130px]',
+      className: 'whitespace-nowrap text-center w-[110px]',
+      cellClassName: 'whitespace-nowrap text-center w-[110px]',
       render: (c) => {
         const stats = projectStatsMap[c.id] || { total: 0, items: [] };
         if (stats.total === 0) {
-          return <span className="text-xs text-muted-foreground italic">-</span>;
+          return <span className="text-xs text-muted-foreground">—</span>;
         }
 
         return (
@@ -519,46 +500,44 @@ export function ClientsPage() {
                 sites: stats.items,
               });
             }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 transition-colors cursor-pointer shadow-2xs"
-            title="Click to view associated sites"
+            className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+            title="View associated sites"
           >
-            <span>{stats.total} {stats.total === 1 ? 'Site' : 'Sites'}</span>
-            <Icon name="chevron-down" size={11} className="text-brand-500" />
+            {stats.total} {stats.total === 1 ? 'Site' : 'Sites'}
           </button>
         );
       },
     },
     {
       key: 'type',
-      header: 'Client Status',
+      header: 'Status',
       className: 'whitespace-nowrap w-[110px]',
       cellClassName: 'whitespace-nowrap w-[110px]',
       render: (c) => {
         const isOld = c.type === 'old' || c.status === 'old';
         return (
-          <span className="text-xs font-medium text-foreground whitespace-nowrap">
-            {isOld ? 'Old Client' : 'New Client'}
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+              isOld
+                ? 'border-border bg-muted text-muted-foreground'
+                : 'border-success/20 bg-success/10 text-success'
+            )}
+          >
+            <span
+              className={cn('size-1.5 rounded-full', isOld ? 'bg-muted-foreground' : 'bg-success')}
+            />
+            {isOld ? 'Existing' : 'New'}
           </span>
         );
       },
     },
     {
-      key: 'createdAt',
-      header: 'Onboarding Date',
-      className: 'whitespace-nowrap w-[120px]',
-      cellClassName: 'whitespace-nowrap w-[120px]',
-      render: (c) => (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {formatDate(c.createdAt)}
-        </span>
-      ),
-    },
-    {
       key: 'actions',
       header: 'Actions',
       align: 'right',
-      className: 'whitespace-nowrap text-right w-[110px]',
-      cellClassName: 'whitespace-nowrap text-right w-[110px]',
+      className: 'whitespace-nowrap text-right w-[100px]',
+      cellClassName: 'whitespace-nowrap text-right w-[100px]',
       render: (c) => (
         <div
           className="flex items-center justify-end gap-1"
@@ -656,9 +635,9 @@ export function ClientsPage() {
       />
 
       {/* Modern BefUI Filter Toolbar: Search, Client Type Dropdown, Sort, Onboarding, Rows in a Single Row */}
-      <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+      <div className="py-2">
+        <div className="flex items-center justify-between gap-2.5 overflow-x-auto">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
             {/* Search bar: searches name, phone, address, email, notes */}
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Icon
@@ -752,24 +731,6 @@ export function ClientsPage() {
                 />
               </div>
             )}
-
-            {/* Rows Page Size Selector */}
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-muted-foreground font-medium shrink-0">Rows:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="h-9 px-2 bg-background border border-border rounded-lg text-xs font-medium text-foreground cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
           </div>
 
           {/* Clear Filters button - visible only when filters are active */}
@@ -788,33 +749,34 @@ export function ClientsPage() {
       </div>
 
       {/* Clients Table with Row Click */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-xs">
-        <Table
-          columns={columns}
-          data={paginatedClients}
-          loading={loading}
-          onRowClick={(client) => navigate(`/clients/${client.id}`)}
-          emptyTitle={
-            hasActiveFilters
-              ? 'No clients match your filter criteria'
-              : 'No clients available yet'
-          }
-          emptyDescription={
-            hasActiveFilters
-              ? 'Try modifying the search term or clearing the date/status filter.'
-              : "No clients have been created yet. Click 'Add Client' to get started."
-          }
-        />
-
-        {/* Table Pagination */}
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={filteredAndSortedClients.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-        />
-      </div>
+      <Table
+        variant="clean"
+        columns={columns}
+        data={paginatedClients}
+        loading={loading}
+        onRowClick={(client) => navigate(`/clients/${client.id}`)}
+        emptyTitle={
+          hasActiveFilters
+            ? 'No clients match your filter criteria'
+            : 'No clients available yet'
+        }
+        emptyDescription={
+          hasActiveFilters
+            ? 'Try modifying the search term or clearing the date/status filter.'
+            : "No clients have been created yet. Click 'Add Client' to get started."
+        }
+        pagination={{
+          currentPage,
+          totalPages,
+          totalItems: filteredAndSortedClients.length,
+          pageSize,
+          onPageChange: setCurrentPage,
+          onPageSizeChange: (size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          },
+        }}
+      />
 
       {/* Add / Edit Client Modal */}
       <Modal
@@ -1071,7 +1033,7 @@ export function ClientsPage() {
             </Button>
           }
         >
-          <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
+          <div className="max-h-[280px] divide-y divide-border/70 overflow-y-auto pr-1 scrollbar-thin">
             {sitesPopupClient.sites.map((site) => (
               <div
                 key={site.id}
@@ -1079,28 +1041,32 @@ export function ClientsPage() {
                   setSitesPopupClient(null);
                   navigate(`/projects/${site.id}`);
                 }}
-                className="p-2.5 rounded-xl border border-border bg-card hover:bg-muted/50 hover:border-brand-300 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/60 group"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                  <p className="truncate text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
                     {site.name}
                   </p>
-                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     {site.siteAddress || site.clientName || 'Interior Fit-Out Site'}
                   </p>
                 </div>
-                <div className="shrink-0 flex items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5">
                   <span
                     className={cn(
-                      'px-2 py-0.5 rounded-full text-[10px] font-semibold border',
+                      'rounded-full border px-2 py-0.5 text-[10px] font-semibold',
                       site.status === 'completed' || site.status === 'done'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-brand-50 text-brand-700 border-brand-200'
+                        ? 'border-success/20 bg-success/10 text-success'
+                        : 'border-primary/20 bg-primary/10 text-primary'
                     )}
                   >
                     {site.status === 'completed' || site.status === 'done' ? 'Completed' : 'Active'}
                   </span>
-                  <Icon name="chevron-right" size={13} className="text-muted-foreground group-hover:text-primary transition-colors" />
+                  <Icon
+                    name="chevron-right"
+                    size={13}
+                    className="text-muted-foreground group-hover:text-primary transition-colors"
+                  />
                 </div>
               </div>
             ))}

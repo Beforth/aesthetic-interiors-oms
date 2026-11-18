@@ -523,14 +523,8 @@ export function HRWorkforceOverview({
     }
   };
 
-  const pendingLeavesCount = leavesList.filter(
-    (l) => l.status === 'pending_hr' || l.status === 'pending'
-  ).length;
-
-
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
       {/* COLUMN 1: Recent Employees Bento Tile */}
       <div className="p-4 sm:p-5 bg-surface rounded-2xl border border-border shadow-2xs hover:border-brand-300 transition-all flex flex-col justify-between h-full">
         <div className="flex flex-col flex-1 min-h-0 space-y-3">
@@ -538,7 +532,7 @@ export function HRWorkforceOverview({
           <div className="flex items-center justify-between gap-3 border-b border-border/80 pb-2.5 shrink-0">
             <div>
               <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
+                <span className="size-2.5 rounded-full bg-primary" />
                 <span>Recent Employees</span>
               </h3>
               <p className="text-xs text-text-muted mt-0.5">
@@ -595,7 +589,7 @@ export function HRWorkforceOverview({
           <div className="flex items-center justify-between gap-3 border-b border-border/80 pb-2.5 shrink-0">
             <div>
               <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-600" />
+                <span className="size-2.5 rounded-full bg-warning" />
                 <span>Recent Leaves</span>
               </h3>
               <p className="text-xs text-text-muted mt-0.5">
@@ -638,24 +632,24 @@ export function HRWorkforceOverview({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={() => handleApproveLeave(leave.id)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all cursor-pointer shadow-2xs"
+                      className="p-1.5 rounded-lg text-success hover:bg-success/10 transition-colors cursor-pointer"
                       title="Approve request"
+                      aria-label="Approve request"
                     >
-                      <CheckIcon className="size-3" />
-                      <span>Approve</span>
+                      <CheckIcon className="size-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleRejectLeave(leave.id)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 border border-rose-500/20 transition-all cursor-pointer shadow-2xs"
+                      className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                       title="Reject request"
+                      aria-label="Reject request"
                     >
-                      <XIcon className="size-3" />
-                      <span>Reject</span>
+                      <XIcon className="size-4" />
                     </button>
                   </div>
                 </div>
@@ -675,7 +669,7 @@ export function HRWorkforceOverview({
       </div>
 
       {/* COLUMN 3: Right Bento Column (Upcoming Holidays) */}
-      <div className="flex flex-col gap-4.5 justify-between h-full md:col-span-2 lg:col-span-1">
+      <div className="flex flex-col gap-4 justify-between h-full md:col-span-2 lg:col-span-1">
         {/* Bento Tile 3B: Upcoming Holidays Card (Calendar -> and listed badge removed as requested) */}
         <div className="p-4 sm:p-5 bg-surface rounded-2xl border border-border shadow-2xs hover:border-brand-300 transition-all flex flex-col justify-between flex-1 min-h-[220px]">
           <div className="space-y-3">
@@ -683,7 +677,7 @@ export function HRWorkforceOverview({
             <div className="flex items-center justify-between gap-3 border-b border-border/80 pb-2.5 shrink-0">
               <div>
                 <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                  <span className="size-2.5 rounded-full bg-info" />
                   <span>Upcoming Holidays</span>
                 </h3>
                 <p className="text-xs text-text-muted mt-0.5">

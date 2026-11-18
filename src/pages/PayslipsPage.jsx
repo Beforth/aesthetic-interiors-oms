@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
@@ -8,16 +8,23 @@ import { formatCurrency, formatDate } from '../utils/formatters';
 import { mockPayslips } from '../data/leaves';
 import { mockUsers } from '../data/users';
 import { cn } from '../lib/utils';
+import { usePagination } from '../hooks/usePagination';
+import payrollService, {
+  initialCycles,
+  initialStructures,
+  initialPayrollSettings,
+} from '../services/payrollService';
 
 // BefUI Components strictly conforming to design.md tokens
-import PageHeader from '../components/ui/PageHeader';
-import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Avatar from '../components/ui/Avatar';
 import Modal from '../components/ui/Modal';
-import { Badge } from '../components/ui/badge';
-import { Select } from '../components/ui/Select';
-import { Input } from '../components/ui/Input';
+import { Badge } from '../components/ui/Badge';
+import Select from '../components/ui/Select';
+import Tabs from '../components/ui/Tabs';
+import DataToolbar from '../components/ui/DataToolbar';
+import StatCard from '../components/ui/StatCard';
+import Table from '../components/ui/Table';
 
 // BefUI SVG Icons strictly from '@/components/ui/icons'
 import {
@@ -41,178 +48,15 @@ import {
   CheckIcon,
   Building2Icon,
   SaveIcon,
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  LockIcon,
+  WalletIcon,
+  EditIcon,
+  MoreIcon,
 } from '../components/ui/icons';
-
-const STORAGE_KEY_PAY_CYCLES = 'osm_payroll_cycles_v2';
-const STORAGE_KEY_STRUCTURES = 'osm_payroll_structures_v3';
-const STORAGE_KEY_PAYROLL_SETTINGS = 'osm_payroll_settings_v3';
-
-const initialPayrollSettings = {
-  companyName: 'Aesthetic Interiors',
-  companyAddress: 'Surat, Gujarat, India',
-  pfNumber: 'GJ/SRT/12345',
-  esicNumber: '2400000000',
-  panNumber: 'AAAAA0000A',
-
-  pfPercent: 12,
-  esicPercent: 0.75,
-  esicCap: 21000,
-  ptAmount: 200,
-  defaultTds: 0,
-
-  payDaysInMonth: 26,
-  basicPercent: 60,
-  hraPercent: 30,
-  conveyancePercent: 20,
-  pfEmployerPercent: 13,
-  esicEmployerPercent: 3.25,
-  pfWageCap: 15000,
-  esicWages: 'Larger of basic and half of gross',
-};
-
-// Initial Salary Structures (Headings: Site Supervisor, Manager, Worker, Client)
-const initialStructures = [
-  {
-    id: 'str-1',
-    name: 'Site Supervisor',
-    note: '',
-    payModel: 'Monthly Salary',
-    ctc: 50000,
-    basic: 25000,
-    hra: 12000,
-    conveyance: 5000,
-    specialAllowance: 8000,
-    overtimeRate: 200,
-    pfEnabled: true,
-    pfRate: 12,
-    esicEnabled: false,
-    esicRate: 0.5,
-    esicThreshold: 21000,
-    ptEnabled: true,
-    ptAmount: 200,
-    tdsAmount: 1500,
-    lwfEnabled: false,
-  },
-  {
-    id: 'str-2',
-    name: 'Manager',
-    note: '',
-    payModel: 'Monthly Salary',
-    ctc: 90000,
-    basic: 45000,
-    hra: 22000,
-    conveyance: 8000,
-    specialAllowance: 15000,
-    overtimeRate: 350,
-    pfEnabled: true,
-    pfRate: 12,
-    esicEnabled: false,
-    esicRate: 0.5,
-    esicThreshold: 21000,
-    ptEnabled: true,
-    ptAmount: 200,
-    tdsAmount: 5000,
-    lwfEnabled: false,
-  },
-  {
-    id: 'str-3',
-    name: 'Worker',
-    note: '',
-    payModel: 'Monthly Salary',
-    ctc: 25000,
-    basic: 12500,
-    hra: 6000,
-    conveyance: 2500,
-    specialAllowance: 4000,
-    overtimeRate: 150,
-    pfEnabled: true,
-    pfRate: 12,
-    esicEnabled: true,
-    esicRate: 0.5,
-    esicThreshold: 21000,
-    ptEnabled: true,
-    ptAmount: 200,
-    tdsAmount: 0,
-    lwfEnabled: true,
-  },
-  {
-    id: 'str-4',
-    name: 'Client',
-    note: '',
-    payModel: 'Monthly Retainer',
-    ctc: 150000,
-    basic: 75000,
-    hra: 35000,
-    conveyance: 10000,
-    specialAllowance: 30000,
-    overtimeRate: 0,
-    pfEnabled: true,
-    pfRate: 12,
-    esicEnabled: false,
-    esicRate: 0.5,
-    esicThreshold: 21000,
-    ptEnabled: true,
-    ptAmount: 200,
-    tdsAmount: 10000,
-    lwfEnabled: false,
-  },
-];
-
-// Initial Pay Cycles (matching Screenshot 1: October 2026, September 2026, July 2026, January 2026)
-const initialCycles = [
-  {
-    id: 'cycle-2026-10',
-    period: 'October 2026',
-    createdDate: '15/10/2026',
-    monthKey: '2026-10',
-    totalDays: 31,
-    sundaysCount: 4,
-    employeesCount: 5,
-    gross: 62676.53,
-    deductions: 5441.53,
-    netPay: 57235.0,
-    status: 'Calculated', // Calculated, Draft, Approved, Paid
-  },
-  {
-    id: 'cycle-2026-09',
-    period: 'September 2026',
-    createdDate: '11/09/2026',
-    monthKey: '2026-09',
-    totalDays: 30,
-    sundaysCount: 4,
-    employeesCount: 5,
-    gross: 0,
-    deductions: 0,
-    netPay: 0,
-    status: 'Draft',
-  },
-  {
-    id: 'cycle-2026-07',
-    period: 'July 2026',
-    createdDate: '11/09/2026',
-    monthKey: '2026-07',
-    totalDays: 31,
-    sundaysCount: 4,
-    employeesCount: 5,
-    gross: 177758.09,
-    deductions: 10631.14,
-    netPay: 167126.95,
-    status: 'Calculated',
-  },
-  {
-    id: 'cycle-2026-01',
-    period: 'January 2026',
-    createdDate: '11/09/2026',
-    monthKey: '2026-01',
-    totalDays: 31,
-    sundaysCount: 4,
-    employeesCount: 6,
-    gross: 124150.0,
-    deductions: 6210.38,
-    netPay: 117939.62,
-    status: 'Approved',
-  },
-];
 
 export function PayslipsPage() {
   const toast = useToast();
@@ -226,111 +70,92 @@ export function PayslipsPage() {
   // Sub-tabs: 'cycles' (Pay cycles) | 'structure' (Structure) | 'settings' (Settings)
   const [activeSubTab, setActiveSubTab] = useState('cycles');
 
-  // Payroll Global Settings (Screenshots: Company, Default Deductions, Calculation Rules)
-  const [payrollSettings, setPayrollSettings] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PAYROLL_SETTINGS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return initialPayrollSettings;
-  });
-
-  const handleSavePayrollSettings = (e) => {
-    e.preventDefault();
-    try {
-      localStorage.setItem(STORAGE_KEY_PAYROLL_SETTINGS, JSON.stringify(payrollSettings));
-      toast.success('Payroll settings saved successfully!');
-    } catch (e) {
-      toast.error('Failed to save settings');
-    }
-  };
+  // Payroll Global Settings (loaded through payrollService; the service owns the local fallback)
+  const [payrollSettings, setPayrollSettings] = useState(initialPayrollSettings);
+  const toastRef = useRef(toast);
 
   // Normalize period string for robust comparison (e.g. 'November, 2026' vs 'November 2026')
   const normalizePeriod = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  const availablePeriods = [
-    'November, 2026',
-    'October, 2026',
-    'September, 2026',
-    'August, 2026',
-    'July, 2026',
-    'June, 2026',
-    'May, 2026',
-    'April, 2026',
-    'March, 2026',
-    'February, 2026',
-    'January, 2026',
-    'December, 2026',
-    'January, 2027',
-    'February, 2027',
+  const payrollMonths = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
+  const payrollYears = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 2 + i);
 
   // State for Pay Cycles (with duplicate period prevention & deduplication)
-  const [cycles, setCycles] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PAY_CYCLES);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const seen = new Set();
-        const unique = [];
-        for (const c of parsed) {
-          const key = (c.period || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (!seen.has(key)) {
-            seen.add(key);
-            unique.push(c);
-          }
-        }
-        return unique;
-      }
-    } catch (e) {}
-    return initialCycles;
-  });
+  const [cycles, setCycles] = useState(initialCycles);
 
-  const saveCycles = (newCycles) => {
-    setCycles(newCycles);
-    try {
-      localStorage.setItem(STORAGE_KEY_PAY_CYCLES, JSON.stringify(newCycles));
-    } catch (e) {}
+  // State for Salary Structures (migration of old headings is handled in payrollService)
+  const [structures, setStructures] = useState(initialStructures);
+
+  const refreshCycles = async () => {
+    const rows = await payrollService.getCycles();
+    setCycles(rows);
+    return rows;
   };
 
-  // State for Salary Structures (handles migration of old heading names to: Site Supervisor, Manager, Worker, Client)
-  const [structures, setStructures] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_STRUCTURES) || localStorage.getItem('osm_payroll_structures_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const legacyNameMap = {
-            'Executive & Management': 'Site Supervisor',
-            'Senior Operations & Design': 'Manager',
-            'Site Supervisor & Civil': 'Worker',
-            'Warehouse & Skilled Artisan': 'Client',
-          };
-          const migrated = parsed.map((item, idx) => {
-            const mappedName = legacyNameMap[item.name];
-            if (mappedName) {
-              return { ...item, name: mappedName };
-            }
-            if (idx === 0 && !['Site Supervisor', 'Manager', 'Worker', 'Client'].includes(item.name)) return { ...item, name: 'Site Supervisor' };
-            if (idx === 1 && !['Site Supervisor', 'Manager', 'Worker', 'Client'].includes(item.name)) return { ...item, name: 'Manager' };
-            if (idx === 2 && !['Site Supervisor', 'Manager', 'Worker', 'Client'].includes(item.name)) return { ...item, name: 'Worker' };
-            if (idx === 3 && !['Site Supervisor', 'Manager', 'Worker', 'Client'].includes(item.name)) return { ...item, name: 'Client' };
-            return item;
-          });
-          localStorage.setItem(STORAGE_KEY_STRUCTURES, JSON.stringify(migrated));
-          return migrated;
-        }
-      }
-    } catch (e) {}
-    return initialStructures;
-  });
-
-  const saveStructures = (newStructures) => {
-    setStructures(newStructures);
-    try {
-      localStorage.setItem(STORAGE_KEY_STRUCTURES, JSON.stringify(newStructures));
-    } catch (e) {}
+  const refreshStructures = async () => {
+    const rows = await payrollService.getStructures();
+    setStructures(rows);
+    return rows;
   };
+
+  // Keep a locally persisted mutation visible even if a backend read is still stale.
+  const upsertById = (rows, row) => {
+    if (!row) return rows;
+    const exists = rows.some((item) => String(item.id) === String(row.id));
+    return exists
+      ? rows.map((item) => (String(item.id) === String(row.id) ? row : item))
+      : [row, ...rows];
+  };
+
+  const handleSavePayrollSettings = async (e) => {
+    e.preventDefault();
+    try {
+      const saved = await payrollService.saveSettings(payrollSettings);
+      if (saved) setPayrollSettings(saved);
+      toast.success('Payroll settings saved successfully!');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to save settings');
+    }
+  };
+
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [cycleRows, structureRows, settings] = await Promise.all([
+          payrollService.getCycles(),
+          payrollService.getStructures(),
+          payrollService.getSettings(),
+        ]);
+        if (!active) return;
+        setCycles(cycleRows);
+        setStructures(structureRows);
+        setPayrollSettings(settings);
+      } catch (err) {
+        if (active) toastRef.current.error(err?.message || 'Failed to load payroll data');
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Search & Filter in Pay Cycles
   const [searchMonth, setSearchMonth] = useState('');
@@ -339,6 +164,22 @@ export function PayslipsPage() {
   // Generate Run Modal State (Screenshot 2)
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [generatePeriod, setGeneratePeriod] = useState('November, 2026');
+  const [isPeriodPickerOpen, setIsPeriodPickerOpen] = useState(false);
+  const [periodPickerView, setPeriodPickerView] = useState('months');
+  const [pickerYear, setPickerYear] = useState(() => Number(generatePeriod.match(/\d{4}/)?.[0]) || new Date().getFullYear());
+  const periodPickerRef = useRef(null);
+
+  useEffect(() => {
+    if (!isPeriodPickerOpen) return;
+    const handleOutsideClick = (event) => {
+      if (periodPickerRef.current && !periodPickerRef.current.contains(event.target)) {
+        setIsPeriodPickerOpen(false);
+        setPeriodPickerView('months');
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [isPeriodPickerOpen]);
 
   // New Structure / Template Modal State (Screenshot 3 & 4)
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false);
@@ -365,7 +206,20 @@ export function PayslipsPage() {
 
   // Cycle Details Modal (Staff Salary Slips breakdown)
   const [viewingCycle, setViewingCycle] = useState(null);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [showPayslip, setShowPayslip] = useState(false);
   const [selectedStaffSlip, setSelectedStaffSlip] = useState(null);
+
+  // Cycle breakdown row-action state
+  const [openMenuEmpId, setOpenMenuEmpId] = useState(null);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [holdingEmployee, setHoldingEmployee] = useState(null);
+  const [adjustingEmployee, setAdjustingEmployee] = useState(null);
+  const [removingEmployee, setRemovingEmployee] = useState(null);
+
+  const openEditEmployee   = (emp) => setEditingEmployee(emp);
+  const openHoldEmployee   = (emp) => setHoldingEmployee(emp);
+  const openAdjustEmployee = (emp) => setAdjustingEmployee(emp);
 
   // 4 Metric Card Stats (Matching Screenshot 1)
   const stats = useMemo(() => {
@@ -388,10 +242,13 @@ export function PayslipsPage() {
     });
   }, [cycles, statusFilter, searchMonth]);
 
+  const cyclePager = usePagination(filteredCycles);
+  const structurePager = usePagination(structures);
+
   // ---------------------------------------------------------------------------
   // EXACT SALARY CALCULATION FORMULA (Specified by user)
-  // Daily rate = monthly salary ÷ days in the month.
-  // Pay = daily rate × (total days − unworked Sundays − unpaid leave days) + (1 paid leave encashed if unused) + (Sunday work)
+  // Daily rate = monthly salary / days in the month.
+  // Pay = daily rate x (total days - unworked Sundays - unpaid leave days) + (1 paid leave encashed if unused) + (Sunday work)
   // ---------------------------------------------------------------------------
   const calculateCycleForMonth = (cycle) => {
     const daysInMonth = cycle.totalDays || 30;
@@ -458,8 +315,30 @@ export function PayslipsPage() {
     return cycles.some((c) => normalizePeriod(c.period) === norm);
   }, [cycles, generatePeriod]);
 
+  const selectedPeriodMonth = generatePeriod.split(',')[0].trim();
+  const selectedPeriodYear = Number(generatePeriod.match(/\d{4}/)?.[0]);
+
+  const togglePeriodPicker = () => {
+    if (!isPeriodPickerOpen) {
+      if (selectedPeriodYear) setPickerYear(selectedPeriodYear);
+      setPeriodPickerView('months');
+    }
+    setIsPeriodPickerOpen((open) => !open);
+  };
+
+  const handlePickYear = (year) => {
+    setPickerYear(year);
+    setPeriodPickerView('months');
+  };
+
+  const handlePickMonth = (month) => {
+    setGeneratePeriod(`${month}, ${pickerYear}`);
+    setIsPeriodPickerOpen(false);
+    setPeriodPickerView('months');
+  };
+
   // Generate Run Handler (Screenshot 2 with duplicate prevention)
-  const handleGenerateRun = (e) => {
+  const handleGenerateRun = async (e) => {
     e.preventDefault();
 
     if (isPeriodAlreadyGenerated) {
@@ -485,47 +364,119 @@ export function PayslipsPage() {
       status: 'Draft',
     };
 
-    saveCycles([newCycle, ...cycles]);
-    toast.success(`Created draft payroll run for ${generatePeriod}! Click Calculate (⚡) to process.`);
-    setIsGenerateModalOpen(false);
+    try {
+      const created = await payrollService.createCycle(newCycle);
+      if (!created) throw new Error('Failed to create payroll run');
+      const rows = await refreshCycles();
+      setCycles(upsertById(rows, created));
+      toast.success(`Created draft payroll run for ${generatePeriod}! Click Calculate  to process.`);
+      setIsGenerateModalOpen(false);
+    } catch (err) {
+      toast.error(err?.message || 'Failed to create payroll run');
+    }
   };
 
   // Run calculation on a cycle
-  const handleExecuteCalculation = (cycleId) => {
-    const updated = cycles.map((c) => {
-      if (c.id === cycleId) {
-        const res = calculateCycleForMonth(c);
-        return {
-          ...c,
-          gross: res.totalGross,
-          deductions: res.totalDeductions,
-          netPay: res.totalNet,
-          status: 'Calculated',
-        };
-      }
-      return c;
-    });
-    saveCycles(updated);
-    toast.success('Pay cycle calculated using daily rate & attendance rules!');
+  const handleExecuteCalculation = async (cycleId) => {
+    const cycle = cycles.find((c) => String(c.id) === String(cycleId));
+    if (!cycle) return;
+    const res = calculateCycleForMonth(cycle);
+
+    try {
+      const updated = await payrollService.calculateCycle(cycleId, {
+        gross: res.totalGross,
+        deductions: res.totalDeductions,
+        netPay: res.totalNet,
+      });
+      if (!updated) throw new Error('Failed to calculate pay cycle');
+
+      const rows = await refreshCycles();
+      const merged = upsertById(rows, updated);
+      setCycles(merged);
+      const fresh = merged.find((row) => String(row.id) === String(cycleId));
+      setViewingCycle((prev) =>
+        prev && String(prev.id) === String(cycleId) ? fresh || updated : prev
+      );
+      toast.success('Pay cycle calculated using daily rate & attendance rules!');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to calculate pay cycle');
+    }
   };
 
   // Approve a cycle
-  const handleApproveCycle = (cycleId) => {
-    const updated = cycles.map((c) => (c.id === cycleId ? { ...c, status: 'Approved' } : c));
-    saveCycles(updated);
-    toast.success('Payroll run approved for disbursement!');
+  const handleApproveCycle = async (cycleId) => {
+    try {
+      const updated = await payrollService.approveCycle(cycleId);
+      if (!updated) throw new Error('Failed to approve pay cycle');
+
+      const rows = await refreshCycles();
+      const merged = upsertById(rows, updated);
+      setCycles(merged);
+      const fresh = merged.find((row) => String(row.id) === String(cycleId));
+      setViewingCycle((prev) =>
+        prev && String(prev.id) === String(cycleId) ? fresh || updated : prev
+      );
+      toast.success('Payroll run approved for disbursement!');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to approve pay cycle');
+    }
+  };
+
+  // Mark an approved cycle as paid
+  const handlePayCycle = async (cycleId) => {
+    try {
+      const updated = await payrollService.payCycle(cycleId);
+      if (!updated) throw new Error('Failed to mark payroll run as paid');
+
+      const rows = await refreshCycles();
+      const merged = upsertById(rows, updated);
+      setCycles(merged);
+      const fresh = merged.find((row) => String(row.id) === String(cycleId));
+      setViewingCycle((prev) =>
+        prev && String(prev.id) === String(cycleId) ? fresh || updated : prev
+      );
+      toast.success('Payroll run marked as paid!');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to mark payroll run as paid');
+    }
   };
 
   // Delete a cycle
-  const handleDeleteCycle = (cycleId) => {
+  const handleDeleteCycle = async (cycleId) => {
     if (!window.confirm('Delete this payroll cycle run?')) return;
-    const updated = cycles.filter((c) => c.id !== cycleId);
-    saveCycles(updated);
-    toast.success('Payroll run removed');
+    try {
+      const removed = await payrollService.deleteCycle(cycleId);
+      if (!removed) throw new Error('Failed to delete payroll run');
+      const rows = await refreshCycles();
+      setCycles(rows.filter((row) => String(row.id) !== String(cycleId)));
+      if (viewingCycle && String(viewingCycle.id) === String(cycleId)) {
+        setViewingCycle(null);
+        setSelectedEmployee(null);
+        setShowPayslip(false);
+        setSelectedStaffSlip(null);
+      }
+      toast.success('Payroll run removed');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to delete payroll run');
+    }
+  };
+
+  // Delete a salary structure template
+  const handleDeleteStructure = async (structureId) => {
+    if (!window.confirm('Delete this salary structure template?')) return;
+    try {
+      const removed = await payrollService.deleteStructure(structureId);
+      if (!removed) throw new Error('Failed to delete salary structure template');
+      const rows = await refreshStructures();
+      setStructures(rows.filter((row) => String(row.id) !== String(structureId)));
+      toast.success('Salary structure template removed');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to delete salary structure template');
+    }
   };
 
   // Create Salary Structure Template (Screenshot 3 & 4)
-  const handleCreateTemplate = (e) => {
+  const handleCreateTemplate = async (e) => {
     e.preventDefault();
     if (!templateForm.name.trim()) {
       toast.error('Please enter a structure template name');
@@ -559,79 +510,586 @@ export function PayslipsPage() {
       lwfEnabled: templateForm.lwfEnabled,
     };
 
-    saveStructures([...structures, newStruct]);
-    toast.success(`Salary structure "${newStruct.name}" created!`);
-    setIsNewTemplateOpen(false);
-    setTemplateForm({
-      name: '',
-      note: '',
-      payModel: 'Monthly Salary',
-      ctc: '',
-      basic: 0,
-      hra: 0,
-      conveyance: 0,
-      specialAllowance: 0,
-      overtimeRate: 0,
-      pfEnabled: true,
-      pfRate: 12,
-      esicEnabled: true,
-      esicRate: 0.5,
-      esicThreshold: 21000,
-      ptEnabled: true,
-      ptAmount: 200,
-      tdsAmount: 0,
-      lwfEnabled: false,
-    });
+    try {
+      const created = await payrollService.createStructure(newStruct);
+      if (!created) throw new Error('Failed to create salary structure');
+      const rows = await refreshStructures();
+      setStructures(upsertById(rows, created));
+      toast.success(`Salary structure "${newStruct.name}" created!`);
+      setIsNewTemplateOpen(false);
+      setTemplateForm({
+        name: '',
+        note: '',
+        payModel: 'Monthly Salary',
+        ctc: '',
+        basic: 0,
+        hra: 0,
+        conveyance: 0,
+        specialAllowance: 0,
+        overtimeRate: 0,
+        pfEnabled: true,
+        pfRate: 12,
+        esicEnabled: true,
+        esicRate: 0.5,
+        esicThreshold: 21000,
+        ptEnabled: true,
+        ptAmount: 200,
+        tdsAmount: 0,
+        lwfEnabled: false,
+      });
+    } catch (err) {
+      toast.error(err?.message || 'Failed to create salary structure');
+    }
   };
 
+  // ===========================================================================
+  // IN-PAGE VIEW: PAYSLIP PREVIEW (print only this sheet)
+  // ===========================================================================
+  if (showPayslip && selectedStaffSlip) {
+    const slip = selectedStaffSlip;
+    const pt = 200;
+    const tds = slip.tdsTax || 0;
+    const pf = Math.max(0, Math.round(((slip.calculatedDeductions || 0) - pt - tds) * 100) / 100);
+    const slipPeriod = viewingCycle?.period || slip.month || '';
+
+    return (
+      <div className="space-y-4 pb-16 animate-in fade-in duration-200">
+        <div className="flex items-center justify-between gap-3 no-print">
+          <button
+            type="button"
+            onClick={() => { setShowPayslip(false); setSelectedStaffSlip(null); }}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <ArrowLeftIcon className="size-4" />
+            Back to {slip.employeeName}
+          </button>
+          <Button variant="primary" size="sm" onClick={() => window.print()} className="flex items-center gap-1.5 font-semibold">
+            <DownloadIcon className="size-4" />
+            <span>Download / Print</span>
+          </Button>
+        </div>
+
+        <div className="print-payslip mx-auto max-w-3xl rounded-xl border border-border bg-card shadow-2xs p-6 sm:p-8 space-y-5">
+          <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
+            <div>
+              <h2 className="text-lg font-bold text-foreground">{payrollSettings.companyName}</h2>
+              <p className="text-[11px] text-muted-foreground">{payrollSettings.companyAddress}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">PF: {payrollSettings.pfNumber} - PAN: {payrollSettings.panNumber}</p>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Payslip</span>
+              <p className="text-xs font-semibold text-foreground">{slipPeriod}</p>
+              <p className="text-[11px] text-muted-foreground">{viewingCycle?.status || slip.payoutStatus || 'Draft'}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Employee</span>
+              <span className="font-semibold text-foreground">{slip.employeeName}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Role</span>
+              <span className="font-semibold text-foreground">{slip.role}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Payable Days</span>
+              <span className="font-semibold text-foreground">{slip.payableDays} / {slip.daysInMonth}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Payment Mode</span>
+              <span className="font-semibold text-foreground">{slip.paymentMode || 'Bank Transfer'}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="px-3 py-2 bg-muted/30 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Earnings</div>
+              <div className="divide-y divide-border text-xs">
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Basic Pay</span><span className="font-mono text-foreground">{formatCurrency(slip.basicPay)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">HRA</span><span className="font-mono text-foreground">{formatCurrency(slip.hra)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Special Allowance</span><span className="font-mono text-foreground">{formatCurrency(slip.specialAllowance)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Site Execution Bonus</span><span className="font-mono text-foreground">{formatCurrency(slip.siteExecutionBonus || 0)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Leave Encashment</span><span className="font-mono text-success">{formatCurrency(slip.leaveEncashment)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/20 font-semibold"><span className="text-foreground">Gross</span><span className="font-mono text-foreground">{formatCurrency(slip.calculatedGross)}</span></div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="px-3 py-2 bg-muted/30 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Deductions</div>
+              <div className="divide-y divide-border text-xs">
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Provident Fund (12%)</span><span className="font-mono text-foreground">{formatCurrency(pf)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Professional Tax</span><span className="font-mono text-foreground">{formatCurrency(pt)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">TDS</span><span className="font-mono text-foreground">{formatCurrency(tds)}</span></div>
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/20 font-semibold"><span className="text-foreground">Total Deductions</span><span className="font-mono text-destructive">{formatCurrency(slip.calculatedDeductions)}</span></div>
+              </div>
+
+              <div className="px-3 py-3 bg-success/10 border-t border-border flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Net Pay</span>
+                <span className="text-sm font-bold font-mono text-success">{formatCurrency(slip.calculatedNetPay)}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-muted-foreground border-t border-border pt-3">
+            Daily Rate = CTC / {slip.daysInMonth} days - Sundays weekly off - 1 paid leave covered or encashed
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ===========================================================================
+  // IN-PAGE VIEW: EMPLOYEE SALARY BREAKDOWN
+  // ===========================================================================
+  if (selectedEmployee) {
+    const emp = selectedEmployee;
+    const pt = 200;
+    const tds = emp.tdsTax || 0;
+    const pf = Math.max(0, Math.round(((emp.calculatedDeductions || 0) - pt - tds) * 100) / 100);
+    const basePay = Math.round(emp.dailyRate * emp.payableDays * 100) / 100;
+
+    return (
+      <div className="space-y-5 pb-16 animate-in fade-in duration-200">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setSelectedEmployee(null)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <ArrowLeftIcon className="size-4" />
+            Back to {viewingCycle?.period || 'pay cycles'}
+          </button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => { setSelectedStaffSlip(emp); setShowPayslip(true); }}
+            className="flex items-center gap-1.5 font-semibold"
+          >
+            <FileTextIcon className="size-4" />
+            <span>View Payslip</span>
+          </Button>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card shadow-2xs overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <Avatar name={emp.employeeName} size="lg" className="shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold tracking-tight text-foreground truncate">{emp.employeeName}</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">{emp.role}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Payroll period: {viewingCycle?.period}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge variant={viewingCycle?.status === 'Paid' ? 'success' : viewingCycle?.status === 'Approved' ? 'info' : 'warning'}>
+                {viewingCycle?.status}
+              </Badge>
+              <span className="text-[11px] text-muted-foreground">Employee ID: {emp.employeeId}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border border-t border-border">
+            <div className="relative bg-card p-4 pr-11">
+              <span className="text-[11px] text-muted-foreground block">Monthly CTC</span>
+              <span className="mt-1 block text-base font-bold font-mono text-foreground">{formatCurrency(emp.monthlySalary)}</span>
+              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:size-3.5">
+                <IndianRupeeIcon />
+              </div>
+            </div>
+            <div className="relative bg-card p-4 pr-11">
+              <span className="text-[11px] text-muted-foreground block">Daily Rate</span>
+              <span className="mt-1 block text-base font-bold font-mono text-foreground">{formatCurrency(emp.dailyRate)}</span>
+              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-info/10 text-info [&>svg]:size-3.5">
+                <CalendarIcon />
+              </div>
+            </div>
+            <div className="relative bg-card p-4 pr-11">
+              <span className="text-[11px] text-muted-foreground block">Payable Days</span>
+              <span className="mt-1 block text-base font-bold text-foreground">{emp.payableDays} <span className="text-[11px] font-medium text-muted-foreground">of {emp.daysInMonth}</span></span>
+              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-success/10 text-success [&>svg]:size-3.5">
+                <CheckCircleIcon />
+              </div>
+            </div>
+            <div className="relative bg-primary/5 p-4 pr-11">
+              <span className="text-[11px] text-muted-foreground block">Net Pay</span>
+              <span className="mt-1 block text-base font-bold font-mono text-success">{formatCurrency(emp.calculatedNetPay)}</span>
+              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:size-3.5">
+                <ReceiptIcon />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-2 rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+            <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
+              <ClockIcon className="size-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-foreground">Attendance and Days</span>
+            </div>
+            <div className="divide-y divide-border text-xs">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-muted-foreground">Total days in month</span>
+                <span className="font-semibold text-foreground">{emp.daysInMonth}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-muted-foreground">Sundays (weekly off)</span>
+                <span className="font-semibold text-foreground">-{emp.unworkedSundays}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-muted-foreground">Sunday work</span>
+                <span className="font-semibold text-success">+{emp.sundayWorkDays}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-muted-foreground">Leaves taken</span>
+                <span className="font-semibold text-foreground">{emp.leavesTaken}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-muted-foreground">Unpaid leave days</span>
+                <span className="font-semibold text-destructive">-{emp.unpaidLeaveDays}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3 bg-muted/20">
+                <span className="font-semibold text-foreground">Payable days</span>
+                <span className="font-bold text-foreground">{emp.payableDays}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-3 rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+            <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
+              <IndianRupeeIcon className="size-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-foreground">Earnings and Deductions</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border text-xs">
+              <div>
+                <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/10">Earnings</div>
+                <div className="divide-y divide-border">
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">Base pay (daily rate x payable days)</span>
+                    <span className="font-mono font-semibold text-foreground">{formatCurrency(basePay)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">Paid leave encashment</span>
+                    <span className="font-mono font-semibold text-success">{formatCurrency(emp.leaveEncashment)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20">
+                    <span className="font-semibold text-foreground">Gross earnings</span>
+                    <span className="font-mono font-bold text-foreground">{formatCurrency(emp.calculatedGross)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/10">Deductions</div>
+                <div className="divide-y divide-border">
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">Provident Fund (12% capped)</span>
+                    <span className="font-mono font-semibold text-destructive">-{formatCurrency(pf)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">Professional Tax</span>
+                    <span className="font-mono font-semibold text-destructive">-{formatCurrency(pt)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">TDS</span>
+                    <span className="font-mono font-semibold text-destructive">-{formatCurrency(tds)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20">
+                    <span className="font-semibold text-foreground">Total deductions</span>
+                    <span className="font-mono font-bold text-destructive">{formatCurrency(emp.calculatedDeductions)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-3.5 bg-success/10 border-t border-border">
+              <span className="text-sm font-bold text-foreground">Net Pay</span>
+              <span className="text-base font-bold font-mono text-success">{formatCurrency(emp.calculatedNetPay)}</span>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground">
+          Calculation: (Monthly CTC / {emp.daysInMonth} days) x payable days + paid leave encashment - statutory deductions. Sundays are weekly off.
+        </p>
+      </div>
+    );
+  }
+
+  // ===========================================================================
+  // IN-PAGE VIEW: PAY CYCLE BREAKDOWN (whole page)
+  // ===========================================================================
+  if (viewingCycle) {
+    const calc = calculateCycleForMonth(viewingCycle);
+
+    return (
+      <div className="space-y-5 pb-16 animate-in fade-in duration-200">
+
+        {/* ── Header Row: Title + Status + Action Buttons ── */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          {/* Left: title + badge */}
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-tight">
+                {viewingCycle.period}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => { setViewingCycle(null); setSelectedEmployee(null); setShowPayslip(false); setSelectedStaffSlip(null); }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-medium"
+              >
+                ← Payroll run
+              </button>
+              <Badge
+                variant={
+                  viewingCycle.status === 'Calculated'
+                    ? 'warning'
+                    : viewingCycle.status === 'Draft'
+                    ? 'neutral'
+                    : viewingCycle.status === 'Approved'
+                    ? 'info'
+                    : 'success'
+                }
+              >
+                {viewingCycle.status}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Right: action buttons — no Register, no Reports */}
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => toast.info('Sync employees coming soon')}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <RefreshIcon className="size-3.5 text-muted-foreground" />
+              Sync employees
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExecuteCalculation(viewingCycle.id)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <ZapIcon className="size-3.5 text-amber-500" />
+              Recalculate
+            </button>
+            <button
+              type="button"
+              onClick={() => handleApproveCycle(viewingCycle.id)}
+              disabled={viewingCycle.status === 'Approved' || viewingCycle.status === 'Paid'}
+              className={cn(
+                'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
+                viewingCycle.status === 'Approved' || viewingCycle.status === 'Paid'
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-60 border border-border'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent'
+              )}
+            >
+              <CheckCircleIcon className="size-3.5" />
+              Approve Run
+            </button>
+            {viewingCycle.status === 'Approved' && (
+              <button
+                type="button"
+                onClick={() => handlePayCycle(viewingCycle.id)}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                <WalletIcon className="size-3.5 text-success" />
+                Mark Paid
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleExecuteCalculation(viewingCycle.id)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <RefreshIcon className="size-3.5 text-muted-foreground" />
+              Regenerate
+            </button>
+            <button
+              type="button"
+              onClick={() => { handleDeleteCycle(viewingCycle.id); setViewingCycle(null); }}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-destructive/30 bg-destructive/5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+            >
+              <TrashIcon className="size-3.5" />
+              Delete
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard variant="inline" label="Employees" value={viewingCycle.employeesCount} icon={<FileTextIcon className="size-5" />} />
+          <StatCard variant="inline" label="Gross" value={formatCurrency(calc.totalGross)} tone="primary" icon={<IndianRupeeIcon className="size-5" />} />
+          <StatCard variant="inline" label="Deductions" value={formatCurrency(calc.totalDeductions)} tone="danger" icon={<XCircleIcon className="size-5" />} />
+          <StatCard variant="inline" label="Net Pay" value={formatCurrency(calc.totalNet)} tone="success" icon={<IndianRupeeIcon className="size-5" />} />
+        </div>
+
+        {/* ── Employee Breakdown Table ── */}
+        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <span className="inline-flex items-center gap-1">Employee <span className="text-muted-foreground/60">↑</span></span>
+                  </th>
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Type</th>
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Attendance</th>
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">Gross</th>
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">Deductions</th>
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">
+                    <span className="inline-flex items-center gap-1">Net <span className="text-muted-foreground/60">↕</span></span>
+                  </th>
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {calc.staffList.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground text-xs">
+                      No employees in this payroll run. Click Recalculate to populate.
+                    </td>
+                  </tr>
+                ) : (
+                  calc.staffList.map((emp) => (
+                    <tr
+                      key={emp.id}
+                      onClick={() => setSelectedEmployee(emp)}
+                      className="hover:bg-muted/30 transition-colors cursor-pointer"
+                    >
+                      {/* Employee name + role */}
+                      <td className="py-3.5 px-4">
+                        <span className="text-sm font-semibold text-foreground block leading-tight">{emp.employeeName}</span>
+                        <span className="text-[11px] text-muted-foreground">{emp.role}</span>
+                      </td>
+
+                      {/* Type — purple text, no badge background */}
+                      <td className="py-3.5 px-4">
+                        <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">Monthly</span>
+                      </td>
+
+                      {/* Attendance — P · H · LOP format */}
+                      <td className="py-3.5 px-4">
+                        <span className="text-xs text-foreground font-mono">
+                          P {emp.payableDays} · H {emp.unusedPaidLeaveEncashed} · LOP {emp.unpaidLeaveDays}
+                        </span>
+                        {emp.sundayWorkDays > 0 && (
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold block">
+                            +{formatCurrency(emp.leaveEncashment)} OT
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Gross */}
+                      <td className="py-3.5 px-4 text-right">
+                        <span className="text-sm font-semibold font-mono text-foreground">{formatCurrency(emp.calculatedGross)}</span>
+                      </td>
+
+                      {/* Deductions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <span className={cn(
+                          'text-sm font-semibold font-mono',
+                          emp.calculatedDeductions > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-muted-foreground'
+                        )}>
+                          {formatCurrency(emp.calculatedDeductions)}
+                        </span>
+                      </td>
+
+                      {/* Net */}
+                      <td className="py-3.5 px-4 text-right">
+                        <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(emp.calculatedNetPay)}
+                        </span>
+                        {emp.holdAmount > 0 && (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium block">
+                            Hold {formatCurrency(emp.holdAmount)}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-4">
+                        <Badge
+                          variant={
+                            viewingCycle.status === 'Calculated'
+                              ? 'warning'
+                              : viewingCycle.status === 'Draft'
+                              ? 'neutral'
+                              : viewingCycle.status === 'Approved'
+                              ? 'info'
+                              : 'success'
+                          }
+                        >
+                          {viewingCycle.status}
+                        </Badge>
+                      </td>
+
+                      {/* Actions — ··· dots menu */}
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="relative inline-block text-left">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setOpenMenuEmpId(openMenuEmpId === emp.id ? null : emp.id); }}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            <MoreIcon className="size-4" />
+                          </button>
+                          {openMenuEmpId === emp.id && (
+                            <div className="absolute right-0 top-full mt-1 z-30 w-44 rounded-xl border border-border bg-card shadow-lg py-1 animate-in fade-in duration-100">
+                              <button onClick={() => { setSelectedStaffSlip(emp); setShowPayslip(true); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                <FileTextIcon className="size-3.5 text-muted-foreground" /> Payslip
+                              </button>
+                              <button onClick={() => { openEditEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                <EditIcon className="size-3.5 text-muted-foreground" /> Edit
+                              </button>
+                              <div className="my-1 border-t border-border" />
+                              <button onClick={() => { openHoldEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                <LockIcon className="size-3.5 text-muted-foreground" /> Hold amount
+                              </button>
+                              <button onClick={() => { openAdjustEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                <WalletIcon className="size-3.5 text-muted-foreground" /> Adjust amount paid
+                              </button>
+                              <div className="my-1 border-t border-border" />
+                              <button onClick={() => { setRemovingEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 cursor-pointer">
+                                <TrashIcon className="size-3.5" /> Remove from run
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground">Click any row to open the full salary breakdown.</p>
+      </div>
+    );
+  }
   return (
     <div className="space-y-5 pb-16 animate-in fade-in duration-200">
-      {/* 1. Sub-Tabs Bar: Pay cycles, Structure, Settings (Requested by user) */}
-      <div className="flex items-center gap-2 border-b border-border pb-3">
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('cycles')}
-          className={cn(
-            'px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer',
-            activeSubTab === 'cycles'
-              ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-              : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-          )}
-        >
-          Pay cycles
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('structure')}
-          className={cn(
-            'px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer',
-            activeSubTab === 'structure'
-              ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-              : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-          )}
-        >
-          Structure
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('settings')}
-          className={cn(
-            'px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer',
-            activeSubTab === 'settings'
-              ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-              : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-          )}
-        >
-          Settings
-        </button>
-      </div>
+      <Tabs
+        activeTab={activeSubTab}
+        onChange={setActiveSubTab}
+        tabs={[
+          { id: 'cycles', label: 'Pay cycles' },
+          { id: 'structure', label: 'Structure' },
+          { id: 'settings', label: 'Settings' },
+        ]}
+      />
 
       {/* ===================================================================== */}
       {/* SUB-TAB 1: PAY CYCLES (Screenshot 1)                                  */}
       {/* ===================================================================== */}
       {activeSubTab === 'cycles' && (
         <div className="space-y-5">
-          {/* Header with Title and '+ Generate' Button (Renamed from Generate monthly payslips) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Payroll</h1>
@@ -641,227 +1099,188 @@ export function PayslipsPage() {
               <Button
                 variant="primary"
                 size="sm"
+                leadingIcon="plus"
                 onClick={() => setIsGenerateModalOpen(true)}
-                className="flex items-center gap-1.5 shadow-2xs self-start sm:self-auto font-semibold"
               >
-                <PlusIcon className="size-4" />
-                <span>Generate</span>
+                Generate
               </Button>
             )}
           </div>
 
-          {/* 4 KPI Metric Cards in a Grid (Screenshot 1) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex items-center gap-3.5">
-              <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <FileTextIcon className="size-5" />
-              </div>
-              <div>
-                <div className="text-xl font-bold font-mono text-foreground leading-none">
-                  {stats.totalCycles}
-                </div>
-                <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                  Total Pay Cycles
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex items-center gap-3.5">
-              <div className="size-10 rounded-xl bg-warning/15 text-warning flex items-center justify-center shrink-0">
-                <ClockIcon className="size-5" />
-              </div>
-              <div>
-                <div className="text-xl font-bold font-mono text-warning leading-none">
-                  {stats.inProgress}
-                </div>
-                <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                  In Progress
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex items-center gap-3.5">
-              <div className="size-10 rounded-xl bg-success/15 text-success flex items-center justify-center shrink-0">
-                <CheckCircleIcon className="size-5" />
-              </div>
-              <div>
-                <div className="text-xl font-bold font-mono text-success leading-none">
-                  {stats.paidCount}
-                </div>
-                <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                  Paid
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex items-center gap-3.5">
-              <div className="size-10 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                <IndianRupeeIcon className="size-5" />
-              </div>
-              <div>
-                <div className="text-xl font-bold font-mono text-foreground leading-none">
-                  {formatCurrency(stats.netPayout)}
-                </div>
-                <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                  Net Payout
-                </span>
-              </div>
-            </div>
+            <StatCard variant="inline" label="Total Pay Cycles" value={stats.totalCycles} icon={<FileTextIcon className="size-5" />} />
+            <StatCard variant="inline" label="In Progress" value={stats.inProgress} tone="warning" icon={<ClockIcon className="size-5" />} />
+            <StatCard variant="inline" label="Paid" value={stats.paidCount} tone="success" icon={<CheckCircleIcon className="size-5" />} />
+            <StatCard variant="inline" label="Net Payout" value={formatCurrency(stats.netPayout)} tone="primary" icon={<IndianRupeeIcon className="size-5" />} />
           </div>
 
-          {/* Search by Month & Status Filter (Screenshot 1) */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search by month..."
-                value={searchMonth}
-                onChange={(e) => setSearchMonth(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
-              />
-            </div>
-
-            <div className="relative">
-              <select
+          <DataToolbar
+            variant="clean"
+            layout="inline"
+            searchValue={searchMonth}
+            onSearchChange={setSearchMonth}
+            searchPlaceholder="Search by month..."
+            filters={
+              <Select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-8.5 px-3 py-1 text-xs font-semibold rounded-lg border border-border bg-card text-foreground hover:bg-muted/40 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
-              >
-                <option value="ALL">All Status ⇅</option>
-                <option value="Calculated">Calculated</option>
-                <option value="Draft">Draft</option>
-                <option value="Approved">Approved</option>
-                <option value="Paid">Paid</option>
-              </select>
-            </div>
-          </div>
+                placeholder=""
+                className="h-9 w-36 text-xs"
+                options={[
+                  { value: 'ALL', label: 'All Status' },
+                  { value: 'Calculated', label: 'Calculated' },
+                  { value: 'Draft', label: 'Draft' },
+                  { value: 'Approved', label: 'Approved' },
+                  { value: 'Paid', label: 'Paid' },
+                ]}
+              />
+            }
+          />
 
-          {/* Pay Cycles Data Table (Screenshot 1) */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <th className="py-3 px-4">Period ⌵</th>
-                    <th className="py-3 px-4">Employees</th>
-                    <th className="py-3 px-4">Gross</th>
-                    <th className="py-3 px-4">Deductions</th>
-                    <th className="py-3 px-4">Net Pay ⇅</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border text-xs">
-                  {filteredCycles.length > 0 ? (
-                    filteredCycles.map((cycle) => (
-                      <tr key={cycle.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="py-3 px-4">
-                          <span className="font-semibold text-foreground block">
-                            {cycle.period}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            Created {cycle.createdDate}
-                          </span>
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <span className="size-7 rounded-full bg-muted/60 text-foreground font-semibold flex items-center justify-center text-xs">
-                            {cycle.employeesCount}
-                          </span>
-                        </td>
-
-                        <td className="py-3 px-4 font-mono font-medium text-foreground">
-                          {formatCurrency(cycle.gross)}
-                        </td>
-
-                        <td className="py-3 px-4 font-mono text-destructive">
-                          {formatCurrency(cycle.deductions)}
-                        </td>
-
-                        <td className="py-3 px-4 font-mono font-bold text-success text-sm">
-                          {formatCurrency(cycle.netPay)}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          {cycle.status === 'Calculated' && <Badge variant="warning">Calculated</Badge>}
-                          {cycle.status === 'Draft' && <Badge variant="neutral">Draft</Badge>}
-                          {cycle.status === 'Approved' && <Badge variant="info">Approved</Badge>}
-                          {cycle.status === 'Paid' && <Badge variant="success">Paid</Badge>}
-                        </td>
-
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Eye: View Slips */}
-                            <button
-                              type="button"
-                              onClick={() => setViewingCycle(cycle)}
-                              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-                              title="view details"
-                            >
-                              <EyeIcon className="size-3.5" />
-                            </button>
-
-                            {/* Zap: Calculate run */}
-                            {isAdminOrManager && (
-                              <button
-                                type="button"
-                                onClick={() => handleExecuteCalculation(cycle.id)}
-                                className="size-7 rounded-lg flex items-center justify-center text-amber-500 hover:bg-amber-500/15 transition-colors cursor-pointer"
-                                title="recalculate"
-                              >
-                                <ZapIcon className="size-3.5" />
-                              </button>
-                            )}
-
-                            {/* Approve */}
-                            {isAdminOrManager && cycle.status !== 'Approved' && cycle.status !== 'Paid' && (
-                              <button
-                                type="button"
-                                onClick={() => handleApproveCycle(cycle.id)}
-                                className="size-7 rounded-lg flex items-center justify-center text-success hover:bg-success/15 transition-colors cursor-pointer"
-                                title="approve"
-                              >
-                                <CheckCircleIcon className="size-3.5" />
-                              </button>
-                            )}
-
-                            {/* Refresh */}
-                            <button
-                              type="button"
-                              onClick={() => handleExecuteCalculation(cycle.id)}
-                              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-                              title="regenerate"
-                            >
-                              <RefreshIcon className="size-3.5" />
-                            </button>
-
-                            {/* Delete */}
-                            {isAdminOrManager && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteCycle(cycle.id)}
-                                className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                                title="delete"
-                              >
-                                <TrashIcon className="size-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="py-12 text-center text-muted-foreground text-xs">
-                        No pay cycle runs found. Click "+ Generate" to create one.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Table
+            variant="clean"
+            columns={[
+              {
+                key: 'period',
+                header: 'Period',
+                width: '22%',
+                render: (cycle) => (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedEmployee(null);
+                      setShowPayslip(false);
+                      setSelectedStaffSlip(null);
+                      setViewingCycle(cycle);
+                    }}
+                    className="text-left group cursor-pointer"
+                  >
+                    <span className="font-semibold text-foreground block group-hover:text-primary transition-colors">
+                      {cycle.period}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{cycle.createdDate}</span>
+                  </button>
+                ),
+              },
+              {
+                key: 'employeesCount',
+                header: 'Employees',
+                align: 'center',
+                width: '11%',
+                render: (cycle) => (
+                  <span className="size-7 rounded-full bg-muted text-foreground font-semibold flex items-center justify-center text-xs mx-auto">
+                    {cycle.employeesCount}
+                  </span>
+                ),
+              },
+              {
+                key: 'gross',
+                header: 'Gross',
+                align: 'right',
+                width: '16%',
+                render: (cycle) => (
+                  <span className="font-mono font-medium text-foreground">{formatCurrency(cycle.gross)}</span>
+                ),
+              },
+              {
+                key: 'deductions',
+                header: 'Deductions',
+                align: 'right',
+                width: '16%',
+                render: (cycle) => (
+                  <span className="font-mono text-destructive">{formatCurrency(cycle.deductions)}</span>
+                ),
+              },
+              {
+                key: 'netPay',
+                header: 'Net Pay',
+                align: 'right',
+                width: '16%',
+                render: (cycle) => (
+                  <span className="font-mono font-bold text-success">{formatCurrency(cycle.netPay)}</span>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                align: 'center',
+                width: '10%',
+                render: (cycle) => (
+                  <Badge
+                    variant={
+                      cycle.status === 'Calculated'
+                        ? 'warning'
+                        : cycle.status === 'Draft'
+                        ? 'neutral'
+                        : cycle.status === 'Approved'
+                        ? 'info'
+                        : 'success'
+                    }
+                  >
+                    {cycle.status}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                align: 'right',
+                width: '9%',
+                render: (cycle) => (
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployee(null);
+                        setShowPayslip(false);
+                        setSelectedStaffSlip(null);
+                        setViewingCycle(cycle);
+                      }}
+                      className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                      title="View details"
+                    >
+                      <EyeIcon className="size-3.5" />
+                    </button>
+                    {isAdminOrManager && (
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteCalculation(cycle.id)}
+                        className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        title="Recalculate"
+                      >
+                        <ZapIcon className="size-3.5" />
+                      </button>
+                    )}
+                    {isAdminOrManager && cycle.status !== 'Approved' && cycle.status !== 'Paid' && (
+                      <button
+                        type="button"
+                        onClick={() => handleApproveCycle(cycle.id)}
+                        className="size-7 rounded-lg flex items-center justify-center text-success hover:bg-success/15 transition-colors cursor-pointer"
+                        title="Approve"
+                      >
+                        <CheckCircleIcon className="size-3.5" />
+                      </button>
+                    )}
+                    {isAdminOrManager && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCycle(cycle.id)}
+                        className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                        title="Delete"
+                      >
+                        <TrashIcon className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            data={cyclePager.paginatedItems}
+            pagination={cyclePager.pagination}
+            keyField="id"
+            emptyTitle="No pay cycles found"
+            emptyDescription="Generate a pay cycle to get started."
+          />
         </div>
       )}
 
@@ -890,58 +1309,93 @@ export function PayslipsPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {structures.map((str) => (
-              <div
-                key={str.id}
-                className="p-5 rounded-xl border border-border bg-card shadow-2xs space-y-4 text-xs flex flex-col justify-between min-h-[220px]"
-              >
-                <div className="border-b border-border pb-3">
-                  <h3 className="font-bold text-sm text-foreground leading-snug">
-                    {(str.name || '').replace(/,\s*[\d,]+$/, '')}
-                  </h3>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="p-3 rounded-xl bg-muted/20 border border-border flex flex-col justify-between">
-                    <span className="text-muted-foreground block text-[10px] font-medium uppercase tracking-wider">
-                      Basic Pay
-                    </span>
-                    <span className="font-mono font-bold text-foreground text-xs mt-1.5">
-                      {formatCurrency(str.basic)}
-                    </span>
+          <Table
+            variant="clean"
+            columns={[
+              {
+                key: 'name',
+                header: 'Template',
+                render: (str) => (
+                  <div>
+                    <div className="font-semibold text-foreground">
+                      {(str.name || '').replace(/,\s*[\d,]+$/, '')}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{str.payModel}</div>
                   </div>
-
-                  <div className="p-3 rounded-xl bg-muted/20 border border-border flex flex-col justify-between">
-                    <span className="text-muted-foreground block text-[10px] font-medium uppercase tracking-wider">
-                      HRA
-                    </span>
-                    <span className="font-mono font-bold text-foreground text-xs mt-1.5">
-                      {formatCurrency(str.hra)}
-                    </span>
+                ),
+              },
+              {
+                key: 'ctc',
+                header: 'CTC',
+                render: (str) => (
+                  <span className="font-mono font-semibold text-foreground">{formatCurrency(str.ctc)}</span>
+                ),
+              },
+              {
+                key: 'basic',
+                header: 'Basic Pay',
+                render: (str) => (
+                  <span className="font-mono text-foreground">{formatCurrency(str.basic)}</span>
+                ),
+              },
+              {
+                key: 'hra',
+                header: 'HRA',
+                render: (str) => (
+                  <span className="font-mono text-foreground">{formatCurrency(str.hra)}</span>
+                ),
+              },
+              {
+                key: 'conveyance',
+                header: 'Conveyance',
+                render: (str) => (
+                  <span className="font-mono text-foreground">{formatCurrency(str.conveyance)}</span>
+                ),
+              },
+              {
+                key: 'specialAllowance',
+                header: 'Special Allowance',
+                render: (str) => (
+                  <span className="font-mono text-foreground">{formatCurrency(str.specialAllowance)}</span>
+                ),
+              },
+              {
+                key: 'statutory',
+                header: 'Statutory',
+                render: (str) => (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {str.pfEnabled && <Badge variant="neutral" size="sm">PF</Badge>}
+                    {str.esicEnabled && <Badge variant="neutral" size="sm">ESIC</Badge>}
+                    {str.ptEnabled && <Badge variant="neutral" size="sm">PT</Badge>}
+                    {!str.pfEnabled && !str.esicEnabled && !str.ptEnabled && (
+                      <span className="text-xs text-muted-foreground">None</span>
+                    )}
                   </div>
-
-                  <div className="p-3 rounded-xl bg-muted/20 border border-border flex flex-col justify-between">
-                    <span className="text-muted-foreground block text-[10px] font-medium uppercase tracking-wider">
-                      Conveyance
-                    </span>
-                    <span className="font-mono font-bold text-foreground text-xs mt-1.5">
-                      {formatCurrency(str.conveyance)}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-muted/20 border border-border flex flex-col justify-between">
-                    <span className="text-muted-foreground block text-[10px] font-medium uppercase tracking-wider">
-                      Special Allow.
-                    </span>
-                    <span className="font-mono font-bold text-foreground text-xs mt-1.5">
-                      {formatCurrency(str.specialAllowance)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                align: 'right',
+                render: (str) =>
+                  isAdminOrManager ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteStructure(str.id)}
+                      className="size-7 rounded-lg inline-flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                      title="Delete template"
+                    >
+                      <TrashIcon className="size-3.5" />
+                    </button>
+                  ) : null,
+              },
+            ]}
+            data={structurePager.paginatedItems}
+            pagination={structurePager.pagination}
+            keyField="id"
+            emptyTitle="No salary structures"
+            emptyDescription="Create a template to define earnings and deductions."
+          />
         </div>
       )}
 
@@ -1253,26 +1707,111 @@ export function PayslipsPage() {
               <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Pay Period
               </label>
-              <div className="relative">
-                <select
-                  value={generatePeriod}
-                  onChange={(e) => setGeneratePeriod(e.target.value)}
+              <div className="relative" ref={periodPickerRef}>
+                <button
+                  type="button"
+                  onClick={togglePeriodPicker}
+                  aria-haspopup="dialog"
+                  aria-expanded={isPeriodPickerOpen}
                   className={cn(
-                    "w-full px-3 py-2 border rounded-lg bg-background text-foreground text-xs font-medium focus:ring-1 focus:outline-none cursor-pointer",
+                    "w-full flex items-center justify-between gap-2 px-3 py-2 border rounded-lg bg-background text-foreground text-xs font-medium focus:ring-1 focus:outline-none cursor-pointer text-left",
                     isPeriodAlreadyGenerated
                       ? "border-destructive focus:ring-destructive"
                       : "border-border focus:ring-primary"
                   )}
                 >
-                  {availablePeriods.map((p) => {
-                    const exists = cycles.some((c) => normalizePeriod(c.period) === normalizePeriod(p));
-                    return (
-                      <option key={p} value={p}>
-                        {p} {exists ? '• (Already generated)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                  <span className="flex items-center gap-2">
+                    <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <span>{generatePeriod}</span>
+                  </span>
+                  <ChevronDownIcon className={cn("size-4 shrink-0 text-muted-foreground transition-transform", isPeriodPickerOpen && "rotate-180")} />
+                </button>
+
+                {isPeriodPickerOpen && (
+                  <div className="mt-2 p-3 rounded-lg border border-border bg-popover shadow-lg animate-in fade-in duration-150">
+                    {periodPickerView === 'months' ? (
+                      <>
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setPickerYear((year) => year - 1)}
+                            aria-label="Previous year"
+                            className="size-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            <ChevronLeftIcon className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPeriodPickerView('years')}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-bold text-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                            title="Select year"
+                          >
+                            <span>{pickerYear}</span>
+                            <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPickerYear((year) => year + 1)}
+                            aria-label="Next year"
+                            className="size-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            <ChevronRightIcon className="size-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {payrollMonths.map((month) => {
+                            const isSelected = month === selectedPeriodMonth && pickerYear === selectedPeriodYear;
+                            const exists = cycles.some((c) => normalizePeriod(c.period) === normalizePeriod(`${month}, ${pickerYear}`));
+                            return (
+                              <button
+                                key={month}
+                                type="button"
+                                onClick={() => handlePickMonth(month)}
+                                className={cn(
+                                  "relative px-1 py-2 rounded-md text-[11px] font-medium text-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary",
+                                  isSelected && "bg-primary text-primary-foreground hover:bg-primary",
+                                  exists && !isSelected && "text-destructive"
+                                )}
+                                title={exists ? `${month}, ${pickerYear} (Already generated)` : `${month}, ${pickerYear}`}
+                              >
+                                {month.slice(0, 3)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <span className="text-xs font-bold text-foreground">Select Year</span>
+                          <button
+                            type="button"
+                            onClick={() => setPeriodPickerView('months')}
+                            className="size-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                            aria-label="Back to months"
+                          >
+                            <XIcon className="size-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {payrollYears.map((year) => (
+                            <button
+                              key={year}
+                              type="button"
+                              onClick={() => handlePickYear(year)}
+                              className={cn(
+                                "px-1 py-2 rounded-md text-[11px] font-medium text-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary",
+                                year === pickerYear && "bg-primary text-primary-foreground hover:bg-primary"
+                              )}
+                            >
+                              {year}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1583,87 +2122,6 @@ export function PayslipsPage() {
         </Modal>
       )}
 
-      {/* ===================================================================== */}
-      {/* MODAL: VIEW EMPLOYEE SLIPS IN PAY CYCLE                               */}
-      {/* ===================================================================== */}
-      {viewingCycle && (
-        <Modal
-          isOpen={!!viewingCycle}
-          onClose={() => setViewingCycle(null)}
-          title={`Payroll Breakdown — ${viewingCycle.period}`}
-          subtitle={`Status: ${viewingCycle.status} • Total Net: ${formatCurrency(viewingCycle.netPay)}`}
-          size="xl"
-        >
-          <div className="space-y-4">
-            <div className="p-3 bg-muted/20 border border-border rounded-xl text-xs flex items-center justify-between">
-              <span>Formula: <strong>Daily Rate = CTC ÷ {viewingCycle.totalDays} Days</strong></span>
-              <span>1 Paid Leave Covered / Cash Encashed • Sundays Weekly Off</span>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/20 font-bold text-[11px] text-muted-foreground uppercase tracking-wider">
-                      <th className="py-2.5 px-3">Employee</th>
-                      <th className="py-2.5 px-3">Monthly CTC</th>
-                      <th className="py-2.5 px-3">Daily Rate</th>
-                      <th className="py-2.5 px-3">Worked Days</th>
-                      <th className="py-2.5 px-3">Encashment</th>
-                      <th className="py-2.5 px-3">Gross</th>
-                      <th className="py-2.5 px-3">Deductions</th>
-                      <th className="py-2.5 px-3">Net Pay</th>
-                      <th className="py-2.5 px-3 text-right">Slip</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {calculateCycleForMonth(viewingCycle).staffList.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="py-2.5 px-3">
-                          <span className="font-semibold text-foreground block">{emp.employeeName}</span>
-                          <span className="text-[10px] text-muted-foreground">{emp.role}</span>
-                        </td>
-                        <td className="py-2.5 px-3 font-mono">{formatCurrency(emp.monthlySalary)}</td>
-                        <td className="py-2.5 px-3 font-mono text-muted-foreground">{formatCurrency(emp.dailyRate)}</td>
-                        <td className="py-2.5 px-3">{emp.payableDays} Days</td>
-                        <td className="py-2.5 px-3 text-success font-mono font-medium">
-                          {emp.unusedPaidLeaveEncashed > 0 ? `+${formatCurrency(emp.leaveEncashment)}` : '0'}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-foreground">
-                          {formatCurrency(emp.calculatedGross)}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-destructive">
-                          {formatCurrency(emp.calculatedDeductions)}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-success text-sm">
-                          {formatCurrency(emp.calculatedNetPay)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() => window.print()}
-                            className="inline-flex items-center gap-1"
-                          >
-                            <DownloadIcon className="size-3" />
-                            <span>Slip</span>
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setViewingCycle(null)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

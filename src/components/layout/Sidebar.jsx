@@ -49,13 +49,13 @@ export function Sidebar({ onNavigate, className = '' }) {
 
   // Group items logically for clean visual hierarchy
   const overviewItems = navItems.filter((i) =>
-    ['dashboard', 'notifications', 'tasks', 'attendance', 'daily-reports'].includes(i.id)
+    ['dashboard', 'tasks', 'attendance', 'daily-reports'].includes(i.id)
   );
   const businessItems = navItems.filter((i) =>
-    ['clients', 'projects', 'agencies', 'website-leads'].includes(i.id)
+    ['clients', 'projects', 'agencies', 'estimates', 'website-leads'].includes(i.id)
   );
   const financeItems = navItems.filter((i) =>
-    ['payments', 'expenses', 'incentives', 'leave', 'payroll', 'payslips', 'leave-payslips', 'reports'].includes(i.id)
+    ['payments', 'expenses', 'incentives', 'leave', 'payroll', 'payslips', 'leave-payslips', 'approvals', 'reports'].includes(i.id)
   );
   const settingsItems = navItems.filter((i) =>
     ['settings'].includes(i.id)

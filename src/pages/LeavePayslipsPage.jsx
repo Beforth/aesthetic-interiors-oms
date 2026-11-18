@@ -1,19 +1,104 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { validateDateRange, validateRequired } from '../utils/validators';
+import { usePagination } from '../hooks/usePagination';
+import { apiClient } from '../services/apiClient';
+import { leaveService } from '../services/leaveService';
 import { mockLeaveBalances, mockLeaveApplications, mockPayslips } from '../data/leaves';
 
 import PageHeader from '../components/ui/PageHeader';
+import Tabs from '../components/ui/Tabs';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Avatar from '../components/ui/Avatar';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import Icon from '../components/ui/Icon';
+import Pagination from '../components/ui/Pagination';
 import { CalendarDaysIcon, ClockIcon, CheckCircleIcon, ReceiptIcon } from '../components/ui/icons';
+
+const LEAVE_BALANCE_URL = '/reports/leave-balance/';
+const PAYMENT_SHEET_URL = '/reports/payment-sheet/';
+const PAYROLL_CYCLES_URL = '/payroll/cycles/';
+
+function normalizeApplication(row) {
+  return {
+    ...row,
+    employeeName: row.employeeName || row.userName || row.name || 'Staff Member',
+    role: row.role || row.department || 'Staff',
+    daysCount: row.daysCount ?? row.durationDays ?? 0,
+    status: String(row.status || '').toLowerCase(),
+    approvedBy: row.approvedBy || row.decidedBy || null,
+  };
+}
+
+function normalizeBalanceRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return mockLeaveBalances;
+
+  const byType = new Map();
+  rows.forEach((row) => {
+    const type = row.leaveType || 'Other';
+    const entry = byType.get(type) || { type, allotted: 0, used: 0, balance: 0 };
+    entry.allotted += Number(row.accrued) || 0;
+    entry.used += Number(row.consumed) || 0;
+    entry.balance += Number(row.remaining) || 0;
+    byType.set(type, entry);
+  });
+
+  const categories = Array.from(byType.values());
+  return {
+    employeeName: 'All staff',
+    totalAllotted: categories.reduce((sum, item) => sum + item.allotted, 0),
+    used: categories.reduce((sum, item) => sum + item.used, 0),
+    balance: categories.reduce((sum, item) => sum + item.balance, 0),
+    categories: categories.map((item) => ({ ...item, carryForward: 'No' })),
+  };
+}
+
+function normalizePayslipRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return mockPayslips;
+
+  return rows.map((row, index) => {
+    const gross = Number(row.gross) || 0;
+    const deductions = Number(row.deductions) || 0;
+    const basicPay = Math.round(gross * 0.6 * 100) / 100;
+    const hra = Math.round(gross * 0.3 * 100) / 100;
+    const specialAllowance = Math.round((gross - basicPay - hra) * 100) / 100;
+    const professionalTax = Math.min(200, deductions);
+    const pfDeduction = Math.min(1800, deductions - professionalTax);
+    const tdsTax = Math.max(0, deductions - professionalTax - pfDeduction);
+
+    return {
+      id: row.id || `ps-report-${index}`,
+      employeeId: row.employeeCode || String(index),
+      employeeName: row.name || 'Staff Member',
+      role: row.designation || row.department || 'Staff',
+      month: 'Current Cycle',
+      periodStart: '',
+      periodEnd: '',
+      workingDays: 26,
+      presentDays: 26,
+      paidLeaves: 0,
+      unpaidLeaves: 0,
+      basicPay,
+      hra,
+      specialAllowance,
+      siteExecutionBonus: 0,
+      grossSalary: gross,
+      pfDeduction,
+      professionalTax,
+      tdsTax,
+      totalDeductions: deductions,
+      netPayable: Number(row.net) || Math.max(0, gross - deductions),
+      paymentMode: 'Direct Bank Transfer',
+      payoutStatus: 'Generated',
+      paidOn: 'Pending Month End',
+    };
+  });
+}
 
 export function LeavePayslipsPage() {
   const toast = useToast();
@@ -27,10 +112,51 @@ export function LeavePayslipsPage() {
   // Navigation tab
   const [activeTab, setActiveTab] = useState('applications'); // 'applications' | 'balances' | 'payslips'
 
-  // Data states
-  const [applications, setApplications] = useState(mockLeaveApplications);
+  // Data states. The mock rows remain visible when the backend is empty or unreachable.
+  const [applications, setApplications] = useState(() => mockLeaveApplications.map(normalizeApplication));
+  const [leaveBalances, setLeaveBalances] = useState(mockLeaveBalances);
   const [payslips, setPayslips] = useState(mockPayslips);
   const [selectedPayslip, setSelectedPayslip] = useState(null);
+
+  const applyApplications = useCallback((rows) => {
+    const normalized = Array.isArray(rows) ? rows.map(normalizeApplication) : [];
+    setApplications(normalized.length > 0 ? normalized : mockLeaveApplications.map(normalizeApplication));
+  }, []);
+
+  const reloadApplications = useCallback(() => {
+    applyApplications(leaveService.getLeaveRequests());
+  }, [applyApplications]);
+
+  const reloadBalances = useCallback(async () => {
+    try {
+      const rows = await apiClient.get(LEAVE_BALANCE_URL);
+      setLeaveBalances(normalizeBalanceRows(rows));
+    } catch {
+      setLeaveBalances(mockLeaveBalances);
+    }
+  }, []);
+
+  const reloadPayslips = useCallback(async () => {
+    try {
+      const rows = await apiClient.get(PAYMENT_SHEET_URL);
+      setPayslips(normalizePayslipRows(rows));
+    } catch {
+      setPayslips(mockPayslips);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadApplications();
+    reloadBalances();
+    reloadPayslips();
+
+    const onLeaveUpdated = (event) => {
+      if (Array.isArray(event?.detail)) applyApplications(event.detail);
+      else reloadApplications();
+    };
+    window.addEventListener('osm_leave_applications_updated', onLeaveUpdated);
+    return () => window.removeEventListener('osm_leave_applications_updated', onLeaveUpdated);
+  }, [applyApplications, reloadApplications, reloadBalances, reloadPayslips]);
 
   // Modals state
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
@@ -44,8 +170,11 @@ export function LeavePayslipsPage() {
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [generateMonth, setGenerateMonth] = useState('October 2026');
 
+  const applicationsPager = usePagination(applications);
+  const payslipsPager = usePagination(payslips);
+
   // Submit Leave Application (FR-HR-01)
-  const handleApplyLeave = (e) => {
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
 
     const dateErr = validateDateRange(applyForm.startDate, applyForm.endDate, {
@@ -68,52 +197,59 @@ export function LeavePayslipsPage() {
     const diffTime = Math.abs(end - start);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-    const newApp = {
-      id: `la-${Date.now()}`,
-      employeeId: currentUser?.id || 'u1',
-      employeeName: currentUser?.name || 'Rohit Kumar',
-      role: currentUser?.role || 'Staff',
-      leaveType: applyForm.leaveType,
-      startDate: applyForm.startDate,
-      endDate: applyForm.endDate,
-      daysCount: diffDays,
-      reason: applyForm.reason,
-      status: 'pending',
-      appliedOn: new Date().toISOString().split('T')[0],
-      approvedBy: null,
-    };
-
-    setApplications([newApp, ...applications]);
-    toast.success(`Leave application for ${diffDays} day(s) submitted for manager approval`);
-    setIsApplyModalOpen(false);
-    setApplyForm({
-      leaveType: 'Privileged Leave',
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date().toISOString().split('T')[0],
-      reason: '',
-    });
+    try {
+      await leaveService.applyLeave({
+        employeeId: currentUser?.id || 'u1',
+        employeeName: currentUser?.name || 'Rohit Kumar',
+        department: currentUser?.role || 'Staff',
+        leaveType: applyForm.leaveType,
+        startDate: applyForm.startDate,
+        endDate: applyForm.endDate,
+        durationDays: diffDays,
+        paidDays: diffDays,
+        lwpDays: 0,
+        reason: applyForm.reason,
+      });
+      toast.success(`Leave application for ${diffDays} day(s) submitted for manager approval`);
+      setIsApplyModalOpen(false);
+      setApplyForm({
+        leaveType: 'Privileged Leave',
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0],
+        reason: '',
+      });
+      reloadApplications();
+    } catch (error) {
+      toast.error(error?.message || 'Failed to submit leave application');
+    }
   };
 
   // Manager Approve or Reject (FR-HR-02)
-  const handleUpdateStatus = (id, newStatus) => {
-    setApplications(
-      applications.map((app) =>
-        app.id === id
-          ? {
-              ...app,
-              status: newStatus,
-              approvedBy: currentUser?.name || 'Manager Neha Kulkarni',
-            }
-          : app
-      )
-    );
-    toast.success(`Leave request ${newStatus === 'approved' ? 'Approved' : 'Rejected'}`);
+  const handleUpdateStatus = async (id, newStatus) => {
+    try {
+      await leaveService.decideLeave(id, newStatus === 'approved' ? 'approve' : 'reject');
+      toast.success(`Leave request ${newStatus === 'approved' ? 'Approved' : 'Rejected'}`);
+      reloadApplications();
+    } catch (error) {
+      toast.error(error?.message || 'Failed to update leave request');
+    }
   };
 
   // Generate Monthly Payslips (FR-HR-04 & FR-HR-05)
-  const handleGeneratePayslips = () => {
-    toast.success(`Generated monthly payslips for all staff for ${generateMonth} factoring attendance & approved leaves!`);
-    setIsGenerateModalOpen(false);
+  const handleGeneratePayslips = async () => {
+    try {
+      const cycle = await apiClient.post(PAYROLL_CYCLES_URL, {
+        period: generateMonth,
+        createdDate: new Date().toLocaleDateString('en-GB'),
+        status: 'Draft',
+      });
+      await apiClient.post(`${PAYROLL_CYCLES_URL}${cycle.id}/status/`, { action: 'calculate' });
+      toast.success(`Generated monthly payslips for all staff for ${generateMonth} factoring attendance & approved leaves!`);
+      setIsGenerateModalOpen(false);
+      await reloadPayslips();
+    } catch (error) {
+      toast.error(error?.message || 'Failed to generate payroll cycle');
+    }
   };
 
   // Download / Print Payslip PDF (FR-HR-06)
@@ -165,10 +301,10 @@ export function LeavePayslipsPage() {
           </div>
           <div className="mt-1">
             <div className="text-base sm:text-xl font-bold tracking-tight text-foreground">
-              {mockLeaveBalances.balance} <span className="text-xs sm:text-sm font-semibold text-muted-foreground">Days</span>
+              {leaveBalances.balance} <span className="text-xs sm:text-sm font-semibold text-muted-foreground">Days</span>
             </div>
             <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-              {mockLeaveBalances.used} used of {mockLeaveBalances.totalAllotted} allotted
+              {leaveBalances.used} used of {leaveBalances.totalAllotted} allotted
             </p>
           </div>
         </div>
@@ -235,51 +371,20 @@ export function LeavePayslipsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-border">
-        <button
-          type="button"
-          onClick={() => setActiveTab('applications')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'applications'
-              ? 'border-primary text-primary bg-card'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Icon name="attendance" size={14} />
-          <span>Leave Requests & Approvals</span>
-          {pendingCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-warning/15 text-warning font-bold">
-              {pendingCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('balances')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'balances'
-              ? 'border-primary text-primary bg-card'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Icon name="calendar" size={14} />
-          <span>Leave Quotas & Balances</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('payslips')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 cursor-pointer ${
-            activeTab === 'payslips'
-              ? 'border-primary text-primary bg-card'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Icon name="receipt" size={14} />
-          <span>Monthly Payslips & Payroll</span>
-        </button>
-      </div>
+      <Tabs
+        tabs={[
+          {
+            id: 'applications',
+            label: 'Leave Requests & Approvals',
+            icon: 'attendance',
+            count: pendingCount > 0 ? pendingCount : undefined,
+          },
+          { id: 'balances', label: 'Leave Quotas & Balances', icon: 'calendar' },
+          { id: 'payslips', label: 'Monthly Payslips & Payroll', icon: 'receipt' },
+        ]}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+      />
 
       {/* TAB 1: Leave Applications & Approvals */}
       {activeTab === 'applications' && (
@@ -304,7 +409,7 @@ export function LeavePayslipsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {applications.map((app) => (
+                {applicationsPager.paginatedItems.map((app) => (
                   <tr key={app.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="p-3">
                       <div className="flex items-center gap-2.5">
@@ -323,7 +428,7 @@ export function LeavePayslipsPage() {
                         {formatDate(app.startDate)} → {formatDate(app.endDate)}
                       </div>
                       <div className="text-[11px] text-text-muted font-mono">
-                        {app.daysCount} day{app.daysCount > 1 ? 's' : ''}
+                        {app.daysCount ?? app.durationDays ?? 0} day{(app.daysCount ?? app.durationDays ?? 0) > 1 ? 's' : ''}
                       </div>
                     </td>
                     <td className="p-3 max-w-xs">
@@ -364,6 +469,7 @@ export function LeavePayslipsPage() {
               </tbody>
             </table>
           </div>
+          <Pagination {...applicationsPager.pagination} />
         </Card>
       )}
 
@@ -371,7 +477,7 @@ export function LeavePayslipsPage() {
       {activeTab === 'balances' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {mockLeaveBalances.categories.map((cat) => (
+            {leaveBalances.categories.map((cat) => (
               <Card key={cat.type} className="p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="font-bold text-sm text-text-main">{cat.type}</div>
@@ -463,7 +569,7 @@ export function LeavePayslipsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {payslips.map((ps) => (
+                {payslipsPager.paginatedItems.map((ps) => (
                   <tr key={ps.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="p-3">
                       <div className="flex items-center gap-2.5">
@@ -527,6 +633,7 @@ export function LeavePayslipsPage() {
               </tbody>
             </table>
           </div>
+          <Pagination {...payslipsPager.pagination} />
         </Card>
       )}
 

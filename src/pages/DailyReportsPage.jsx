@@ -60,7 +60,7 @@ import {
   MoreIcon,
 } from '../components/ui/icons';
 
-const PAGE_SIZES = [10, 25, 50, 100];
+const PAGE_SIZES = [10, 25, 30];
 const STORAGE_KEY = 'osm_dsr_entries_v2';
 
 function pageNumbers(current, total) {
@@ -815,7 +815,7 @@ export function DailyReportsPage() {
       )}
 
       {/* Modern Filter Toolbar Container - Sticky on scroll */}
-      <div className="sticky top-0 z-20 rounded-xl border border-border bg-card/95 backdrop-blur-md p-3 shadow-sm space-y-3">
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md py-2 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center gap-2.5 justify-between">
           <div className="flex items-center gap-2.5 flex-1 min-w-0 flex-wrap">
             {canViewOthers && (

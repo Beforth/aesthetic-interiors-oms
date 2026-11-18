@@ -1,9 +1,22 @@
 import React, { forwardRef, useId } from 'react';
 import Icon from './Icon';
 import FormField from './FormField';
+import { cn } from '../../lib/utils';
+import {
+  SelectRoot,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from './SelectPrimitives';
+
+// Radix reserves the empty string for "no value"; keep empty options working
+// for existing forms that use '' as a real choice.
+const EMPTY_OPTION = '__befui_empty_option__';
 
 /**
- * befui Select component conforming to https://befui.vercel.app/
+ * BefUI Select (https://befui.vercel.app/) with the project's existing form API.
+ * Every dropdown in the app goes through this component.
  */
 export const Select = forwardRef(function Select(
   {
@@ -19,6 +32,7 @@ export const Select = forwardRef(function Select(
     disabled = false,
     value,
     onChange,
+    name,
     ...rest
   },
   ref
@@ -26,53 +40,57 @@ export const Select = forwardRef(function Select(
   const generatedId = useId();
   const selectId = id || generatedId;
 
-  const baseSelect = (
-    <div className="relative flex items-center w-full">
-      {leadingIcon && (
-        <div className="absolute left-3 text-muted-foreground pointer-events-none flex items-center z-10">
-          <Icon name={leadingIcon} size={15} />
-        </div>
-      )}
-      <select
+  const currentValue =
+    value === '' || value === undefined || value === null
+      ? value === ''
+        ? EMPTY_OPTION
+        : undefined
+      : String(value);
+
+  const emitChange = (nextValue) => {
+    if (!onChange) return;
+    onChange({ target: { name, value: nextValue === EMPTY_OPTION ? '' : nextValue } });
+  };
+
+  const control = (
+    <SelectRoot
+      value={currentValue}
+      onValueChange={emitChange}
+      disabled={disabled}
+      required={required}
+      name={name}
+    >
+      <SelectTrigger
         ref={ref}
         id={selectId}
-        disabled={disabled}
-        required={required}
-        value={value}
-        onChange={onChange}
         aria-invalid={!!error}
         aria-describedby={error ? `${selectId}-error` : undefined}
-        className={`w-full rounded-lg border bg-background ${
-          leadingIcon ? 'pl-9' : 'px-3'
-        } pr-9 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 h-9 appearance-none cursor-pointer text-foreground
-          ${
-            error
-              ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive focus:ring-2 focus:ring-destructive/30'
-              : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
-          }
-          ${className}
-        `}
+        className={cn(
+          error && 'border-destructive bg-destructive/5 ring-2 ring-destructive/20',
+          className
+        )}
         {...rest}
       >
-        {placeholder && (
-          <option value="" disabled>
-            {placeholder}
-          </option>
-        )}
-        {options.map((opt) => {
-          const optValue = typeof opt === 'object' ? opt.value : opt;
-          const optLabel = typeof opt === 'object' ? opt.label : opt;
+        <span className="flex min-w-0 items-center gap-2 truncate">
+          {leadingIcon && (
+            <Icon name={leadingIcon} size={15} className="shrink-0 text-muted-foreground" />
+          )}
+          <SelectValue placeholder={placeholder || 'Select an option'} />
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option, index) => {
+          const rawValue = typeof option === 'object' ? option.value : option;
+          const optionLabel = typeof option === 'object' ? option.label : option;
+          const optionValue = rawValue === '' ? EMPTY_OPTION : String(rawValue);
           return (
-            <option key={optValue} value={optValue}>
-              {optLabel}
-            </option>
+            <SelectItem key={`${optionValue}-${index}`} value={optionValue}>
+              {optionLabel}
+            </SelectItem>
           );
         })}
-      </select>
-      <div className="absolute right-3 text-muted-foreground pointer-events-none flex items-center">
-        <Icon name="chevronDown" size={14} />
-      </div>
-    </div>
+      </SelectContent>
+    </SelectRoot>
   );
 
   if (label || helperText || error) {
@@ -84,12 +102,12 @@ export const Select = forwardRef(function Select(
         helperText={helperText}
         htmlFor={selectId}
       >
-        {baseSelect}
+        {control}
       </FormField>
     );
   }
 
-  return baseSelect;
+  return control;
 });
 
 Select.displayName = 'Select';

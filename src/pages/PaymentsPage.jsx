@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -11,24 +11,26 @@ import {
   mockAgencyPayouts,
 } from '../data/payments';
 import { mockAgencies } from '../data/agencies';
+import paymentService, { initialPaymentSettings } from '../services/paymentService';
 import { cn } from '../lib/utils';
 
 // BefUI Components strictly adhering to design.md tokens
 import PageHeader from '../components/ui/PageHeader';
 import Avatar from '../components/ui/Avatar';
-import Pagination from '../components/ui/Pagination';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
-import { Badge } from '../components/ui/badge';
+import DataToolbar from '../components/ui/DataToolbar';
+import StatCard from '../components/ui/StatCard';
+import Table from '../components/ui/Table';
+import Select from '../components/ui/Select';
+import { Badge } from '../components/ui/Badge';
 
 // BefUI Icons strictly from '@/components/ui/icons'
 import {
-  WalletIcon,
   Building2Icon,
   ReceiptIcon,
   SaveIcon,
-  SettingsIcon,
   PlusIcon,
   SearchIcon,
   CheckIcon,
@@ -37,36 +39,20 @@ import {
   TrashIcon,
   DownloadIcon,
   XIcon,
-  CalendarIcon,
-  CreditCardIcon,
-  FilterIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   ArrowLeftIcon,
+  PrinterIcon,
+  ShieldCheckIcon,
 } from '../components/ui/icons';
-
-const STORAGE_KEY_CLIENT_PAYMENTS = 'osm_client_payment_schedules_v3';
-const STORAGE_KEY_AGENCY_PAYOUTS = 'osm_agency_payouts_v2';
-const STORAGE_KEY_PAYMENT_SETTINGS = 'osm_payment_settings_v2';
-
-const initialPaymentSettings = {
-  bankName: 'HDFC Bank Ltd',
-  accountName: 'Aesthetic Interiors OMS Pvt Ltd',
-  accountNumber: '50200088991122',
-  ifscCode: 'HDFC0001234',
-  upiId: 'aestheticinteriors@hdfcbank',
-  defaultAdvancePercent: 30,
-  defaultInstallmentsCount: 3,
-  gracePeriodDays: 7,
-  defaultGstPercent: 18,
-  tdsRateOnContracts: 2.0,
-  retentionHoldPercent: 5,
-};
 
 export function PaymentsPage({ mode }) {
   const { currentUser } = useAuth();
   const toast = useToast();
+  const toastRef = useRef(toast);
   const location = useLocation();
+
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
 
   // Determine view mode directly from route & prop: 'received' | 'pay' | 'settings'
   const currentView = useMemo(() => {
@@ -75,22 +61,17 @@ export function PaymentsPage({ mode }) {
     return 'received';
   }, [mode, location.pathname]);
 
-  // Payment Configuration Settings State
-  const [paymentSettings, setPaymentSettings] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PAYMENT_SETTINGS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return initialPaymentSettings;
-  });
+  // Payment Configuration Settings State (the service owns the local fallback)
+  const [paymentSettings, setPaymentSettings] = useState(initialPaymentSettings);
 
-  const handleSavePaymentSettings = (e) => {
+  const handleSavePaymentSettings = async (e) => {
     e.preventDefault();
     try {
-      localStorage.setItem(STORAGE_KEY_PAYMENT_SETTINGS, JSON.stringify(paymentSettings));
+      const saved = await paymentService.saveSettings(paymentSettings);
+      if (saved) setPaymentSettings(saved);
       toast.success('Payment settings saved successfully!');
-    } catch (e) {
-      toast.error('Failed to save payment settings');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to save payment settings');
     }
   };
 
@@ -103,23 +84,12 @@ export function PaymentsPage({ mode }) {
   // ---------------------------------------------------------------------------
   // 1. CLIENT PAYMENT SCHEDULES STATE (Received Mode)
   // ---------------------------------------------------------------------------
-  const [schedules, setSchedules] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_CLIENT_PAYMENTS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to load client payment schedules', e);
-    }
-    return mockProjectPaymentSchedules;
-  });
+  const [schedules, setSchedules] = useState(mockProjectPaymentSchedules);
 
-  const saveSchedules = (newSchedules) => {
-    setSchedules(newSchedules);
-    try {
-      localStorage.setItem(STORAGE_KEY_CLIENT_PAYMENTS, JSON.stringify(newSchedules));
-    } catch (e) {
-      console.error('Failed to save client payment schedules', e);
-    }
+  const refreshSchedules = async () => {
+    const rows = await paymentService.getSchedules();
+    setSchedules(Array.isArray(rows) ? rows : mockProjectPaymentSchedules);
+    return rows;
   };
 
   // Selected site filter ('all' or specific projectId)
@@ -136,8 +106,7 @@ export function PaymentsPage({ mode }) {
   const [clientMethodFilter, setClientMethodFilter] = useState('all');
   const [clientSort, setClientSort] = useState('due_asc');
   const [clientPage, setClientPage] = useState(1);
-  const [clientRowsPerPage, setClientRowsPerPage] = useState(8);
-  const [selectedClientIds, setSelectedClientIds] = useState([]);
+  const [clientRowsPerPage, setClientRowsPerPage] = useState(10);
 
   // Flattened installments across all projects
   const allClientPayments = useMemo(() => {
@@ -233,20 +202,6 @@ export function PaymentsPage({ mode }) {
 
   const clientTotalPages = Math.ceil(filteredClientPayments.length / clientRowsPerPage) || 1;
 
-  const handleToggleClientSelect = (id) => {
-    setSelectedClientIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllClients = () => {
-    if (selectedClientIds.length === paginatedClientPayments.length) {
-      setSelectedClientIds([]);
-    } else {
-      setSelectedClientIds(paginatedClientPayments.map((item) => item.id));
-    }
-  };
-
   const handleExportClientCSV = () => {
     const headers = ['Project Name', 'Client Name', 'Installment', 'Amount', 'Paid Amount', 'Due Date', 'Status', 'Payment Mode', 'Receipt No'];
     const rows = filteredClientPayments.map((item) => [
@@ -274,24 +229,36 @@ export function PaymentsPage({ mode }) {
   // ---------------------------------------------------------------------------
   // 2. AGENCY PAYOUTS STATE (Pay Mode)
   // ---------------------------------------------------------------------------
-  const [agencyPayouts, setAgencyPayouts] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_AGENCY_PAYOUTS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to load agency payouts', e);
-    }
-    return mockAgencyPayouts;
-  });
+  const [agencyPayouts, setAgencyPayouts] = useState(mockAgencyPayouts);
 
-  const saveAgencyPayouts = (newPayouts) => {
-    setAgencyPayouts(newPayouts);
-    try {
-      localStorage.setItem(STORAGE_KEY_AGENCY_PAYOUTS, JSON.stringify(newPayouts));
-    } catch (e) {
-      console.error('Failed to save agency payouts', e);
-    }
+  const refreshAgencyPayouts = async () => {
+    const rows = await paymentService.getAgencyPayouts();
+    setAgencyPayouts(Array.isArray(rows) ? rows : mockAgencyPayouts);
+    return rows;
   };
+
+  // Load payment data once on mount; the service falls back to local sample data.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [settings, scheduleRows, payoutRows] = await Promise.all([
+          paymentService.getSettings(),
+          paymentService.getSchedules(),
+          paymentService.getAgencyPayouts(),
+        ]);
+        if (!active) return;
+        if (settings) setPaymentSettings(settings);
+        if (Array.isArray(scheduleRows)) setSchedules(scheduleRows);
+        if (Array.isArray(payoutRows)) setAgencyPayouts(payoutRows);
+      } catch (err) {
+        if (active) toastRef.current.error(err?.message || 'Failed to load payment data');
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Agency Filters
   const [agencySearch, setAgencySearch] = useState('');
@@ -300,8 +267,7 @@ export function PaymentsPage({ mode }) {
   const [agencyMethodFilter, setAgencyMethodFilter] = useState('all');
   const [agencySort, setAgencySort] = useState('newest');
   const [agencyPage, setAgencyPage] = useState(1);
-  const [agencyRowsPerPage, setAgencyRowsPerPage] = useState(8);
-  const [selectedAgencyIds, setSelectedAgencyIds] = useState([]);
+  const [agencyRowsPerPage, setAgencyRowsPerPage] = useState(10);
 
   const filteredAgencyPayouts = useMemo(() => {
     const list = agencyPayouts.filter((item) => {
@@ -355,25 +321,34 @@ export function PaymentsPage({ mode }) {
 
   const agencyTotalPages = Math.ceil(filteredAgencyPayouts.length / agencyRowsPerPage) || 1;
 
-  const handleToggleAgencySelect = (id) => {
-    setSelectedAgencyIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllAgencies = () => {
-    if (selectedAgencyIds.length === paginatedAgencyPayouts.length) {
-      setSelectedAgencyIds([]);
-    } else {
-      setSelectedAgencyIds(paginatedAgencyPayouts.map((item) => item.id));
+  const handleDeleteAgencyPayout = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this agency bill record?')) return;
+    try {
+      await paymentService.deleteAgencyPayout(id);
+      await refreshAgencyPayouts();
+      toast.success('Agency bill record deleted');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to delete agency bill record');
     }
   };
 
-  const handleDeleteAgencyPayout = (id) => {
-    if (!window.confirm('Are you sure you want to delete this agency bill record?')) return;
-    const updated = agencyPayouts.filter((a) => a.id !== id);
-    saveAgencyPayouts(updated);
-    toast.success('Agency bill record deleted');
+  const handleOpenAgencyPayment = () => {
+    const firstAg = mockAgencies[0];
+    setAgencyForm({
+      agencyId: firstAg?.id || 'a1',
+      agencyName: firstAg?.name || 'Apex False Ceiling',
+      trade: firstAg?.trade || 'Ceiling',
+      projectId: schedules[0]?.projectId || 'P1',
+      invoiceNumber: `INV-AGC-${Date.now().toString().slice(-4)}`,
+      billAmount: 120000,
+      paidAmount: 80000,
+      dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMode: 'Bank Transfer',
+      workStage: 'Framing & Boarding Stage Bill',
+      proof: null,
+    });
+    setIsRecordAgencyOpen(true);
   };
 
   const handleExportAgencyCSV = () => {
@@ -412,7 +387,7 @@ export function PaymentsPage({ mode }) {
     clientName: '',
     totalCost: 40000,
     advancePercentage: 10,
-    installmentsCount: 2,
+    installmentsCount: 1,
     installments: [],
   });
 
@@ -420,55 +395,24 @@ export function PaymentsPage({ mode }) {
   const handleOpenPaymentModal = (targetSchedule = null) => {
     const schedule = targetSchedule || currentSchedule || schedules[0];
     const totalCost = schedule?.totalCost || 40000;
-    const existingInst = schedule?.installments || [];
+    const advPct = 10;
+    const remaining = Math.max(0, totalCost - Math.round((totalCost * advPct) / 100));
 
-    // Calculate advance % from first installment or default 10%
-    let advPct = 10;
-    let instList = [];
-
-    if (existingInst.length > 0) {
-      instList = existingInst.map((inst, idx) => ({
-        id: inst.id || `inst-${idx + 1}`,
-        title: inst.title || `Installment ${idx + 1}`,
-        percentage: inst.percentage !== undefined ? Number(inst.percentage) : Math.round(100 / Math.max(1, existingInst.length)),
-        amount: Number(inst.amount) || 0,
-        status: inst.status || 'pending',
-        dueDate: inst.dueDate ? inst.dueDate.split('T')[0] : '',
-        paidDate: inst.paidDate ? inst.paidDate.split('T')[0] : '',
-        paymentMode: inst.paymentMode || 'Bank Transfer',
-        paymentProof: inst.paymentProof || null,
-        paymentProofName: inst.paymentProofName || '',
-      }));
-    } else {
-      const advAmt = Math.round((totalCost * advPct) / 100);
-      const remaining = Math.max(0, totalCost - advAmt);
-      instList = [
-        {
-          id: 'inst-1',
-          title: 'Installment 1',
-          percentage: 50,
-          amount: Math.round(remaining * 0.5),
-          status: 'pending',
-          dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
-          paidDate: '',
-          paymentMode: 'Bank Transfer',
-          paymentProof: null,
-          paymentProofName: '',
-        },
-        {
-          id: 'inst-2',
-          title: 'Installment 2',
-          percentage: 50,
-          amount: Math.round(remaining * 0.5),
-          status: 'pending',
-          dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-          paidDate: '',
-          paymentMode: 'Bank Transfer',
-          paymentProof: null,
-          paymentProofName: '',
-        },
-      ];
-    }
+    // Always start with a single installment; admin can add more if needed
+    const instList = [
+      {
+        id: 'inst-1',
+        title: 'Installment 1',
+        percentage: 100,
+        amount: remaining,
+        status: 'pending',
+        dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+        paidDate: '',
+        paymentMode: 'Bank Transfer',
+        paymentProof: null,
+        paymentProofName: '',
+      },
+    ];
 
     setPaymentForm({
       projectId: schedule?.projectId || 'P1',
@@ -476,7 +420,7 @@ export function PaymentsPage({ mode }) {
       clientName: schedule?.clientName || '',
       totalCost,
       advancePercentage: advPct,
-      installmentsCount: instList.length || 2,
+      installmentsCount: 1,
       installments: instList,
     });
     setIsPaymentModalOpen(true);
@@ -499,8 +443,8 @@ export function PaymentsPage({ mode }) {
 
     setPaymentForm((prev) => ({
       ...prev,
-      totalCost: cost,
-      advancePercentage: advPct,
+      totalCost: newCost,
+      advancePercentage: newAdvPct,
       installments: updatedInst,
     }));
   };
@@ -544,23 +488,50 @@ export function PaymentsPage({ mode }) {
     }));
   };
 
-  // Save the simplified payment form
-  const handleSavePaymentForm = (e) => {
-    e.preventDefault();
-    const updatedSchedules = schedules.map((s) => {
-      if (s.projectId === paymentForm.projectId) {
-        return {
-          ...s,
-          totalCost: paymentForm.totalCost,
-          installments: paymentForm.installments,
-        };
-      }
-      return s;
+  const handleRemoveInstallment = (removeIdx) => {
+    if (paymentForm.installments.length <= 1) return;
+
+    const remaining = paymentForm.installments.filter((_, i) => i !== removeIdx);
+    const count = remaining.length;
+    const equalPct = Math.floor(100 / count);
+    const remainder = 100 - equalPct * count;
+
+    const rebalanced = remaining.map((inst, i) => {
+      const pct = i === count - 1 ? equalPct + remainder : equalPct;
+      const isAutoTitle = /^Installment \d+$/.test(inst.title || '');
+      return {
+        ...inst,
+        title: isAutoTitle ? `Installment ${i + 1}` : inst.title,
+        percentage: pct,
+        amount: Math.round((modalRemVal * pct) / 100),
+      };
     });
 
-    saveSchedules(updatedSchedules);
-    toast.success('Payment plan & installments updated successfully!');
-    setIsPaymentModalOpen(false);
+    setPaymentForm((prev) => ({
+      ...prev,
+      installmentsCount: count,
+      installments: rebalanced,
+    }));
+  };
+
+  // Save the simplified payment form through the payment service
+  const handleSavePaymentForm = async (e) => {
+    e.preventDefault();
+    try {
+      const rows = await paymentService.savePaymentPlan(paymentForm.projectId, {
+        ...paymentForm,
+        totalCost: parseFloat(String(paymentForm.totalCost).replace(/,/g, '')) || 0,
+      });
+      if (Array.isArray(rows)) {
+        setSchedules(rows);
+      } else {
+        await refreshSchedules();
+      }
+      toast.success('Payment plan & installments updated successfully!');
+      setIsPaymentModalOpen(false);
+    } catch (err) {
+      toast.error(err?.message || 'Failed to save payment plan');
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -575,13 +546,14 @@ export function PaymentsPage({ mode }) {
     invoiceNumber: '',
     billAmount: '',
     paidAmount: '',
+    dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
     paymentDate: new Date().toISOString().split('T')[0],
     paymentMode: 'Bank Transfer',
     workStage: '',
     proof: null,
   });
 
-  const handleSaveAgencyPayout = (e) => {
+  const handleSaveAgencyPayout = async (e) => {
     e.preventDefault();
     if (!agencyForm.invoiceNumber.trim()) {
       toast.error('Please enter an invoice number');
@@ -589,30 +561,30 @@ export function PaymentsPage({ mode }) {
     }
     const billed = parseFloat(agencyForm.billAmount) || 0;
     const paid = parseFloat(agencyForm.paidAmount) || 0;
-    const due = Math.max(0, billed - paid);
     const targetProj = schedules.find((s) => s.projectId === agencyForm.projectId);
 
-    const newRecord = {
-      id: `apx-${Date.now()}`,
-      agencyId: agencyForm.agencyId,
-      agencyName: agencyForm.agencyName,
-      trade: agencyForm.trade,
-      projectId: agencyForm.projectId,
-      projectName: targetProj?.projectName || 'Indiranagar 4BHK Luxury Villa',
-      invoiceNumber: agencyForm.invoiceNumber.trim(),
-      billAmount: billed,
-      paidAmount: paid,
-      pendingBalance: due,
-      status: due === 0 ? 'paid' : paid > 0 ? 'partially_paid' : 'pending',
-      paymentDate: agencyForm.paymentDate,
-      paymentMode: agencyForm.paymentMode,
-      workStage: agencyForm.workStage || 'Site Trade Clearance',
-      proof: agencyForm.proof,
-    };
-
-    saveAgencyPayouts([newRecord, ...agencyPayouts]);
-    toast.success(`Agency bill ${newRecord.invoiceNumber} recorded successfully!`);
-    setIsRecordAgencyOpen(false);
+    try {
+      await paymentService.createAgencyPayout({
+        agencyId: agencyForm.agencyId,
+        agencyName: agencyForm.agencyName,
+        trade: agencyForm.trade,
+        projectId: agencyForm.projectId,
+        projectName: targetProj?.projectName || 'Indiranagar 4BHK Luxury Villa',
+        invoiceNumber: agencyForm.invoiceNumber.trim(),
+        billAmount: billed,
+        paidAmount: paid,
+        dueDate: agencyForm.dueDate,
+        paymentDate: agencyForm.paymentDate,
+        paymentMode: agencyForm.paymentMode,
+        workStage: agencyForm.workStage || 'Site Trade Clearance',
+        proof: agencyForm.proof,
+      });
+      await refreshAgencyPayouts();
+      toast.success(`Agency bill ${agencyForm.invoiceNumber.trim()} recorded successfully!`);
+      setIsRecordAgencyOpen(false);
+    } catch (err) {
+      toast.error(err?.message || 'Failed to record agency bill');
+    }
   };
 
   // Calculated values for Payment Form modal
@@ -625,35 +597,43 @@ export function PaymentsPage({ mode }) {
   // FULL-SCREEN VIEW: RECORD / EDIT CLIENT PAYMENT PLAN (Received Mode)
   // ---------------------------------------------------------------------------
   if (currentView === 'received' && isPaymentModalOpen) {
+    const plannedTotal = paymentForm.installments.reduce(
+      (sum, inst) => sum + (Number(inst.amount) || 0),
+      0
+    );
+    const paidTotal = paymentForm.installments
+      .filter((inst) => inst.status === 'paid')
+      .reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0);
+    const pctTotal = paymentForm.installments.reduce(
+      (sum, inst) => sum + (Number(inst.percentage) || 0),
+      0
+    );
+
     return (
-      <div className="space-y-6 pb-20 animate-in fade-in duration-200">
-        {/* Full Screen Top Navigation & Actions Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+      <div className="space-y-6 pb-24 animate-in fade-in duration-200">
+        {/* Top Navigation & Primary Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setIsPaymentModalOpen(false)}
               className="p-2 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              title="Back to Received Payments"
+              aria-label="Back to received payments"
+              data-no-tooltip
             >
               <ArrowLeftIcon className="size-4" />
             </button>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                  Record Client Payment
-                </h1>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
-                  Full Screen Form
-                </span>
-              </div>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+                Record Client Payment
+              </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Configure contract budget, advance percentage, installment milestones, and attach payment proofs.
+                Set the contract value, advance, and installment clearances for this project.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             <Button
               type="button"
               variant="outline"
@@ -670,25 +650,23 @@ export function PaymentsPage({ mode }) {
               className="flex items-center gap-1.5 font-semibold"
             >
               <SaveIcon className="size-4" />
-              <span>Save Payment Schedule</span>
+              <span>Save Schedule</span>
             </Button>
           </div>
         </div>
 
         <form onSubmit={handleSavePaymentForm} className="space-y-6">
-          {/* Card 1: Project & Client Selection */}
-          <div className="rounded-xl border border-border bg-card p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                1. Project & Client Selection
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Select project to configure payment schedule
+          {/* Step 1: Payment Plan */}
+          <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-border bg-muted/10">
+              <h2 className="text-sm font-semibold text-foreground">Payment Plan</h2>
+              <span className="text-[11px] text-muted-foreground truncate max-w-[240px]">
+                {paymentForm.clientName || 'Select a project'}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-5">
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-foreground mb-1.5">
                   Project & Client *
                 </label>
@@ -711,169 +689,185 @@ export function PaymentsPage({ mode }) {
 
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">
-                  Client Name
-                </label>
-                <div className="w-full h-10 px-3 flex items-center border border-border rounded-lg bg-muted/20 text-foreground text-xs font-semibold">
-                  {paymentForm.clientName || 'Select a project'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Total Contract Budget & Advance % (with Live Value in Front of It) */}
-          <div className="rounded-xl border border-border bg-card p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                2. Contract Budget & Advance Allocation
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Advance value is calculated live
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Total Contract Budget */}
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">
-                  Total Contract Budget (₹) *
+                  Contract Budget (₹) *
                 </label>
                 <input
                   type="number"
                   required
                   min="1000"
                   value={paymentForm.totalCost}
-                  onChange={(e) => handleRecalculateBudget(e.target.value, paymentForm.advancePercentage)}
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
-                  placeholder="e.g. 1500000"
+                  onChange={(e) =>
+                    handleRecalculateBudget(e.target.value, paymentForm.advancePercentage)
+                  }
+                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
+                  placeholder="0"
                 />
               </div>
 
-              {/* Advance Percentage (%) */}
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">
-                  Advance Percentage (%) *
-                </label>
-                <div className="relative">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">
+                    Advance %
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      required
+                      value={paymentForm.advancePercentage}
+                      onChange={(e) =>
+                        handleRecalculateBudget(paymentForm.totalCost, e.target.value)
+                      }
+                      placeholder="0"
+                      className="w-full h-10 px-3 pr-7 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground font-semibold">
+                      %
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">
+                    Count
+                  </label>
                   <input
                     type="number"
-                    min="0"
-                    max="100"
+                    min="1"
+                    max="12"
                     required
-                    value={paymentForm.advancePercentage}
-                    onChange={(e) => handleRecalculateBudget(paymentForm.totalCost, e.target.value)}
-                    className="w-full h-10 px-3 pr-8 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
-                    placeholder="e.g. 30"
+                    value={paymentForm.installmentsCount}
+                    onChange={(e) => handleInstallmentsCountChange(e.target.value)}
+                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold">
-                    %
-                  </span>
-                </div>
-              </div>
-
-              {/* Advance Value Directly in Front of It */}
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">
-                  Advance Value (Live)
-                </label>
-                <div className="w-full h-10 px-3 flex items-center justify-between border border-border rounded-lg bg-primary/5 text-primary">
-                  <span className="text-xs text-muted-foreground">Calculated:</span>
-                  <span className="font-mono font-bold text-sm text-foreground">
-                    {formatCurrency(modalAdvVal)}
-                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Budget Balance Banner */}
-            <div className="p-3 rounded-lg bg-muted/30 border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
-              <span className="text-muted-foreground">
-                Advance Amount: <strong className="text-foreground">{paymentForm.advancePercentage}%</strong> of {formatCurrency(modalCost)}
-              </span>
-              <span className="text-muted-foreground">
-                Remaining Balance for Installments: <strong className="font-mono font-bold text-foreground text-sm">{formatCurrency(modalRemVal)}</strong>
-              </span>
+            <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-border border-t border-border bg-muted/20">
+              <div className="px-5 py-3">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">
+                  Advance
+                </span>
+                <span className="text-sm font-bold font-mono text-foreground">
+                  {formatCurrency(modalAdvVal)}
+                </span>
+              </div>
+              <div className="px-5 py-3">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">
+                  Remaining
+                </span>
+                <span className="text-sm font-bold font-mono text-foreground">
+                  {formatCurrency(modalRemVal)}
+                </span>
+              </div>
+              <div className="px-5 py-3 border-t lg:border-t-0 border-border">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">
+                  Planned
+                </span>
+                <span className="text-sm font-bold font-mono text-foreground">
+                  {formatCurrency(plannedTotal)}
+                </span>
+              </div>
+              <div className="px-5 py-3 border-t lg:border-t-0 border-border">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">
+                  Cleared
+                </span>
+                <span className="text-sm font-bold font-mono text-success">
+                  {formatCurrency(paidTotal)}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Card 3: Installments & Payment Details */}
-          <div className="rounded-xl border border-border bg-card p-5 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-                  3. Installment Milestones & Clearances
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Percentage, status, dates, payment mode and proof for each installment
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                  No. of Installments:
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="12"
-                  required
-                  value={paymentForm.installmentsCount}
-                  onChange={(e) => handleInstallmentsCountChange(e.target.value)}
-                  className="w-20 h-9 px-2.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
-                />
-              </div>
+          {/* Step 2: Installments */}
+          <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-5 py-3.5 border-b border-border bg-muted/10">
+              <h2 className="text-sm font-semibold text-foreground">Installments</h2>
+              <span className="text-[11px] text-muted-foreground">
+                Mark an installment paid to add paid date, mode and proof.
+              </span>
             </div>
 
-            {/* Installments List */}
-            <div className="space-y-4">
+            <div className="divide-y divide-border">
               {paymentForm.installments.map((inst, idx) => (
-                <div
-                  key={inst.id || idx}
-                  className="p-4 rounded-xl border border-border bg-muted/10 space-y-3.5 text-xs shadow-2xs hover:border-primary/30 transition-colors"
-                >
-                  {/* Header: Title, Percentage & Calculated Value */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="size-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center">
+                <div key={inst.id || idx} className="px-5 py-4 space-y-3.5">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
+                    <div className="flex items-center gap-2.5 min-w-[170px] flex-1">
+                      <span className="size-6 rounded-full bg-primary/10 text-primary font-bold text-[11px] flex items-center justify-center shrink-0">
                         {idx + 1}
                       </span>
-                      <span className="font-bold text-sm text-foreground">
-                        {inst.title || `Installment #${idx + 1}`}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground text-xs">Percentage:</span>
-                      <div className="relative w-20">
+                      <div className="min-w-0">
                         <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={inst.percentage}
+                          type="text"
+                          value={inst.title}
                           onChange={(e) => {
-                            const newPct = parseFloat(e.target.value) || 0;
                             const updated = [...paymentForm.installments];
-                            const amt = Math.round((modalRemVal * newPct) / 100);
-                            updated[idx] = { ...updated[idx], percentage: newPct, amount: amt };
+                            updated[idx] = { ...updated[idx], title: e.target.value };
                             setPaymentForm({ ...paymentForm, installments: updated });
                           }}
-                          className="w-full h-8 px-2.5 pr-6 border border-border rounded-md bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                          onBlur={() => {
+                            if (!inst.title.trim()) {
+                              const updated = [...paymentForm.installments];
+                              updated[idx] = { ...updated[idx], title: `Installment ${idx + 1}` };
+                              setPaymentForm({ ...paymentForm, installments: updated });
+                            }
+                          }}
+                          placeholder={`Installment ${idx + 1}`}
+                          aria-label={`Installment ${idx + 1} name`}
+                          className="w-full max-w-[170px] -ml-1 px-1 py-0.5 text-xs font-semibold text-foreground bg-transparent border border-transparent hover:border-border focus:border-border rounded transition-colors focus:outline-none"
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">
-                          %
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="relative w-16">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={inst.percentage}
+                              placeholder="0"
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                const newPct = parseFloat(raw) || 0;
+                                const updated = [...paymentForm.installments];
+                                const amt = Math.round((modalRemVal * newPct) / 100);
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  percentage: raw === '' ? '' : newPct,
+                                  amount: amt,
+                                };
+                                setPaymentForm({ ...paymentForm, installments: updated });
+                              }}
+                              className="w-full h-7 px-2 pr-5 border border-border rounded-md bg-background text-foreground font-mono text-[11px] focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
+                              title="Percentage of remaining balance"
+                            />
+                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">
+                              %
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">of remaining</span>
+                        </div>
                       </div>
-                      <span className="font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded bg-muted border border-border">
-                        {formatCurrency(inst.amount)}
-                      </span>
                     </div>
-                  </div>
 
-                  {/* 4 Fields Grid: Status, Due Date, Paid Date, Payment Mode */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Status
+                    <span className="font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded-md bg-muted border border-border">
+                      {formatCurrency(inst.amount)}
+                    </span>
+
+                    <div className="flex flex-wrap items-center gap-2 ml-auto">
+                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        Due
+                        <input
+                          type="date"
+                          value={inst.dueDate}
+                          onChange={(e) => {
+                            const updated = [...paymentForm.installments];
+                            updated[idx] = { ...updated[idx], dueDate: e.target.value };
+                            setPaymentForm({ ...paymentForm, installments: updated });
+                          }}
+                          className="h-8 px-2 border border-border rounded-md bg-background text-foreground text-[11px] focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                        />
                       </label>
+
                       <select
                         value={inst.status}
                         onChange={(e) => {
@@ -888,178 +882,202 @@ export function PaymentsPage({ mode }) {
                           };
                           setPaymentForm({ ...paymentForm, installments: updated });
                         }}
-                        className="w-full h-9 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                        className={cn(
+                          'h-8 px-2 rounded-md border text-[11px] font-semibold focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer',
+                          inst.status === 'paid'
+                            ? 'bg-success/10 text-success border-success/30'
+                            : inst.status === 'overdue'
+                            ? 'bg-destructive/10 text-destructive border-destructive/30'
+                            : 'bg-background text-foreground border-border'
+                        )}
                       >
                         <option value="pending">Pending</option>
                         <option value="paid">Paid</option>
                         <option value="overdue">Overdue</option>
                       </select>
-                    </div>
 
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Due Date
-                      </label>
-                      <input
-                        type="date"
-                        value={inst.dueDate}
-                        onChange={(e) => {
-                          const updated = [...paymentForm.installments];
-                          updated[idx] = { ...updated[idx], dueDate: e.target.value };
-                          setPaymentForm({ ...paymentForm, installments: updated });
-                        }}
-                        className="w-full h-9 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Paid Date
-                      </label>
-                      <input
-                        type="date"
-                        value={inst.paidDate}
-                        onChange={(e) => {
-                          const updated = [...paymentForm.installments];
-                          updated[idx] = { ...updated[idx], paidDate: e.target.value };
-                          setPaymentForm({ ...paymentForm, installments: updated });
-                        }}
-                        className="w-full h-9 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground block mb-1">
-                        Payment Mode
-                      </label>
-                      <select
-                        value={inst.paymentMode}
-                        onChange={(e) => {
-                          const updated = [...paymentForm.installments];
-                          updated[idx] = { ...updated[idx], paymentMode: e.target.value };
-                          setPaymentForm({ ...paymentForm, installments: updated });
-                        }}
-                        className="w-full h-9 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="Bank Transfer">Bank Transfer</option>
-                        <option value="UPI">UPI</option>
-                        <option value="Cheque">Cheque</option>
-                        <option value="Cash">Cash</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Payment Proof (Pic Option) */}
-                  <div className="flex items-center gap-3 pt-1 border-t border-border/40">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
-                      Payment Proof:
-                    </span>
-                    {inst.paymentProof ? (
-                      <div className="flex items-center gap-2 bg-muted/40 px-3 py-1.5 rounded-lg border border-border">
-                        <img
-                          src={inst.paymentProof}
-                          alt="Proof"
-                          onClick={() => setPreviewImageModal(inst.paymentProof)}
-                          className="size-7 rounded object-cover cursor-pointer border border-border hover:opacity-80"
-                        />
-                        <span className="text-xs font-medium text-foreground max-w-[200px] truncate">
-                          {inst.paymentProofName || 'Picture Attached'}
-                        </span>
+                      {paymentForm.installments.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => setPreviewImageModal(inst.paymentProof)}
-                          className="p-1 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-                          title="View Preview"
-                        >
-                          <EyeIcon className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = [...paymentForm.installments];
-                            updated[idx] = { ...updated[idx], paymentProof: null, paymentProofName: '' };
-                            setPaymentForm({ ...paymentForm, installments: updated });
-                          }}
-                          className="p-1 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-                          title="Remove picture"
+                          onClick={() => handleRemoveInstallment(idx)}
+                          className="size-8 inline-flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors cursor-pointer"
+                          aria-label="Remove installment"
+                          data-no-tooltip
                         >
                           <TrashIcon className="size-3.5" />
                         </button>
-                      </div>
-                    ) : (
-                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 bg-background hover:bg-muted text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                        <CameraIcon className="size-3.5 text-primary" />
-                        <span>Attach Picture / Slip</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {inst.status === 'paid' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border/60 pt-3 pl-0 sm:pl-8">
+                      <label className="block">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground block mb-1">
+                          Paid Date
+                        </span>
                         <input
-                          type="file"
-                          accept="image/*,application/pdf"
-                          className="hidden"
+                          type="date"
+                          value={inst.paidDate}
                           onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => {
+                            const updated = [...paymentForm.installments];
+                            updated[idx] = { ...updated[idx], paidDate: e.target.value };
+                            setPaymentForm({ ...paymentForm, installments: updated });
+                          }}
+                          className="w-full h-8 px-2 border border-border rounded-md bg-background text-foreground text-[11px] focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground block mb-1">
+                          Payment Mode
+                        </span>
+                        <select
+                          value={inst.paymentMode}
+                          onChange={(e) => {
+                            const updated = [...paymentForm.installments];
+                            updated[idx] = { ...updated[idx], paymentMode: e.target.value };
+                            setPaymentForm({ ...paymentForm, installments: updated });
+                          }}
+                          className="w-full h-8 px-2 border border-border rounded-md bg-background text-foreground text-[11px] focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                        >
+                          <option value="Bank Transfer">Bank Transfer</option>
+                          <option value="UPI">UPI</option>
+                          <option value="Cheque">Cheque</option>
+                          <option value="Cash">Cash</option>
+                        </select>
+                      </label>
+
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground block mb-1">
+                          Payment Proof
+                        </span>
+                        {inst.paymentProof ? (
+                          <div className="flex items-center gap-2 h-8 px-2 rounded-md bg-muted/40 border border-border">
+                            <img
+                              src={inst.paymentProof}
+                              alt="Proof"
+                              onClick={() => setPreviewImageModal(inst.paymentProof)}
+                              className="size-5 rounded object-cover cursor-pointer border border-border hover:opacity-80"
+                            />
+                            <span className="text-[11px] font-medium text-foreground flex-1 min-w-0 truncate">
+                              {inst.paymentProofName || 'Picture attached'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImageModal(inst.paymentProof)}
+                              className="p-0.5 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                              title="View proof"
+                            >
+                              <EyeIcon className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
                                 const updated = [...paymentForm.installments];
                                 updated[idx] = {
                                   ...updated[idx],
-                                  paymentProof: ev.target.result,
-                                  paymentProofName: file.name,
+                                  paymentProof: null,
+                                  paymentProofName: '',
                                 };
                                 setPaymentForm({ ...paymentForm, installments: updated });
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-                    )}
-                  </div>
+                              }}
+                              className="p-0.5 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                              title="Remove proof"
+                            >
+                              <TrashIcon className="size-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md border border-dashed border-border hover:border-primary/50 bg-background hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+                            <CameraIcon className="size-3.5 text-primary" />
+                            <span>Attach slip</span>
+                            <input
+                              type="file"
+                              accept="image/*,application/pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    const updated = [...paymentForm.installments];
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      paymentProof: ev.target.result,
+                                      paymentProofName: file.name,
+                                    };
+                                    setPaymentForm({ ...paymentForm, installments: updated });
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-          </div>
 
-          {/* Bottom Action Footer */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsPaymentModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              className="flex items-center gap-1.5 font-semibold"
-            >
-              <SaveIcon className="size-4" />
-              <span>Save Payment Schedule</span>
-            </Button>
+            <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={paymentForm.installments.length >= 12}
+                onClick={() => handleInstallmentsCountChange(paymentForm.installments.length + 1)}
+                className="flex items-center gap-1.5"
+              >
+                <PlusIcon className="size-3.5" />
+                <span>Add installment</span>
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                {paymentForm.installments.length} of 12
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-t border-border bg-muted/20 text-xs">
+              <span className="text-muted-foreground">
+                Allocation:{' '}
+                <strong className="text-foreground font-mono">{pctTotal}%</strong>
+                {pctTotal !== 100 && (
+                  <span className="text-warning font-medium"> (should total 100%)</span>
+                )}
+              </span>
+              <span className="text-muted-foreground">
+                Planned{' '}
+                <strong className="font-mono text-foreground">{formatCurrency(plannedTotal)}</strong>
+                {' · '}Cleared{' '}
+                <strong className="font-mono text-success">{formatCurrency(paidTotal)}</strong>
+              </span>
+            </div>
           </div>
         </form>
 
-        {/* Modal preview image if opened while in full-screen */}
+        {/* In-page proof preview */}
         {previewImageModal && (
           <Modal
             isOpen={!!previewImageModal}
             onClose={() => setPreviewImageModal(null)}
-            title="Payment Proof Preview"
+            title="Payment Proof"
+            subtitle="Uploaded installment proof"
             size="lg"
+            bodyClassName="p-0"
+            footer={
+              <Button variant="primary" size="sm" onClick={() => setPreviewImageModal(null)}>
+                Close Preview
+              </Button>
+            }
           >
-            <div className="space-y-3">
+            <div className="flex items-center justify-center bg-muted/40 p-4 min-h-[30vh]">
               <img
                 src={previewImageModal}
-                alt="Payment Proof"
-                className="w-full max-h-[70vh] object-contain rounded-lg border border-border"
+                alt="Payment proof"
+                className="max-h-[70vh] w-auto max-w-full rounded-lg border border-border bg-card object-contain shadow-sm"
               />
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => setPreviewImageModal(null)}>
-                  Close Preview
-                </Button>
-              </div>
             </div>
           </Modal>
         )}
@@ -1080,78 +1098,36 @@ export function PaymentsPage({ mode }) {
         }
         subtitle={
           currentView === 'received'
-            ? 'Track contract budgets, advance allocations, installments & payment proofs.'
+            ? 'Client installments, receipts and pending balances.'
             : currentView === 'pay'
-            ? 'Manage subcontractor contractor bills, clearances, and payment history.'
-            : 'Configure receiving bank accounts, contract milestones, and invoice defaults.'
+            ? 'Agency bills, clearances and payment history.'
+            : 'Bank accounts and invoice defaults.'
         }
         actions={
           isManagerOrAdmin && (
-            <div className="flex items-center gap-2">
+            <>
               {currentView === 'received' && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExportClientCSV}
-                    className="flex items-center gap-1.5"
-                    title="Export CSV"
-                  >
-                    <DownloadIcon className="size-4" />
-                    <span>Export</span>
+                  <Button variant="outline" size="sm" onClick={handleExportClientCSV} leadingIcon="download">
+                    Export
                   </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handleOpenPaymentModal()}
-                    className="flex items-center gap-1.5"
-                  >
-                    <PlusIcon className="size-4" />
-                    <span>Record Payment</span>
+                  <Button variant="primary" size="sm" onClick={() => handleOpenPaymentModal()} leadingIcon="plus">
+                    Record Payment
                   </Button>
                 </>
               )}
 
               {currentView === 'pay' && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExportAgencyCSV}
-                    className="flex items-center gap-1.5"
-                    title="Export CSV"
-                  >
-                    <DownloadIcon className="size-4" />
-                    <span>Export</span>
+                  <Button variant="outline" size="sm" onClick={handleExportAgencyCSV} leadingIcon="download">
+                    Export
                   </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => {
-                      const firstAg = mockAgencies[0];
-                      setAgencyForm({
-                        agencyId: firstAg?.id || 'a1',
-                        agencyName: firstAg?.name || 'Apex False Ceiling',
-                        trade: firstAg?.trade || 'Ceiling',
-                        projectId: schedules[0]?.projectId || 'P1',
-                        invoiceNumber: `INV-AGC-${Date.now().toString().slice(-4)}`,
-                        billAmount: 120000,
-                        paidAmount: 80000,
-                        paymentDate: new Date().toISOString().split('T')[0],
-                        paymentMode: 'Bank Transfer',
-                        workStage: 'Framing & Boarding Stage Bill',
-                        proof: null,
-                      });
-                      setIsRecordAgencyOpen(true);
-                    }}
-                    className="flex items-center gap-1.5"
-                  >
-                    <PlusIcon className="size-4" />
-                    <span>Record Agency Payment</span>
+                  <Button variant="primary" size="sm" onClick={handleOpenAgencyPayment} leadingIcon="plus">
+                    Record Payment
                   </Button>
                 </>
               )}
-            </div>
+            </>
           )
         }
       />
@@ -1161,403 +1137,181 @@ export function PaymentsPage({ mode }) {
       {/* ===================================================================== */}
       {currentView === 'received' && (
         <div className="space-y-4">
-          {/* 4 Clean Metric KPI Cards */}
+          {/* Summary metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Total Contract Budget
-              </span>
-              <div className="text-xl font-bold font-mono text-foreground mt-1">
-                {formatCurrency(overallClientStats.totalBudget)}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Across all client projects</span>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Total Collected
-              </span>
-              <div className="text-xl font-bold font-mono text-success mt-1">
-                {formatCurrency(overallClientStats.totalCollected)}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Cleared client funds</span>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Balance Pending
-              </span>
-              <div className="text-xl font-bold font-mono text-warning mt-1">
-                {formatCurrency(overallClientStats.totalPending)}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Awaiting payment milestone</span>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Active Projects
-              </span>
-              <div className="text-xl font-bold font-mono text-foreground mt-1">
-                {overallClientStats.projectsCount}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Ongoing client fit-outs</span>
-            </div>
+            <StatCard
+              variant="inline"
+              label="Total Contract Budget"
+              value={formatCurrency(overallClientStats.totalBudget)}
+            />
+            <StatCard
+              variant="inline"
+              label="Total Collected"
+              value={formatCurrency(overallClientStats.totalCollected)}
+              valueClassName="text-success"
+            />
+            <StatCard
+              variant="inline"
+              label="Balance Pending"
+              value={formatCurrency(overallClientStats.totalPending)}
+              valueClassName="text-warning"
+            />
+            <StatCard
+              variant="inline"
+              label="Active Projects"
+              value={overallClientStats.projectsCount}
+            />
           </div>
 
-          {/* Horizontal Status Segment Tabs (Reference Image Match) */}
-          <div className="flex items-center gap-6 border-b border-border overflow-x-auto scrollbar-none pt-1">
-            {[
-              { id: 'all', label: 'All payments', count: clientStatusCounts.all },
-              { id: 'paid', label: 'Paid', count: clientStatusCounts.paid },
-              { id: 'pending', label: 'Pending', count: clientStatusCounts.pending },
-              { id: 'overdue', label: 'Overdue', count: clientStatusCounts.overdue },
-            ].map((tab) => {
-              const active = clientStatusFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setClientStatusFilter(tab.id);
-                    setClientPage(1);
-                  }}
-                  className={cn(
-                    'pb-3 pt-1 text-xs font-semibold whitespace-nowrap transition-colors relative cursor-pointer flex items-center gap-2 border-b-2 -mb-px',
-                    active
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
-                  )}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={cn(
-                      'px-2 py-0.5 text-[11px] rounded-full font-medium transition-colors',
-                      active
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {tab.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Filter Toolbar (Site Filter, Method Filter, Sort, Search) */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Site selector dropdown */}
-              <div className="relative">
-                <select
+          <DataToolbar
+            variant="clean"
+            layout="inline"
+            searchValue={clientSearch}
+            onSearchChange={(value) => {
+              setClientSearch(value);
+              setClientPage(1);
+            }}
+            searchPlaceholder="Search project or client..."
+            filters={
+              <>
+                <Select
                   value={selectedProjectId}
                   onChange={(e) => {
                     setSelectedProjectId(e.target.value);
                     setClientPage(1);
                   }}
-                  className="h-10 px-3.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-                >
-                  <option value="all">All Project Sites</option>
-                  {schedules.map((s) => (
-                    <option key={s.projectId} value={s.projectId}>
-                      {s.projectName} ({s.clientName})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Payment Method filter dropdown */}
-              <div className="relative">
-                <select
-                  value={clientMethodFilter}
+                  placeholder=""
+                  className="h-9 w-44 text-xs"
+                  options={[
+                    { value: 'all', label: 'All Project Sites' },
+                    ...schedules.map((s) => ({
+                      value: s.projectId,
+                      label: `${s.projectName} (${s.clientName})`,
+                    })),
+                  ]}
+                />
+                <Select
+                  value={clientStatusFilter}
                   onChange={(e) => {
-                    setClientMethodFilter(e.target.value);
+                    setClientStatusFilter(e.target.value);
                     setClientPage(1);
                   }}
-                  className="h-10 px-3.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-                >
-                  <option value="all">All Payment Methods</option>
-                  <option value="Bank Transfer">Bank Transfer / NEFT</option>
-                  <option value="UPI">UPI / QR Code</option>
-                  <option value="Cheque">Cheque Clearance</option>
-                  <option value="Cash">Cash</option>
-                </select>
-              </div>
+                  placeholder=""
+                  className="h-9 w-32 text-xs"
+                  options={[
+                    { value: 'all', label: `All (${clientStatusCounts.all})` },
+                    { value: 'paid', label: `Paid (${clientStatusCounts.paid})` },
+                    { value: 'pending', label: `Pending (${clientStatusCounts.pending})` },
+                    { value: 'overdue', label: `Overdue (${clientStatusCounts.overdue})` },
+                  ]}
+                />
+              </>
+            }
+          />
 
-              {/* Sort dropdown */}
-              <div className="relative">
-                <select
-                  value={clientSort}
-                  onChange={(e) => setClientSort(e.target.value)}
-                  className="h-10 px-3.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-                >
-                  <option value="due_asc">Sort: Due Date (Earliest)</option>
-                  <option value="due_desc">Sort: Due Date (Latest)</option>
-                  <option value="amount_desc">Sort: Amount (High to Low)</option>
-                  <option value="amount_asc">Sort: Amount (Low to High)</option>
-                  <option value="client_asc">Sort: Client Name (A to Z)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Search Input on the right (Increased height and non-overlapping placeholder) */}
-            <div className="relative w-full md:w-64">
-              <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={clientSearch}
-                onChange={(e) => {
-                  setClientSearch(e.target.value);
-                  setClientPage(1);
-                }}
-                className="w-full h-10 pl-9.5 pr-8 text-xs rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs transition-colors"
-              />
-              {clientSearch && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setClientSearch('');
-                    setClientPage(1);
-                  }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <XIcon className="size-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Clean Fintech Table (Columns: Project & Client, Installment, Amount, Due Date, Status, Payment Details, Action) */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <th className="w-10 py-3 px-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={
-                          paginatedClientPayments.length > 0 &&
-                          selectedClientIds.length === paginatedClientPayments.length
+          <Table
+            variant="clean"
+            columns={[
+              {
+                key: 'projectName',
+                header: 'Project & Client',
+                render: (item) => (
+                  <div className="min-w-0">
+                    <div className="font-semibold text-foreground truncate max-w-[260px]">
+                      {item.projectName}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[260px]">
+                      {item.title}{item.percentage !== undefined ? ` (${item.percentage}%)` : ''}
+                      {' · '}{item.clientName}
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: 'amount',
+                header: 'Amount',
+                cellClassName: 'font-mono font-medium text-foreground whitespace-nowrap',
+                render: (item) => formatCurrency(item.amount),
+              },
+              {
+                key: 'dueDate',
+                header: 'Due Date',
+                cellClassName: 'font-mono text-muted-foreground whitespace-nowrap',
+                render: (item) => (item.dueDate ? formatDate(item.dueDate) : '-'),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (item) => (
+                  <Badge
+                    variant={
+                      item.status === 'paid'
+                        ? 'success'
+                        : item.status === 'overdue'
+                        ? 'danger'
+                        : 'warning'
+                    }
+                  >
+                    {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'Pending'}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                align: 'right',
+                render: (item) => (
+                  <div className="flex items-center justify-end gap-1">
+                    {(item.status === 'paid' || item.receiptNumber || item.receiptUrl || item.paymentProof) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setViewingReceipt({
+                            ...item,
+                            projectName: item.projectName,
+                            clientName: item.clientName,
+                            variant: 'receipt',
+                          })
                         }
-                        onChange={handleSelectAllClients}
-                        className="rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
-                        title="Select All Rows"
-                      />
-                    </th>
-                    <th className="py-3 px-4">Project & Client</th>
-                    <th className="py-3 px-4">Installment</th>
-                    <th className="py-3 px-4">Amount</th>
-                    <th className="py-3 px-4">Due Date</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 min-w-[190px] text-left whitespace-nowrap">Payment Details</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border text-xs">
-                  {paginatedClientPayments.length > 0 ? (
-                    paginatedClientPayments.map((item) => {
-                      const isSelected = selectedClientIds.includes(item.id);
-
-                      return (
-                        <tr
-                          key={item.id}
-                          className={cn(
-                            'hover:bg-muted/40 transition-colors',
-                            isSelected && 'bg-primary/5'
-                          )}
-                        >
-                          {/* Row Checkbox */}
-                          <td className="w-10 py-3.5 px-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleClientSelect(item.id)}
-                              className="rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
-                            />
-                          </td>
-
-                          {/* Column 1: Project & Client */}
-                          <td className="py-3.5 px-4">
-                            <div className="font-semibold text-foreground truncate max-w-[220px]" title={item.projectName}>
-                              {item.projectName}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground mt-0.5">
-                              Client: <span className="text-foreground/80 font-medium">{item.clientName}</span>
-                            </div>
-                          </td>
-
-                          {/* Column 2: Installment */}
-                          <td className="py-3.5 px-4 font-medium text-foreground">
-                            <span>{item.title}</span>
-                            {item.percentage !== undefined && (
-                              <span className="inline-block ml-2 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-muted text-muted-foreground">
-                                {item.percentage}%
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Column 3: Amount */}
-                          <td className="py-3.5 px-4 font-mono font-bold text-foreground text-xs">
-                            {formatCurrency(item.amount)}
-                          </td>
-
-                          {/* Column 4: Due Date */}
-                          <td className="py-3.5 px-4 text-xs text-muted-foreground">
-                            <div className="flex items-center gap-1.5">
-                              <CalendarIcon className="size-3.5 text-muted-foreground shrink-0" />
-                              <span>{item.dueDate ? formatDate(item.dueDate) : '—'}</span>
-                            </div>
-                            {item.status === 'paid' && item.paidDate && (
-                              <span className="text-[10px] text-success block mt-0.5 font-medium">
-                                Paid {formatDate(item.paidDate)}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Column 5: Status (Dot Badge) */}
-                          <td className="py-3.5 px-4">
-                            {item.status === 'paid' && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
-                                <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                <span>Paid</span>
-                              </span>
-                            )}
-                            {item.status === 'pending' && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40">
-                                <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />
-                                <span>Pending</span>
-                              </span>
-                            )}
-                            {item.status === 'overdue' && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/40">
-                                <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
-                                <span>Overdue</span>
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Column 6: Payment Details (Aligned with clean badges & nowrap) */}
-                          <td className="py-3.5 px-4 text-left whitespace-nowrap">
-                            <div className="flex items-center gap-2 whitespace-nowrap">
-                              {item.paymentMode ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-muted text-foreground">
-                                  <CreditCardIcon className="size-3 text-muted-foreground shrink-0" />
-                                  <span>{item.paymentMode}</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] text-muted-foreground bg-muted/40 font-mono">
-                                  —
-                                </span>
-                              )}
-
-                              {(item.paymentProof || item.receiptUrl) && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (item.paymentProof) {
-                                      setPreviewImageModal(item.paymentProof);
-                                    } else {
-                                      setViewingReceipt({
-                                        ...item,
-                                        projectName: item.projectName,
-                                        clientName: item.clientName,
-                                      });
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer shrink-0"
-                                  title="View Proof / Receipt Slip"
-                                >
-                                  <CameraIcon className="size-3" />
-                                  <span>Slip</span>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Column 7: Action */}
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {(item.status === 'paid' || item.receiptNumber || item.receiptUrl) && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setViewingReceipt({
-                                      ...item,
-                                      projectName: item.projectName,
-                                      clientName: item.clientName,
-                                    })
-                                  }
-                                  className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors cursor-pointer"
-                                  title="View Receipt Voucher"
-                                >
-                                  <EyeIcon className="size-4" />
-                                </button>
-                              )}
-
-                              {isManagerOrAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const targetSchedule = schedules.find((s) => s.projectId === item.projectId);
-                                    handleOpenPaymentModal(targetSchedule);
-                                  }}
-                                  className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors cursor-pointer"
-                                  title="Edit / Record Payment"
-                                >
-                                  <ReceiptIcon className="size-4" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-muted-foreground text-xs">
-                        No client payment installments found matching your filter criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Footer */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-t border-border bg-muted/10 text-xs text-muted-foreground">
-              <div>
-                Showing <span className="font-semibold text-foreground">{filteredClientPayments.length === 0 ? 0 : (clientPage - 1) * clientRowsPerPage + 1}</span> to{' '}
-                <span className="font-semibold text-foreground">{Math.min(clientPage * clientRowsPerPage, filteredClientPayments.length)}</span> of{' '}
-                <span className="font-semibold text-foreground">{filteredClientPayments.length}</span> results
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={clientPage <= 1}
-                  onClick={() => setClientPage((p) => Math.max(1, p - 1))}
-                  className="h-8 px-3 text-xs"
-                >
-                  Previous
-                </Button>
-                <span className="px-2 font-medium text-foreground">
-                  Page {clientPage} of {clientTotalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={clientPage >= clientTotalPages}
-                  onClick={() => setClientPage((p) => p + 1)}
-                  className="h-8 px-3 text-xs"
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
+                        className="size-8 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                        title="View Receipt Voucher"
+                      >
+                        <EyeIcon className="size-4" />
+                      </button>
+                    )}
+                    {isManagerOrAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetSchedule = schedules.find((s) => s.projectId === item.projectId);
+                          handleOpenPaymentModal(targetSchedule);
+                        }}
+                        className="size-8 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                        title="Edit / Record Payment"
+                      >
+                        <ReceiptIcon className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            data={paginatedClientPayments}
+            keyField="id"
+            emptyTitle="No payments found"
+            emptyDescription="No client payment installments match the current filters."
+            pagination={{
+              currentPage: clientPage,
+              totalPages: clientTotalPages,
+              totalItems: filteredClientPayments.length,
+              pageSize: clientRowsPerPage,
+              onPageChange: setClientPage,
+              onPageSizeChange: (size) => {
+                setClientRowsPerPage(size);
+                setClientPage(1);
+              },
+            }}
+          />
         </div>
       )}
 
@@ -1566,602 +1320,365 @@ export function PaymentsPage({ mode }) {
       {/* ===================================================================== */}
       {currentView === 'pay' && (
         <div className="space-y-4">
-          {/* Quick KPI Metric Stat Cards */}
+          {/* Summary metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Total Invoiced
-              </span>
-              <div className="text-xl font-bold font-mono text-foreground mt-1">
-                {formatCurrency(agencyTotals.totalBilled)}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Subcontractor agency billings</span>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Total Cleared
-              </span>
-              <div className="text-xl font-bold font-mono text-success mt-1">
-                {formatCurrency(agencyTotals.totalCleared)}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Cleared payments</span>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Balance Due
-              </span>
-              <div className="text-xl font-bold font-mono text-warning mt-1">
-                {formatCurrency(agencyTotals.totalDue)}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Pending invoice clearance</span>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Active Agencies
-              </span>
-              <div className="text-xl font-bold font-mono text-foreground mt-1">
-                {agencyTotals.activeAgencies}
-              </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">Trade partner agencies</span>
-            </div>
+            <StatCard
+              variant="inline"
+              label="Total Invoiced"
+              value={formatCurrency(agencyTotals.totalBilled)}
+            />
+            <StatCard
+              variant="inline"
+              label="Total Cleared"
+              value={formatCurrency(agencyTotals.totalCleared)}
+              valueClassName="text-success"
+            />
+            <StatCard
+              variant="inline"
+              label="Balance Due"
+              value={formatCurrency(agencyTotals.totalDue)}
+              valueClassName="text-warning"
+            />
+            <StatCard
+              variant="inline"
+              label="Active Agencies"
+              value={agencyTotals.activeAgencies}
+            />
           </div>
 
-          {/* Horizontal Status Segment Tabs (Reference Image Match) */}
-          <div className="flex items-center gap-6 border-b border-border overflow-x-auto scrollbar-none pt-1">
-            {[
-              { id: 'all', label: 'All bills', count: agencyStatusCounts.all },
-              { id: 'paid', label: 'Paid', count: agencyStatusCounts.paid },
-              { id: 'partially_paid', label: 'Partially Paid', count: agencyStatusCounts.partially_paid },
-              { id: 'pending', label: 'Pending', count: agencyStatusCounts.pending },
-            ].map((tab) => {
-              const active = agencyStatusFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setAgencyStatusFilter(tab.id);
-                    setAgencyPage(1);
-                  }}
-                  className={cn(
-                    'pb-3 pt-1 text-xs font-semibold whitespace-nowrap transition-colors relative cursor-pointer flex items-center gap-2 border-b-2 -mb-px',
-                    active
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
-                  )}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={cn(
-                      'px-2 py-0.5 text-[11px] rounded-full font-medium transition-colors',
-                      active
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {tab.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Filter Toolbar (Site Filter, Method Filter, Sort, Search) */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Site filter dropdown */}
-              <div className="relative">
-                <select
+          <DataToolbar
+            variant="clean"
+            layout="inline"
+            searchValue={agencySearch}
+            onSearchChange={(value) => {
+              setAgencySearch(value);
+              setAgencyPage(1);
+            }}
+            searchPlaceholder="Search agency or invoice..."
+            filters={
+              <>
+                <Select
                   value={agencyProjectFilter}
                   onChange={(e) => {
                     setAgencyProjectFilter(e.target.value);
                     setAgencyPage(1);
                   }}
-                  className="h-10 px-3.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-                >
-                  <option value="all">All Project Sites</option>
-                  {schedules.map((s) => (
-                    <option key={s.projectId} value={s.projectId}>
-                      {s.projectName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Payment Method filter dropdown */}
-              <div className="relative">
-                <select
-                  value={agencyMethodFilter}
+                  placeholder=""
+                  className="h-9 w-44 text-xs"
+                  options={[
+                    { value: 'all', label: 'All Project Sites' },
+                    ...schedules.map((s) => ({ value: s.projectId, label: s.projectName })),
+                  ]}
+                />
+                <Select
+                  value={agencyStatusFilter}
                   onChange={(e) => {
-                    setAgencyMethodFilter(e.target.value);
+                    setAgencyStatusFilter(e.target.value);
                     setAgencyPage(1);
                   }}
-                  className="h-10 px-3.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-                >
-                  <option value="all">All Payment Methods</option>
-                  <option value="Bank Transfer">Bank Transfer / NEFT</option>
-                  <option value="Cheque">Cheque Clearance</option>
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI / QR Code</option>
-                </select>
-              </div>
+                  placeholder=""
+                  className="h-9 w-40 text-xs"
+                  options={[
+                    { value: 'all', label: `All (${agencyStatusCounts.all})` },
+                    { value: 'paid', label: `Paid (${agencyStatusCounts.paid})` },
+                    { value: 'partially_paid', label: `Partially Paid (${agencyStatusCounts.partially_paid})` },
+                    { value: 'pending', label: `Pending (${agencyStatusCounts.pending})` },
+                  ]}
+                />
+              </>
+            }
+          />
 
-              {/* Sort dropdown */}
-              <div className="relative">
-                <select
-                  value={agencySort}
-                  onChange={(e) => setAgencySort(e.target.value)}
-                  className="h-10 px-3.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-                >
-                  <option value="newest">Sort: Newest First</option>
-                  <option value="oldest">Sort: Oldest First</option>
-                  <option value="bill_desc">Sort: Bill Amount (High to Low)</option>
-                  <option value="due_desc">Sort: Balance Due (High to Low)</option>
-                  <option value="name_asc">Sort: Agency Name (A to Z)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Search Input on the right (Increased height and non-overlapping placeholder) */}
-            <div className="relative w-full md:w-64">
-              <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                value={agencySearch}
-                onChange={(e) => {
-                  setAgencySearch(e.target.value);
-                  setAgencyPage(1);
-                }}
-                placeholder="Search..."
-                className="w-full h-10 pl-9.5 pr-8 text-xs rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs transition-colors"
-              />
-              {agencySearch && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAgencySearch('');
-                    setAgencyPage(1);
-                  }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <XIcon className="size-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Clean Fintech Table (Columns: Agency & Project, Invoice & Stage, Amount, Date, Status, Payment Details, Action) */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <th className="w-10 py-3 px-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={
-                          paginatedAgencyPayouts.length > 0 &&
-                          selectedAgencyIds.length === paginatedAgencyPayouts.length
-                        }
-                        onChange={handleSelectAllAgencies}
-                        className="rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
-                        title="Select All Rows"
-                      />
-                    </th>
-                    <th className="py-3 px-4">Agency & Project</th>
-                    <th className="py-3 px-4">Invoice & Stage</th>
-                    <th className="py-3 px-4">Amount</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 min-w-[190px] text-left whitespace-nowrap">Payment Details</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border text-xs">
-                  {paginatedAgencyPayouts.length > 0 ? (
-                    paginatedAgencyPayouts.map((item) => {
-                      const isSelected = selectedAgencyIds.includes(item.id);
-
-                      return (
-                        <tr
-                          key={item.id}
-                          className={cn(
-                            'hover:bg-muted/40 transition-colors',
-                            isSelected && 'bg-primary/5'
-                          )}
-                        >
-                          {/* Row Checkbox */}
-                          <td className="w-10 py-3.5 px-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleAgencySelect(item.id)}
-                              className="rounded border-border text-primary focus:ring-primary size-4 cursor-pointer"
-                            />
-                          </td>
-
-                          {/* Column 1: Agency & Project */}
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <Avatar name={item.agencyName} size="sm" className="shrink-0" />
-                              <div className="min-w-0">
-                                <div className="font-semibold text-foreground truncate max-w-[200px]">
-                                  {item.agencyName}
-                                </div>
-                                <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                                  <span className="inline-block px-1.5 py-0.2 rounded bg-muted text-[10px] font-medium text-foreground/80">
-                                    {item.trade}
-                                  </span>
-                                  <span className="truncate max-w-[140px]" title={item.projectName}>
-                                    {item.projectName}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Column 2: Invoice & Stage */}
-                          <td className="py-3.5 px-4">
-                            <div className="font-mono text-foreground font-semibold text-xs">
-                              {item.invoiceNumber}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground truncate max-w-[180px] mt-0.5" title={item.workStage}>
-                              {item.workStage || 'Subcontractor clearance'}
-                            </div>
-                          </td>
-
-                          {/* Column 3: Amount (Only total amount shown) */}
-                          <td className="py-3.5 px-4 font-mono font-bold text-foreground text-xs">
-                            {formatCurrency(item.billAmount)}
-                          </td>
-
-                          {/* Column 4: Date */}
-                          <td className="py-3.5 px-4 text-xs text-muted-foreground">
-                            <div className="flex items-center gap-1.5">
-                              <CalendarIcon className="size-3.5 text-muted-foreground shrink-0" />
-                              <span>{item.paymentDate ? formatDate(item.paymentDate) : '—'}</span>
-                            </div>
-                          </td>
-
-                          {/* Column 5: Status (Dot Badge) */}
-                          <td className="py-3.5 px-4">
-                            {item.status === 'paid' && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
-                                <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                <span>Paid</span>
-                              </span>
-                            )}
-                            {item.status === 'partially_paid' && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40">
-                                <span className="size-1.5 rounded-full bg-blue-500 shrink-0" />
-                                <span>Partially Paid</span>
-                              </span>
-                            )}
-                            {item.status === 'pending' && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40">
-                                <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />
-                                <span>Pending</span>
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Column 6: Payment Details (Aligned with clean badges & nowrap) */}
-                          <td className="py-3.5 px-4 text-left whitespace-nowrap">
-                            <div className="flex items-center gap-2 whitespace-nowrap">
-                              {item.paymentMode ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-muted text-foreground">
-                                  <CreditCardIcon className="size-3 text-muted-foreground shrink-0" />
-                                  <span>{item.paymentMode}</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] text-muted-foreground bg-muted/40 font-mono">
-                                  —
-                                </span>
-                              )}
-
-                              {item.proof && (
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewImageModal(item.proof)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer shrink-0"
-                                  title="View Attachment Slip"
-                                >
-                                  <CameraIcon className="size-3" />
-                                  <span>Proof</span>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Column 7: Action (Uniformly aligned with small tooltips 'view', 'delete') */}
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="inline-flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setViewingReceipt({
-                                    title: item.workStage || 'Agency Subcontractor Bill',
-                                    amount: item.billAmount,
-                                    paidAmount: item.paidAmount,
-                                    paymentMode: item.paymentMode,
-                                    receiptNumber: item.invoiceNumber,
-                                    paidDate: item.paymentDate,
-                                    projectName: item.projectName,
-                                    clientName: item.agencyName,
-                                    paymentProof: item.proof,
-                                  })
-                                }
-                                className="size-7 inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors cursor-pointer"
-                                title="view"
-                              >
-                                <EyeIcon className="size-4" />
-                              </button>
-
-                              {isManagerOrAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteAgencyPayout(item.id)}
-                                  className="size-7 inline-flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors cursor-pointer"
-                                  title="delete"
-                                >
-                                  <TrashIcon className="size-4" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-muted-foreground text-xs">
-                        No agency payout records found matching your filter criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Footer */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-t border-border bg-muted/10 text-xs text-muted-foreground">
-              <div>
-                Showing <span className="font-semibold text-foreground">{filteredAgencyPayouts.length === 0 ? 0 : (agencyPage - 1) * agencyRowsPerPage + 1}</span> to{' '}
-                <span className="font-semibold text-foreground">{Math.min(agencyPage * agencyRowsPerPage, filteredAgencyPayouts.length)}</span> of{' '}
-                <span className="font-semibold text-foreground">{filteredAgencyPayouts.length}</span> results
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={agencyPage <= 1}
-                  onClick={() => setAgencyPage((p) => Math.max(1, p - 1))}
-                  className="h-8 px-3 text-xs"
-                >
-                  Previous
-                </Button>
-                <span className="px-2 font-medium text-foreground">
-                  Page {agencyPage} of {agencyTotalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={agencyPage >= agencyTotalPages}
-                  onClick={() => setAgencyPage((p) => p + 1)}
-                  className="h-8 px-3 text-xs"
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
+          <Table
+            variant="clean"
+            columns={[
+              {
+                key: 'agencyName',
+                header: 'Agency & Project',
+                render: (item) => (
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={item.agencyName} size="sm" className="shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-foreground truncate max-w-[200px]">
+                        {item.agencyName}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground truncate max-w-[240px] mt-0.5">
+                        {item.projectName}
+                        {' · '}
+                        <span className="font-mono">{item.invoiceNumber}</span>
+                      </div>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: 'billAmount',
+                header: 'Amount',
+                cellClassName: 'font-mono font-medium text-foreground whitespace-nowrap',
+                render: (item) => formatCurrency(item.billAmount),
+              },
+              {
+                key: 'paymentDate',
+                header: 'Date',
+                render: (item) => (
+                  <div className="text-muted-foreground whitespace-nowrap">
+                    {item.paymentDate ? formatDate(item.paymentDate) : '-'}
+                  </div>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (item) => (
+                  <Badge
+                    variant={
+                      item.status === 'paid'
+                        ? 'success'
+                        : item.status === 'partially_paid'
+                        ? 'info'
+                        : 'warning'
+                    }
+                  >
+                    {item.status === 'partially_paid'
+                      ? 'Partially Paid'
+                      : item.status
+                      ? item.status.charAt(0).toUpperCase() + item.status.slice(1)
+                      : 'Pending'}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                align: 'right',
+                render: (item) => (
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewingReceipt({
+                          title: item.workStage || 'Agency Subcontractor Bill',
+                          amount: item.billAmount,
+                          paidAmount: item.paidAmount,
+                          paymentMode: item.paymentMode,
+                          receiptNumber: item.invoiceNumber,
+                          dueDate: item.dueDate,
+                          paidDate: item.paymentDate,
+                          projectName: item.projectName,
+                          clientName: item.agencyName,
+                          trade: item.trade,
+                          variant: 'bill',
+                          paymentProof: item.proof,
+                        })
+                      }
+                      className="size-8 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                      title="View receipt"
+                    >
+                      <EyeIcon className="size-4" />
+                    </button>
+                    {isManagerOrAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAgencyPayout(item.id)}
+                        className="size-8 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
+                        title="Delete bill"
+                      >
+                        <TrashIcon className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            data={paginatedAgencyPayouts}
+            keyField="id"
+            emptyTitle="No agency bills found"
+            emptyDescription="No agency payout records match the current filters."
+            pagination={{
+              currentPage: agencyPage,
+              totalPages: agencyTotalPages,
+              totalItems: filteredAgencyPayouts.length,
+              pageSize: agencyRowsPerPage,
+              onPageChange: setAgencyPage,
+              onPageSizeChange: (size) => {
+                setAgencyRowsPerPage(size);
+                setAgencyPage(1);
+              },
+            }}
+          />
         </div>
       )}
 
       {currentView === 'settings' && (
-        <div className="space-y-4">
-          <form onSubmit={handleSavePaymentSettings} className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-2xs space-y-6">
-            {/* 1. Receiving Bank Account */}
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Building2Icon className="size-4 text-foreground" />
-                  <h3 className="text-sm font-bold text-foreground">Receiving Bank Account</h3>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Shown to clients for direct transfers, RTGS/NEFT and UPI deposits
-                </p>
+        <form onSubmit={handleSavePaymentSettings} className="space-y-5">
+          <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+            <div className="flex items-start gap-3 px-5 py-4 border-b border-border bg-muted/10">
+              <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Building2Icon className="size-4" />
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    BANK NAME
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={paymentSettings.bankName}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, bankName: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    ACCOUNT BENEFICIARY NAME
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={paymentSettings.accountName}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, accountName: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    ACCOUNT NUMBER
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={paymentSettings.accountNumber}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, accountNumber: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    IFSC CODE
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={paymentSettings.ifscCode}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, ifscCode: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5 md:col-span-1">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    UPI ID / VPA
-                  </label>
-                  <input
-                    type="text"
-                    value={paymentSettings.upiId}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, upiId: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Receiving Bank Account</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Printed on client invoices and receipts for NEFT, RTGS and UPI transfers.
+                </p>
               </div>
             </div>
 
-            <hr className="border-border" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-foreground">Bank name</label>
+                <input
+                  type="text"
+                  required
+                  value={paymentSettings.bankName}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, bankName: e.target.value })}
+                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
 
-            {/* 2. Client Milestone & Advance Defaults */}
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Contract & Milestone Rules</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Default values prefilled when onboarding new project budgets
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-foreground">Account name</label>
+                <input
+                  type="text"
+                  required
+                  value={paymentSettings.accountName}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, accountName: e.target.value })}
+                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-foreground">Account number</label>
+                <input
+                  type="text"
+                  required
+                  value={paymentSettings.accountNumber}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, accountNumber: e.target.value })}
+                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-foreground">IFSC code</label>
+                <input
+                  type="text"
+                  required
+                  value={paymentSettings.ifscCode}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, ifscCode: e.target.value })}
+                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="block text-xs font-medium text-foreground">UPI ID / VPA</label>
+                <input
+                  type="text"
+                  value={paymentSettings.upiId}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, upiId: e.target.value })}
+                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  placeholder="e.g. business@bank"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+              <div className="px-5 py-4 border-b border-border bg-muted/10">
+                <h2 className="text-sm font-semibold text-foreground">Contract Defaults</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Prefilled when creating a new client payment plan.
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 p-5">
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    DEFAULT ADVANCE %
-                  </label>
+                  <label className="block text-xs font-medium text-foreground">Advance (%)</label>
                   <input
                     type="number"
                     value={paymentSettings.defaultAdvancePercent}
                     onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultAdvancePercent: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    DEFAULT INSTALLMENTS
-                  </label>
+                  <label className="block text-xs font-medium text-foreground">Installments</label>
                   <input
                     type="number"
                     value={paymentSettings.defaultInstallmentsCount}
                     onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultInstallmentsCount: parseInt(e.target.value, 10) || 1 })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    GRACE PERIOD (DAYS)
-                  </label>
+                  <label className="block text-xs font-medium text-foreground">Grace period (days)</label>
                   <input
                     type="number"
                     value={paymentSettings.gracePeriodDays}
                     onChange={(e) => setPaymentSettings({ ...paymentSettings, gracePeriodDays: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    DEFAULT GST %
-                  </label>
+                  <label className="block text-xs font-medium text-foreground">GST (%)</label>
                   <input
                     type="number"
                     value={paymentSettings.defaultGstPercent}
                     onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultGstPercent: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            <hr className="border-border" />
-
-            {/* 3. Agency Payout Policies */}
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Agency Payout Policies</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Clearance rules for contractor agency invoices and billing approvals
+            <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+              <div className="px-5 py-4 border-b border-border bg-muted/10">
+                <h2 className="text-sm font-semibold text-foreground">Agency Payout Rules</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Applied when clearing subcontractor invoices.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 p-5">
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    TDS RATE ON CONTRACTS (%)
-                  </label>
+                  <label className="block text-xs font-medium text-foreground">TDS on contracts (%)</label>
                   <input
                     type="number"
                     step="0.1"
                     value={paymentSettings.tdsRateOnContracts}
                     onChange={(e) => setPaymentSettings({ ...paymentSettings, tdsRateOnContracts: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    RETENTION MONEY HOLD (%)
-                  </label>
+                  <label className="block text-xs font-medium text-foreground">Retention hold (%)</label>
                   <input
                     type="number"
                     value={paymentSettings.retentionHoldPercent}
                     onChange={(e) => setPaymentSettings({ ...paymentSettings, retentionHoldPercent: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Action Footer */}
-            <div className="pt-4 flex justify-end">
-              <Button
-                type="submit"
-                variant="primary"
-                size="md"
-                className="flex items-center gap-2 shadow-2xs font-semibold px-5"
-              >
-                <SaveIcon className="size-4" />
-                <span>Save Payment Settings</span>
-              </Button>
-            </div>
-          </form>
-        </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-4 shadow-2xs">
+            <p className="text-[11px] text-muted-foreground">
+              These defaults apply to new payment plans and invoices only. Existing records stay unchanged.
+            </p>
+            <Button type="submit" variant="primary" size="sm" className="flex items-center gap-1.5 self-end sm:self-auto">
+              <SaveIcon className="size-4" />
+              <span>Save Settings</span>
+            </Button>
+          </div>
+        </form>
       )}
 
-{/* ===================================================================== */}
       {/* SIMPLIFIED RECORD AGENCY PAYMENT MODAL                                */}
       {/* ===================================================================== */}
       {isRecordAgencyOpen && (
@@ -2255,6 +1772,18 @@ export function PaymentsPage({ mode }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Bill Due Date
+                </label>
+                <input
+                  type="date"
+                  value={agencyForm.dueDate}
+                  onChange={(e) => setAgencyForm({ ...agencyForm, dueDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Payment Date
                 </label>
                 <input
@@ -2264,7 +1793,9 @@ export function PaymentsPage({ mode }) {
                   className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
                 />
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Payment Mode
@@ -2280,19 +1811,19 @@ export function PaymentsPage({ mode }) {
                   <option value="Cash">Cash</option>
                 </select>
               </div>
-            </div>
 
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Work Stage / Description
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Framing & Boarding Stage Bill"
-                value={agencyForm.workStage}
-                onChange={(e) => setAgencyForm({ ...agencyForm, workStage: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
-              />
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Work Stage / Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Framing & Boarding Stage Bill"
+                  value={agencyForm.workStage}
+                  onChange={(e) => setAgencyForm({ ...agencyForm, workStage: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
             </div>
 
             {/* Bill / Slip File Picker */}
@@ -2354,21 +1885,32 @@ export function PaymentsPage({ mode }) {
         <Modal
           isOpen={!!previewImageModal}
           onClose={() => setPreviewImageModal(null)}
-          title="Payment Proof Attachment"
-        >
-          <div className="space-y-4">
-            <div className="flex items-center justify-center p-2 rounded-xl bg-muted/40 border border-border overflow-hidden">
-              <img
-                src={previewImageModal}
-                alt="Payment Proof Full"
-                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain shadow-xs"
-              />
-            </div>
-            <div className="flex justify-end">
+          title="Payment Attachment"
+          subtitle="Uploaded payment proof"
+          size="xl"
+          bodyClassName="p-0"
+          footer={
+            <>
+              <a
+                href={previewImageModal}
+                download="payment-proof"
+                className="inline-flex items-center justify-center font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20 select-none shadow-2xs whitespace-nowrap text-xs px-3 py-2 gap-1.5 bg-card hover:bg-muted text-foreground border border-border"
+              >
+                <DownloadIcon className="size-3.5" />
+                Download
+              </a>
               <Button variant="primary" size="sm" onClick={() => setPreviewImageModal(null)}>
                 Close Preview
               </Button>
-            </div>
+            </>
+          }
+        >
+          <div className="flex items-center justify-center bg-muted/40 p-4 sm:p-6 min-h-[40vh]">
+            <img
+              src={previewImageModal}
+              alt="Payment proof full view"
+              className="max-h-[70vh] w-auto max-w-full rounded-lg border border-border bg-card object-contain shadow-sm"
+            />
           </div>
         </Modal>
       )}
@@ -2376,67 +1918,145 @@ export function PaymentsPage({ mode }) {
       {/* ===================================================================== */}
       {/* RECEIPT / VOUCHER VIEWER MODAL                                        */}
       {/* ===================================================================== */}
-      {viewingReceipt && (
-        <Modal
-          isOpen={!!viewingReceipt}
-          onClose={() => setViewingReceipt(null)}
-          title="Payment Voucher / Receipt"
-        >
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-3">
-              <div className="flex items-center justify-between border-b border-border pb-2.5">
-                <div>
-                  <h4 className="font-bold text-sm text-foreground">{viewingReceipt.title}</h4>
-                  <p className="text-[11px] text-muted-foreground">{viewingReceipt.projectName}</p>
-                </div>
-                <div className="text-right">
-                  <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted text-foreground border border-border">
-                    {viewingReceipt.receiptNumber}
+      {viewingReceipt && (() => {
+        const receipt = viewingReceipt;
+        const isBill = receipt.variant === 'bill';
+        const paymentMode = receipt.paymentMode || receipt.mode;
+        const paidOn = receipt.paidDate || receipt.date;
+        const paidAmount = receipt.paidAmount ?? receipt.amount;
+        const balanceDue =
+          receipt.amount !== undefined && receipt.paidAmount !== undefined
+            ? Math.max(0, receipt.amount - receipt.paidAmount)
+            : 0;
+        const isPaid = receipt.status === 'paid' || !!receipt.paidDate || !!receipt.paidAmount;
+
+        const detailRows = [
+          { label: isBill ? 'Invoice No.' : 'Receipt No.', value: receipt.receiptNumber || '-', mono: true },
+          { label: 'Due Date', value: receipt.dueDate ? formatDate(receipt.dueDate) : '-' },
+          { label: 'Paid Date', value: paidOn ? formatDate(paidOn) : '-' },
+          { label: isBill ? 'Paid To' : 'Received From', value: receipt.clientName || '-' },
+          { label: 'Project', value: receipt.projectName || '-' },
+          ...(isBill && receipt.trade ? [{ label: 'Trade', value: receipt.trade }] : []),
+          { label: 'Payment Mode', value: paymentMode || '-' },
+          { label: isBill ? 'Work Stage' : 'Against', value: receipt.title || (isBill ? 'Subcontractor bill' : 'Payment installment') },
+        ];
+
+        return (
+          <Modal
+            isOpen={!!viewingReceipt}
+            onClose={() => setViewingReceipt(null)}
+            title={isBill ? 'Agency Payment Receipt' : 'Client Payment Receipt'}
+            subtitle={isBill ? 'Subcontractor payment voucher' : 'Client payment voucher'}
+            size="md"
+            bodyClassName="p-0"
+            footer={
+              <>
+                <Button variant="outline" size="sm" onClick={() => window.print()}>
+                  <PrinterIcon className="size-3.5" />
+                  Print Receipt
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => setViewingReceipt(null)}>
+                  <CheckIcon className="size-3.5" />
+                  Done
+                </Button>
+              </>
+            }
+          >
+            <div className="bg-muted/30 px-4 py-5 sm:px-5">
+              <div className="relative mx-auto max-w-md rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                {isPaid && (
+                  <span className="absolute top-4 right-4 rotate-6 rounded border-2 border-success/30 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-success/50 select-none">
+                    Paid
                   </span>
-                  <span className="text-[10px] text-muted-foreground block mt-0.5">{formatDate(viewingReceipt.date)}</span>
+                )}
+
+                <div className="px-6 pt-6 pb-4 text-center">
+                  <div className="mx-auto mb-2.5 flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Building2Icon className="size-5" />
+                  </div>
+                  <p className="text-sm font-bold text-foreground leading-tight">
+                    Aesthetic Interiors
+                  </p>
+                  <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Payment Receipt
+                  </p>
+                </div>
+
+                <div className="mx-6 border-t border-dashed border-border" />
+
+                <div className="px-6 py-4 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Amount Paid
+                  </p>
+                  <p className="text-2xl font-bold font-mono text-success leading-tight">
+                    {formatCurrency(paidAmount)}
+                  </p>
+                  {balanceDue > 0 && (
+                    <p className="mt-1 text-[10px] text-warning font-medium">
+                      Balance due {formatCurrency(balanceDue)}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mx-6 border-t border-dashed border-border" />
+
+                <div className="px-6 py-2.5 text-xs">
+                  {detailRows.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-center justify-between gap-4 py-2 border-b border-dashed border-border/60 last:border-0"
+                    >
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
+                        {row.label}
+                      </span>
+                      <span
+                        className={cn(
+                          'font-semibold text-foreground text-right truncate',
+                          row.mono && 'font-mono'
+                        )}
+                      >
+                        {row.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {receipt.paymentProof && (
+                  <div className="px-6 pb-4">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImageModal(receipt.paymentProof)}
+                      className="w-full flex items-center gap-2.5 p-2 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-left cursor-pointer"
+                    >
+                      <img
+                        src={receipt.paymentProof}
+                        alt="Payment proof"
+                        className="size-9 rounded-md object-cover border border-border shrink-0"
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[11px] font-semibold text-foreground">
+                          Payment proof attached
+                        </span>
+                        <span className="block text-[10px] text-muted-foreground">
+                          Click to view the slip
+                        </span>
+                      </span>
+                      <EyeIcon className="size-4 text-muted-foreground shrink-0" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="px-6 py-3 border-t border-dashed border-border bg-muted/20 text-center">
+                  <p className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <ShieldCheckIcon className="size-3.5 shrink-0" />
+                    Computer-generated receipt. No signature required.
+                  </p>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Client / Party</span>
-                  <span className="font-semibold text-foreground">{viewingReceipt.clientName}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Payment Mode</span>
-                  <span className="font-semibold text-foreground">{viewingReceipt.mode}</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground">Amount Cleared:</span>
-                <span className="text-base font-bold font-mono text-success">{formatCurrency(viewingReceipt.amount)}</span>
-              </div>
-
-              {viewingReceipt.paymentProof && (
-                <div className="pt-2">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground block mb-1">Attached Proof</span>
-                  <img
-                    src={viewingReceipt.paymentProof}
-                    alt="Proof"
-                    onClick={() => setPreviewImageModal(viewingReceipt.paymentProof)}
-                    className="max-h-36 rounded-lg border border-border cursor-pointer hover:opacity-90 object-contain"
-                  />
-                </div>
-              )}
             </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
-                Print Receipt
-              </Button>
-              <Button variant="primary" size="sm" onClick={() => setViewingReceipt(null)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

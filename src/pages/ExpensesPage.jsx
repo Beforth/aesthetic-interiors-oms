@@ -10,11 +10,18 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from '../data/expenses';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { cn } from '../lib/utils';
 import { compressImage } from '../utils/dsr';
+import { usePagination } from '../hooks/usePagination';
 
 import PageHeader from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Avatar from '../components/ui/Avatar';
+import Tabs from '../components/ui/Tabs';
+import DataToolbar from '../components/ui/DataToolbar';
+import StatCard from '../components/ui/StatCard';
+import Table from '../components/ui/Table';
+import Select from '../components/ui/Select';
+import { Badge } from '../components/ui/Badge';
 
 import {
   PlusIcon,
@@ -37,9 +44,49 @@ import {
   ArrowLeftIcon,
   CalendarIcon,
   CreditCardIcon,
+  PhoneIcon,
+  LandmarkIcon,
+  BanknoteIcon,
 } from '../components/ui/icons';
 
-const STORAGE_KEY_SALARY_ADVANCES = 'osm_salary_advances_v2';
+// ---------------------------------------------------------------------------
+// Payment chip renderer — 5 options, pill style, icon + label
+// ---------------------------------------------------------------------------
+const PAYMENT_OPTIONS = ['Cash', 'Card', 'UPI', 'Net Banking', 'Cheque'];
+
+const renderPaymentChip = (method = '') => {
+  const m = (method || '').toLowerCase().trim();
+  if (m === 'cash') return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/30 dark:text-emerald-400">
+      <BanknoteIcon className="size-2.5 shrink-0" />Cash
+    </span>
+  );
+  if (m === 'card') return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 dark:bg-blue-950/30 dark:text-blue-400">
+      <CreditCardIcon className="size-2.5 shrink-0" />Card
+    </span>
+  );
+  if (m === 'upi') return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200/80 dark:bg-purple-950/30 dark:text-purple-400">
+      <PhoneIcon className="size-2.5 shrink-0" />UPI
+    </span>
+  );
+  if (m === 'net banking' || m === 'net banking / neft') return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200/80 dark:bg-sky-950/30 dark:text-sky-400">
+      <LandmarkIcon className="size-2.5 shrink-0" />Net Banking
+    </span>
+  );
+  if (m === 'cheque' || m === 'check') return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/30 dark:text-amber-400">
+      <ReceiptIcon className="size-2.5 shrink-0" />Cheque
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-muted text-muted-foreground border border-border">
+      <CreditCardIcon className="size-2.5 shrink-0" />{method || 'Other'}
+    </span>
+  );
+};
 
 const initialSalaryAdvances = [
   {
@@ -314,20 +361,21 @@ export function ExpensesPage({ mode }) {
   // ---------------------------------------------------------------------------
   // 2. SALARY ADVANCES STATE (Screenshots 1 & 2)
   // ---------------------------------------------------------------------------
-  const [advances, setAdvances] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SALARY_ADVANCES);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return initialSalaryAdvances;
-  });
+  const [advances, setAdvances] = useState([]);
 
-  const saveAdvances = (newAdvances) => {
-    setAdvances(newAdvances);
+  const fetchAdvances = async () => {
     try {
-      localStorage.setItem(STORAGE_KEY_SALARY_ADVANCES, JSON.stringify(newAdvances));
-    } catch {}
+      const rows = await expenseService.getAllSalaryAdvances(initialSalaryAdvances);
+      setAdvances(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      console.error('Failed to load salary advances', error);
+      toast.error('Failed to load salary advances');
+    }
   };
+
+  useEffect(() => {
+    fetchAdvances();
+  }, []);
 
   // Salary Advances Filters
   const [advanceSearch, setAdvanceSearch] = useState('');
@@ -360,6 +408,9 @@ export function ExpensesPage({ mode }) {
     });
   }, [advances, advanceStatusFilter, advanceSearch]);
 
+  const claimPager = usePagination(filteredClaims);
+  const advancePager = usePagination(filteredAdvances);
+
   // Salary Advances Statistics (3 Stat Cards from Screenshot 2)
   const advanceStats = useMemo(() => {
     const totalApproved = advances
@@ -370,7 +421,7 @@ export function ExpensesPage({ mode }) {
     return { totalApproved, pendingCount, totalSubmitted };
   }, [advances]);
 
-  const handleSaveAdvanceRequest = (e) => {
+  const handleSaveAdvanceRequest = async (e) => {
     e.preventDefault();
     if (!advanceForm.title.trim()) {
       toast.error('Please enter a title or purpose');
@@ -382,19 +433,21 @@ export function ExpensesPage({ mode }) {
       return;
     }
 
-    const newAdvance = {
-      id: `adv-${Date.now()}`,
-      employee: currentUser?.name || 'Amit Deshmukh',
-      title: advanceForm.title.trim(),
-      amount: amt,
-      dateRequired: advanceForm.dateRequired,
-      reason: advanceForm.reason.trim(),
-      status: 'pending',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-
-    saveAdvances([newAdvance, ...advances]);
-    toast.success('Salary advance request submitted successfully!');
+    try {
+      await expenseService.createSalaryAdvance({
+        employee: currentUser?.name || 'Amit Deshmukh',
+        employeeId: currentUser?.id || '',
+        title: advanceForm.title.trim(),
+        amount: amt,
+        dateRequired: advanceForm.dateRequired,
+        reason: advanceForm.reason.trim(),
+      }, initialSalaryAdvances);
+      await fetchAdvances();
+      toast.success('Salary advance request submitted successfully!');
+    } catch {
+      toast.error('Failed to submit salary advance');
+      return;
+    }
     setIsAdvanceModalOpen(false);
     setAdvanceForm({
       title: '',
@@ -404,55 +457,78 @@ export function ExpensesPage({ mode }) {
     });
   };
 
-  const handleAdvanceStatusUpdate = (id, newStatus) => {
-    const updated = advances.map((a) => (a.id === id ? { ...a, status: newStatus } : a));
-    saveAdvances(updated);
-    toast.success(`Salary advance marked as ${newStatus}`);
+  const handleAdvanceStatusUpdate = async (id, newStatus) => {
+    try {
+      await expenseService.updateSalaryAdvanceStatus(id, newStatus, {}, advances);
+      await fetchAdvances();
+      toast.success(`Salary advance marked as ${newStatus}`);
+    } catch {
+      toast.error('Failed to update salary advance');
+    }
   };
 
-  const handleDeleteAdvance = (id) => {
+  const handleDeleteAdvance = async (id) => {
     if (!window.confirm('Are you sure you want to delete this salary advance request?')) return;
-    const updated = advances.filter((a) => a.id !== id);
-    saveAdvances(updated);
-    toast.success('Salary advance record deleted');
+    try {
+      await expenseService.deleteSalaryAdvance(id, advances);
+      await fetchAdvances();
+      toast.success('Salary advance record deleted');
+    } catch {
+      toast.error('Failed to delete salary advance');
+    }
   };
 
-  // Helper for category badge color (Screenshot 5 style)
-  const getCategoryBadgeClass = (category = '') => {
-    const c = category.toLowerCase();
-    if (c.includes('software')) return 'bg-blue-50 text-blue-600 border border-blue-200/60 dark:bg-blue-950/40 dark:text-blue-400';
-    if (c.includes('office')) return 'bg-purple-50 text-purple-600 border border-purple-200/60 dark:bg-purple-950/40 dark:text-purple-400';
-    if (c.includes('travel')) return 'bg-sky-50 text-sky-600 border border-sky-200/60 dark:bg-sky-950/40 dark:text-sky-400';
-    if (c.includes('subscription')) return 'bg-teal-50 text-teal-600 border border-teal-200/60 dark:bg-teal-950/40 dark:text-teal-400';
-    return 'bg-indigo-50 text-indigo-600 border border-indigo-200/60 dark:bg-indigo-950/40 dark:text-indigo-400';
+  // ---------------------------------------------------------------------------
+  // 3. SALARY ADVANCES VIEW MODAL STATE
+  // ---------------------------------------------------------------------------
+  const [viewingAdvance, setViewingAdvance] = useState(null);
+
+  // ---------------------------------------------------------------------------
+  // 4. PARTIAL APPROVAL MODAL STATE (admin can enter approved amount + reason)
+  // ---------------------------------------------------------------------------
+  const [approvalModal, setApprovalModal] = useState(null); // { advance } or null
+  const [approvalForm, setApprovalForm] = useState({ approvedAmount: '', approvalNote: '' });
+
+  const openApprovalModal = (advance) => {
+    setApprovalForm({
+      approvedAmount: String(advance.amount),
+      approvalNote: '',
+    });
+    setApprovalModal({ advance });
   };
 
-  // Helper for payment chip (Screenshot 5 style)
-  const renderPaymentChip = (method = '') => {
-    const m = method.toLowerCase();
-    if (m.includes('cash')) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold text-emerald-600 border border-emerald-200/80 bg-emerald-50/60 dark:bg-emerald-950/30">
-          <span>💵</span>
-          <span>Cash</span>
-        </span>
-      );
+  const handlePartialApprove = async (e) => {
+    e.preventDefault();
+    const amt = Number(approvalForm.approvedAmount);
+    if (Number.isNaN(amt) || amt <= 0) {
+      toast.error('Please enter a valid approved amount');
+      return;
     }
-    if (m.includes('upi') || m.includes('phonepe') || m.includes('gpay')) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold text-purple-600 border border-purple-200/80 bg-purple-50/60 dark:bg-purple-950/30">
-          <span>📱</span>
-          <span>UPI</span>
-        </span>
+
+    try {
+      const refreshed = await expenseService.updateSalaryAdvanceStatus(
+        approvalModal.advance.id,
+        'approved',
+        {
+          approvedAmount: amt,
+          approvalNote: approvalForm.approvalNote.trim(),
+          reviewerName: currentUser?.name || 'Admin',
+        },
+        advances
       );
+      await fetchAdvances();
+      toast.success(`Advance approved for ${formatCurrency(amt)}`);
+      setApprovalModal(null);
+      // keep view modal in sync if open
+      if (viewingAdvance && String(viewingAdvance.id) === String(approvalModal.advance.id)) {
+        setViewingAdvance(refreshed || null);
+      }
+    } catch {
+      toast.error('Failed to approve salary advance');
     }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold text-foreground/80 border border-border bg-muted/40">
-        <CreditCardIcon className="size-3 text-muted-foreground" />
-        <span>{method || 'Direct'}</span>
-      </span>
-    );
   };
+
+  // (payment chip and category helpers defined at module level above)
 
   // ---------------------------------------------------------------------------
   // FULL PAGE VIEW: ADD EXPENSE (Screenshots 3 & 4)
@@ -466,7 +542,6 @@ export function ExpensesPage({ mode }) {
             type="button"
             onClick={() => setIsAddExpenseView(false)}
             className="p-2 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            title="Back to Expenses"
           >
             <ArrowLeftIcon className="size-4" />
           </button>
@@ -572,7 +647,7 @@ export function ExpensesPage({ mode }) {
                         placeholder="e.g. Client dinner"
                         value={p.title}
                         onChange={(e) => handleUpdatePaymentItem(idx, 'title', e.target.value)}
-                        className="w-full h-8.5 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
 
@@ -583,12 +658,11 @@ export function ExpensesPage({ mode }) {
                       <select
                         value={p.paymentMethod}
                         onChange={(e) => handleUpdatePaymentItem(idx, 'paymentMethod', e.target.value)}
-                        className="w-full h-8.5 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
                       >
-                        <option value="Cash">Cash</option>
-                        <option value="UPI">UPI</option>
-                        <option value="Company Card">Company Card</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
+                        {PAYMENT_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
                       </select>
                     </div>
 
@@ -597,7 +671,7 @@ export function ExpensesPage({ mode }) {
                       <select
                         value={p.category}
                         onChange={(e) => handleUpdatePaymentItem(idx, 'category', e.target.value)}
-                        className="w-full h-8.5 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
                       >
                         <option value="Software">Software</option>
                         <option value="Office">Office</option>
@@ -619,7 +693,7 @@ export function ExpensesPage({ mode }) {
                         placeholder="0"
                         value={p.amount}
                         onChange={(e) => handleUpdatePaymentItem(idx, 'amount', e.target.value)}
-                        className="w-full h-8.5 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono font-semibold"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono font-semibold"
                       />
                     </div>
 
@@ -631,7 +705,7 @@ export function ExpensesPage({ mode }) {
                         placeholder="0"
                         value={p.tax}
                         onChange={(e) => handleUpdatePaymentItem(idx, 'tax', e.target.value)}
-                        className="w-full h-8.5 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
                       />
                     </div>
 
@@ -641,7 +715,7 @@ export function ExpensesPage({ mode }) {
                         type="time"
                         value={p.time}
                         onChange={(e) => handleUpdatePaymentItem(idx, 'time', e.target.value)}
-                        className="w-full h-8.5 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
                   </div>
@@ -689,33 +763,14 @@ export function ExpensesPage({ mode }) {
   // ---------------------------------------------------------------------------
   return (
     <div className="space-y-4 pb-16 animate-in fade-in duration-200">
-      {/* 1. Sub-tabs Strip: Business Claims | Salary Advances (Theme Color, NOT black!) */}
-      <div className="flex items-center gap-2 pt-1">
-        <button
-          type="button"
-          onClick={() => handleTabChange('claims')}
-          className={cn(
-            'px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer',
-            currentTab === 'claims'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
-          )}
-        >
-          Business Claims
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange('advances')}
-          className={cn(
-            'px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer',
-            currentTab === 'advances'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'
-          )}
-        >
-          Salary Advances
-        </button>
-      </div>
+      <Tabs
+        activeTab={currentTab}
+        onChange={handleTabChange}
+        tabs={[
+          { id: 'claims', label: 'Business Claims' },
+          { id: 'advances', label: 'Salary Advances' },
+        ]}
+      />
 
       {/* ===================================================================== */}
       {/* VIEW: BUSINESS CLAIMS (Screenshot 5)                                  */}
@@ -739,268 +794,170 @@ export function ExpensesPage({ mode }) {
             }
           />
 
-          {/* 4 Stat Cards from Screenshot 5 */}
+          {/* Summary metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Card 1: Total Expenses */}
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center shrink-0">
-                  <ReceiptIcon className="size-4.5" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-foreground leading-none">
-                    {claimStats.totalCount}
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                    Total Expenses
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Pending */}
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center shrink-0">
-                  <ClockIcon className="size-4.5" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-foreground leading-none">
-                    {claimStats.pendingCount}
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                    Pending
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: Approved */}
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
-                  <CheckCircleIcon className="size-4.5" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-foreground leading-none">
-                    {claimStats.approvedCount}
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                    Approved
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 4: Total Amount */}
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center shrink-0">
-                  <IndianRupeeIcon className="size-4.5" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-foreground leading-none">
-                    {formatCurrency(claimStats.totalAmount)}
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                    Total Amount
-                  </span>
-                </div>
-              </div>
-            </div>
+            <StatCard variant="inline" label="Total Expenses" value={claimStats.totalCount} icon={<ReceiptIcon className="size-5" />} />
+            <StatCard variant="inline" label="Pending" value={claimStats.pendingCount} tone="warning" icon={<ClockIcon className="size-5" />} />
+            <StatCard variant="inline" label="Approved" value={claimStats.approvedCount} tone="success" icon={<CheckCircleIcon className="size-5" />} />
+            <StatCard variant="inline" label="Total Amount" value={formatCurrency(claimStats.totalAmount)} tone="primary" icon={<IndianRupeeIcon className="size-5" />} />
           </div>
 
-          {/* Filter Toolbar (Screenshot 5: Search, All Status, All Categories, All Payments) */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
-            {/* Search */}
-            <div className="relative w-full md:w-72">
-              <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search expenses..."
-                value={claimSearch}
-                onChange={(e) => setClaimSearch(e.target.value)}
-                className="w-full h-8.5 pl-8.5 pr-8 text-xs rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
-              />
-              {claimSearch && (
-                <button
-                  type="button"
-                  onClick={() => setClaimSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  <XIcon className="size-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Dropdown Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
+          <DataToolbar
+            variant="clean"
+            layout="inline"
+            searchValue={claimSearch}
+            onSearchChange={setClaimSearch}
+            searchPlaceholder="Search expenses..."
+            filters={[
+              <Select
+                key="status"
                 value={claimStatusFilter}
                 onChange={(e) => setClaimStatusFilter(e.target.value)}
-                className="h-8.5 px-3 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-              >
-                <option value="ALL">All Status ⇅</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
-
-              <select
+                placeholder=""
+                className="h-9 w-32 text-xs"
+                options={[
+                  { value: 'ALL', label: 'All Status' },
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'approved', label: 'Approved' },
+                  { value: 'rejected', label: 'Rejected' },
+                ]}
+              />,
+              <Select
+                key="category"
                 value={claimCategoryFilter}
                 onChange={(e) => setClaimCategoryFilter(e.target.value)}
-                className="h-8.5 px-3 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-              >
-                <option value="ALL">All Categories ⇅</option>
-                <option value="Software">Software</option>
-                <option value="Office">Office</option>
-                <option value="Travel">Travel</option>
-                <option value="Subscriptions">Subscriptions</option>
-                <option value="Site Materials">Site Materials</option>
-              </select>
-
-              <select
+                placeholder=""
+                className="h-9 w-36 text-xs"
+                options={[
+                  { value: 'ALL', label: 'All Categories' },
+                  { value: 'Software', label: 'Software' },
+                  { value: 'Office', label: 'Office' },
+                  { value: 'Travel', label: 'Travel' },
+                  { value: 'Subscriptions', label: 'Subscriptions' },
+                  { value: 'Site Materials', label: 'Site Materials' },
+                ]}
+              />,
+              <Select
+                key="payment"
                 value={claimPaymentFilter}
                 onChange={(e) => setClaimPaymentFilter(e.target.value)}
-                className="h-8.5 px-3 text-xs font-medium rounded-lg border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs hover:bg-muted/40 transition-colors"
-              >
-                <option value="ALL">All Payments ⇅</option>
-                <option value="Cash">Cash</option>
-                <option value="UPI">UPI</option>
-                <option value="Company Card">Company Card</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-              </select>
-            </div>
-          </div>
+                placeholder=""
+                className="h-9 w-32 text-xs"
+                options={[
+                  { value: 'ALL', label: 'All Payments' },
+                  ...PAYMENT_OPTIONS.map((opt) => ({ value: opt, label: opt })),
+                ]}
+              />,
+            ]}
+          />
 
-          {/* Table from Screenshot 5 (EMPLOYEE, CATEGORY, DATE, AMOUNT, PAYMENT, STATUS, ACTIONS) */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <th className="py-3 px-4">EMPLOYEE</th>
-                    <th className="py-3 px-4">CATEGORY</th>
-                    <th className="py-3 px-4">DATE ⇅</th>
-                    <th className="py-3 px-4">AMOUNT ⇅</th>
-                    <th className="py-3 px-4">PAYMENT</th>
-                    <th className="py-3 px-4">STATUS</th>
-                    <th className="py-3 px-4 text-right">ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border text-xs">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={7} className="py-12 text-center text-muted-foreground">
-                        Loading expenses...
-                      </td>
-                    </tr>
-                  ) : filteredClaims.length > 0 ? (
-                    filteredClaims.map((item) => (
-                      <tr key={item.id} className="hover:bg-muted/40 transition-colors">
-                        {/* Employee */}
-                        <td className="py-3.5 px-4 font-semibold text-foreground">
-                          {item.spentBy}
-                        </td>
-
-                        {/* Category */}
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={cn(
-                              'inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
-                              getCategoryBadgeClass(item.category)
-                            )}
-                          >
-                            {item.category || 'Office'}
-                          </span>
-                        </td>
-
-                        {/* Date */}
-                        <td className="py-3.5 px-4 text-xs font-mono text-muted-foreground">
-                          <div>{item.date || '—'}</div>
-                        </td>
-
-                        {/* Amount */}
-                        <td className="py-3.5 px-4 font-mono font-bold text-foreground text-xs">
-                          {formatCurrency(item.amount)}
-                        </td>
-
-                        {/* Payment */}
-                        <td className="py-3.5 px-4">
-                          {renderPaymentChip(item.paymentMethod)}
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-3.5 px-4 font-semibold text-xs capitalize">
-                          {item.status === 'approved' || item.status === 'reimbursed' ? (
-                            <span className="text-emerald-600">Approved</span>
-                          ) : item.status === 'rejected' ? (
-                            <span className="text-rose-600">Rejected</span>
-                          ) : (
-                            <span className="text-amber-600">Pending</span>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1 text-muted-foreground">
-                            {/* View */}
-                            <button
-                              type="button"
-                              onClick={() => setViewingClaim(item)}
-                              className="p-1 hover:text-foreground hover:bg-muted rounded transition-colors cursor-pointer"
-                              title="View Details"
-                            >
-                              <EyeIcon className="size-4" />
-                            </button>
-
-                            {/* Quick Approve / Reject for managers */}
-                            {isAdminOrManager && item.status === 'pending' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickStatusUpdate(item.id, 'approved')}
-                                  className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
-                                  title="Approve Claim"
-                                >
-                                  <CheckCircleIcon className="size-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickStatusUpdate(item.id, 'rejected')}
-                                  className="p-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                                  title="Reject Claim"
-                                >
-                                  <XCircleIcon className="size-4" />
-                                </button>
-                              </>
-                            )}
-
-                            {isAdminOrManager && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteExpense(item.id)}
-                                className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
-                                title="Delete Record"
-                              >
-                                <TrashIcon className="size-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="py-12 text-center text-muted-foreground text-xs">
-                        No expenses found matching your filter criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Table
+            variant="clean"
+            loading={loading}
+            columns={[
+              {
+                key: 'spentBy',
+                header: 'Employee',
+                render: (item) => <span className="font-semibold text-foreground">{item.spentBy}</span>,
+              },
+              {
+                key: 'category',
+                header: 'Category',
+                render: (item) => <span className="text-xs font-medium text-primary">{item.category || 'Office'}</span>,
+              },
+              {
+                key: 'date',
+                header: 'Date',
+                render: (item) => <span className="font-mono text-muted-foreground">{item.date || '—'}</span>,
+              },
+              {
+                key: 'amount',
+                header: 'Amount',
+                render: (item) => (
+                  <span className="font-mono font-semibold text-foreground">{formatCurrency(item.amount)}</span>
+                ),
+              },
+              {
+                key: 'paymentMethod',
+                header: 'Payment',
+                render: (item) => renderPaymentChip(item.paymentMethod),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (item) => (
+                  <Badge
+                    variant={
+                      item.status === 'approved' || item.status === 'reimbursed'
+                        ? 'success'
+                        : item.status === 'rejected'
+                        ? 'danger'
+                        : 'warning'
+                    }
+                    dot
+                  >
+                    {item.status === 'approved' || item.status === 'reimbursed'
+                      ? 'Approved'
+                      : item.status === 'rejected'
+                      ? 'Rejected'
+                      : 'Pending'}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                align: 'right',
+                render: (item) => (
+                  <div className="flex items-center justify-end gap-0.5 text-muted-foreground">
+                    <button
+                      type="button"
+                      onClick={() => setViewingClaim(item)}
+                      className="p-1.5 hover:text-foreground hover:bg-muted rounded transition-colors cursor-pointer"
+                      title="View expense"
+                    >
+                      <EyeIcon className="size-3.5" />
+                    </button>
+                    {isAdminOrManager && item.status === 'pending' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickStatusUpdate(item.id, 'approved')}
+                          className="p-1.5 hover:text-success hover:bg-success/10 rounded transition-colors cursor-pointer"
+                          title="Approve"
+                        >
+                          <CheckCircleIcon className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickStatusUpdate(item.id, 'rejected')}
+                          className="p-1.5 hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
+                          title="Reject"
+                        >
+                          <XCircleIcon className="size-3.5" />
+                        </button>
+                      </>
+                    )}
+                    {isAdminOrManager && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteExpense(item.id)}
+                        className="p-1.5 hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
+                        title="Delete"
+                      >
+                        <TrashIcon className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            data={claimPager.paginatedItems}
+            pagination={claimPager.pagination}
+            keyField="id"
+            emptyTitle="No expenses found"
+            emptyDescription="No expense claims match the current filters."
+          />
         </div>
       )}
 
@@ -1026,218 +983,153 @@ export function ExpensesPage({ mode }) {
             }
           />
 
-          {/* 3 Stat Cards from Screenshot 2 */}
+          {/* Summary metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Card 1: Total Approved Advances */}
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
-                  <IndianRupeeIcon className="size-4.5" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-foreground leading-none">
-                    {formatCurrency(advanceStats.totalApproved)}
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                    Total Approved Advances
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Pending Requests */}
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center shrink-0">
-                  <ClockIcon className="size-4.5" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-foreground leading-none">
-                    {advanceStats.pendingCount}
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                    Pending Requests
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: Total Requests Submitted */}
-            <div className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center shrink-0">
-                  <CheckCircleIcon className="size-4.5" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-foreground leading-none">
-                    {advanceStats.totalSubmitted}
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground mt-1 block">
-                    Total Requests Submitted
-                  </span>
-                </div>
-              </div>
-            </div>
+            <StatCard variant="inline" label="Total Approved Advances" value={formatCurrency(advanceStats.totalApproved)} tone="success" icon={<IndianRupeeIcon className="size-5" />} />
+            <StatCard variant="inline" label="Pending Requests" value={advanceStats.pendingCount} tone="warning" icon={<ClockIcon className="size-5" />} />
+            <StatCard variant="inline" label="Total Requests Submitted" value={advanceStats.totalSubmitted} tone="primary" icon={<CheckCircleIcon className="size-5" />} />
           </div>
 
-          {/* Filter Toolbar (Screenshot 2: Search + Status Chips) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            {/* Search */}
-            <div className="relative w-full sm:w-80">
-              <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search advances by title, employee, or reason..."
-                value={advanceSearch}
-                onChange={(e) => setAdvanceSearch(e.target.value)}
-                className="w-full h-8.5 pl-8.5 pr-8 text-xs rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+          <DataToolbar
+            variant="clean"
+            layout="inline"
+            searchValue={advanceSearch}
+            onSearchChange={setAdvanceSearch}
+            searchPlaceholder="Search advances..."
+            filters={
+              <Select
+                value={advanceStatusFilter}
+                onChange={(e) => setAdvanceStatusFilter(e.target.value)}
+                placeholder=""
+                className="h-9 w-32 text-xs"
+                options={[
+                  { value: 'All', label: 'All' },
+                  { value: 'Pending', label: 'Pending' },
+                  { value: 'Approved', label: 'Approved' },
+                  { value: 'Rejected', label: 'Rejected' },
+                ]}
               />
-              {advanceSearch && (
-                <button
-                  type="button"
-                  onClick={() => setAdvanceSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  <XIcon className="size-3" />
-                </button>
-              )}
-            </div>
+            }
+          />
 
-            {/* Status chips (Screenshot 2: All, Pending, Approved, Rejected - Theme Color, NOT black!) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto">
-              {['All', 'Pending', 'Approved', 'Rejected'].map((st) => {
-                const active = advanceStatusFilter === st;
-                return (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setAdvanceStatusFilter(st)}
-                    className={cn(
-                      'px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer',
-                      active
-                        ? 'bg-primary text-primary-foreground shadow-2xs'
-                        : 'bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          <Table
+            variant="clean"
+            columns={[
+              {
+                key: 'employee',
+                header: 'Employee',
+                render: (item) => <span className="font-semibold text-foreground">{item.employee}</span>,
+              },
+              {
+                key: 'title',
+                header: 'Title / Purpose',
+                render: (item) => <span className="font-medium text-foreground">{item.title}</span>,
+              },
+              {
+                key: 'amount',
+                header: 'Amount',
+                render: (item) => (
+                  <div className="font-mono font-semibold text-foreground">
+                    {item.status === 'approved' && item.approvedAmount != null ? (
+                      <span className="text-success">{formatCurrency(item.approvedAmount)}</span>
+                    ) : (
+                      formatCurrency(item.amount)
                     )}
+                    {item.status === 'approved' &&
+                      item.approvedAmount != null &&
+                      item.approvedAmount !== item.amount && (
+                        <span className="block text-[11px] text-muted-foreground font-normal">
+                          req. {formatCurrency(item.amount)}
+                        </span>
+                      )}
+                  </div>
+                ),
+              },
+              {
+                key: 'dateRequired',
+                header: 'Date Required',
+                render: (item) => (
+                  <span className="text-muted-foreground">
+                    {item.dateRequired ? formatDate(item.dateRequired) : '—'}
+                  </span>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (item) => (
+                  <Badge
+                    variant={
+                      item.status === 'approved'
+                        ? 'success'
+                        : item.status === 'rejected'
+                        ? 'danger'
+                        : 'warning'
+                    }
+                    dot
                   >
-                    {st}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Table or Empty State (from Screenshot 2) */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
-            {filteredAdvances.length === 0 ? (
-              /* Empty state from Screenshot 2 */
-              <div className="py-16 px-4 text-center space-y-3">
-                <div className="size-12 rounded-full border-2 border-muted-foreground/30 text-muted-foreground flex items-center justify-center mx-auto text-lg font-bold">
-                  !
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    No salary advance requests found
-                  </h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                    No employees have submitted salary advance requests yet.
-                  </p>
-                </div>
-                <div>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setIsAdvanceModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <PlusIcon className="size-4" />
-                    <span>Submit New Request</span>
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              /* Salary Advances Data Table */
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                      <th className="py-3 px-4">EMPLOYEE</th>
-                      <th className="py-3 px-4">TITLE / PURPOSE</th>
-                      <th className="py-3 px-4">AMOUNT</th>
-                      <th className="py-3 px-4">DATE REQUIRED</th>
-                      <th className="py-3 px-4">REASON</th>
-                      <th className="py-3 px-4">STATUS</th>
-                      <th className="py-3 px-4 text-right">ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border text-xs">
-                    {filteredAdvances.map((item) => (
-                      <tr key={item.id} className="hover:bg-muted/40 transition-colors">
-                        <td className="py-3.5 px-4 font-semibold text-foreground">
-                          {item.employee}
-                        </td>
-                        <td className="py-3.5 px-4 font-medium text-foreground">
-                          {item.title}
-                        </td>
-                        <td className="py-3.5 px-4 font-mono font-bold text-foreground text-xs">
-                          {formatCurrency(item.amount)}
-                        </td>
-                        <td className="py-3.5 px-4 text-xs text-muted-foreground">
-                          {item.dateRequired ? formatDate(item.dateRequired) : '—'}
-                        </td>
-                        <td className="py-3.5 px-4 text-xs text-muted-foreground max-w-[200px] truncate" title={item.reason}>
-                          {item.reason || '—'}
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold text-xs capitalize">
-                          {item.status === 'approved' ? (
-                            <span className="text-emerald-600">Approved</span>
-                          ) : item.status === 'rejected' ? (
-                            <span className="text-rose-600">Rejected</span>
-                          ) : (
-                            <span className="text-amber-600">Pending</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1 text-muted-foreground">
-                            {isAdminOrManager && item.status === 'pending' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAdvanceStatusUpdate(item.id, 'approved')}
-                                  className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
-                                  title="Approve Advance"
-                                >
-                                  <CheckCircleIcon className="size-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAdvanceStatusUpdate(item.id, 'rejected')}
-                                  className="p-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                                  title="Reject Advance"
-                                >
-                                  <XCircleIcon className="size-4" />
-                                </button>
-                              </>
-                            )}
-
-                            {isAdminOrManager && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteAdvance(item.id)}
-                                className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
-                                title="Delete Request"
-                              >
-                                <TrashIcon className="size-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    {item.status === 'approved'
+                      ? 'Approved'
+                      : item.status === 'rejected'
+                      ? 'Rejected'
+                      : 'Pending'}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                align: 'right',
+                render: (item) => (
+                  <div className="flex items-center justify-end gap-0.5 text-muted-foreground">
+                    <button
+                      type="button"
+                      onClick={() => setViewingAdvance(item)}
+                      className="p-1.5 hover:text-foreground hover:bg-muted rounded transition-colors cursor-pointer"
+                      title="View details"
+                    >
+                      <EyeIcon className="size-3.5" />
+                    </button>
+                    {isAdminOrManager && item.status === 'pending' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openApprovalModal(item)}
+                          className="p-1.5 hover:text-success hover:bg-success/10 rounded transition-colors cursor-pointer"
+                          title="Approve advance"
+                        >
+                          <CheckCircleIcon className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAdvanceStatusUpdate(item.id, 'rejected')}
+                          className="p-1.5 hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
+                          title="Reject advance"
+                        >
+                          <XCircleIcon className="size-3.5" />
+                        </button>
+                      </>
+                    )}
+                    {isAdminOrManager && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAdvance(item.id)}
+                        className="p-1.5 hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
+                        title="Delete"
+                      >
+                        <TrashIcon className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            data={advancePager.paginatedItems}
+            pagination={advancePager.pagination}
+            keyField="id"
+            emptyTitle="No salary advance requests found"
+            emptyDescription="No employees have submitted salary advance requests yet."
+          />
         </div>
       )}
 
@@ -1324,6 +1216,211 @@ export function ExpensesPage({ mode }) {
                 className="px-4 shadow-2xs font-semibold"
               >
                 Submit Request
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL: VIEW ADVANCE DETAILS (reason + approval info)                 */}
+      {/* ===================================================================== */}
+      {viewingAdvance && (
+        <Modal
+          isOpen={Boolean(viewingAdvance)}
+          onClose={() => setViewingAdvance(null)}
+          title="Salary Advance Details"
+        >
+          <div className="space-y-4 pt-1">
+            <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Employee:</span>
+                <span className="text-xs font-bold text-foreground">{viewingAdvance.employee}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Title / Purpose:</span>
+                <span className="text-xs font-semibold text-foreground">{viewingAdvance.title}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Requested Amount:</span>
+                <span className="text-xs font-mono font-bold text-foreground">
+                  {formatCurrency(viewingAdvance.amount)}
+                </span>
+              </div>
+              {viewingAdvance.status === 'approved' && viewingAdvance.approvedAmount != null && (
+                <div className="flex items-center justify-between border-t border-border/60 pt-2">
+                  <span className="text-xs text-muted-foreground">Approved Amount:</span>
+                  <span className="text-sm font-mono font-bold text-emerald-600">
+                    {formatCurrency(viewingAdvance.approvedAmount)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Date Required:</span>
+                <span className="text-xs font-mono text-foreground">
+                  {viewingAdvance.dateRequired ? formatDate(viewingAdvance.dateRequired) : '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Status:</span>
+                <span
+                  className={cn(
+                    'text-xs font-bold capitalize',
+                    viewingAdvance.status === 'approved'
+                      ? 'text-emerald-600'
+                      : viewingAdvance.status === 'rejected'
+                      ? 'text-rose-600'
+                      : 'text-amber-600'
+                  )}
+                >
+                  {viewingAdvance.status}
+                </span>
+              </div>
+              {viewingAdvance.approvedBy && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Approved By:</span>
+                  <span className="text-xs text-foreground">{viewingAdvance.approvedBy}</span>
+                </div>
+              )}
+            </div>
+
+            {viewingAdvance.reason ? (
+              <div>
+                <span className="text-xs font-bold text-muted-foreground block mb-1">
+                  Reason / Explanation
+                </span>
+                <p className="text-xs text-foreground bg-card p-3 rounded-lg border border-border leading-relaxed">
+                  {viewingAdvance.reason}
+                </p>
+              </div>
+            ) : null}
+
+            {viewingAdvance.approvalNote ? (
+              <div>
+                <span className="text-xs font-bold text-muted-foreground block mb-1">
+                  Admin Note (Approval)
+                </span>
+                <p className="text-xs text-foreground bg-emerald-50 dark:bg-emerald-950/20 p-3 rounded-lg border border-emerald-200/60 dark:border-emerald-800/40 leading-relaxed">
+                  {viewingAdvance.approvalNote}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              {isAdminOrManager && viewingAdvance.status === 'pending' && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      handleAdvanceStatusUpdate(viewingAdvance.id, 'rejected');
+                      setViewingAdvance(null);
+                    }}
+                    className="text-rose-600 hover:text-rose-700"
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      setViewingAdvance(null);
+                      openApprovalModal(viewingAdvance);
+                    }}
+                  >
+                    Approve
+                  </Button>
+                </>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setViewingAdvance(null)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL: PARTIAL / CUSTOM APPROVAL (admin sets approved amount + note)  */}
+      {/* ===================================================================== */}
+      {approvalModal && (
+        <Modal
+          isOpen={Boolean(approvalModal)}
+          onClose={() => setApprovalModal(null)}
+          title="Approve Salary Advance"
+        >
+          <form onSubmit={handlePartialApprove} className="space-y-4 pt-1">
+            {/* Summary of the request */}
+            <div className="p-3 rounded-lg bg-muted/30 border border-border text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Employee:</span>
+                <span className="font-semibold text-foreground">{approvalModal.advance.employee}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Requested Amount:</span>
+                <span className="font-mono font-bold text-foreground">
+                  {formatCurrency(approvalModal.advance.amount)}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Approved Amount (₹) *
+              </label>
+              <input
+                type="number"
+                required
+                min="1"
+                value={approvalForm.approvedAmount}
+                onChange={(e) =>
+                  setApprovalForm({ ...approvalForm, approvedAmount: e.target.value })
+                }
+                className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono font-semibold"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                You can approve less or more than the requested amount.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Reason / Note for Staff
+              </label>
+              <textarea
+                rows={3}
+                placeholder="e.g. Approved partial amount due to policy limit…"
+                value={approvalForm.approvalNote}
+                onChange={(e) =>
+                  setApprovalForm({ ...approvalForm, approvalNote: e.target.value })
+                }
+                className="w-full p-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setApprovalModal(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="px-4 shadow-2xs font-semibold"
+              >
+                Confirm Approval
               </Button>
             </div>
           </form>

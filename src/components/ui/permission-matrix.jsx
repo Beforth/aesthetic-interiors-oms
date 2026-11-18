@@ -132,7 +132,7 @@ export function PermissionMatrix({
     <div className={`space-y-3 font-sans ${className}`}>
       {/* Search & Stats Bar */}
       {searchable && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/60 p-3 rounded-xl border border-border">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-2">
           <div className="relative w-full sm:w-80">
             <Icon
               name="search"

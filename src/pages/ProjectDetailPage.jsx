@@ -27,6 +27,7 @@ import { Badge } from '../components/ui/badge';
 import { Kanban } from '../components/ui/kanban';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
 import EmptyState from '../components/ui/EmptyState';
 import Icon from '../components/ui/Icon';
 import TaskAllocationModal from '../components/common/TaskAllocationModal';
@@ -55,6 +56,10 @@ export function ProjectDetailPage() {
   const canUpdateStatus = usePermission('stages.updateStatus');
   const canEditProjectStages = usePermission('stages.editProjectStages');
   const canManageTasks = usePermission('tasks.create');
+  const canCreateProject = usePermission('projects.create');
+  const canManageProject =
+    role === ROLES.MANAGER || role === ROLES.ADMIN || role === ROLES.OWNER ||
+    role === 'manager' || role === 'admin' || role === 'owner' || canCreateProject;
 
   const [project, setProject] = useState(null);
   const [projectTasks, setProjectTasks] = useState([]);
@@ -64,6 +69,9 @@ export function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [stagePendingDelete, setStagePendingDelete] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [isEditingProject, setIsEditingProject] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [projectForm, setProjectForm] = useState({ name: '', siteAddress: '', startDate: '', endDate: '', totalCost: '', status: 'in progress' });
 
   // Stage Edit Modal State
   const [editingStage, setEditingStage] = useState(null);
@@ -359,6 +367,55 @@ export function ProjectDetailPage() {
     }
   };
 
+  // Edit project details from the detail page
+  const openEditProject = () => {
+    if (!project) return;
+    setProjectForm({
+      name: project.name || '',
+      siteAddress: project.siteAddress || '',
+      startDate: project.startDate || '',
+      endDate: project.endDate || project.dueDate || project.targetDate || '',
+      totalCost: project.totalCost !== undefined && project.totalCost !== null ? String(project.totalCost) : '',
+      status: ['planning', 'in progress', 'completed', 'on_hold'].includes(String(project.status || '').toLowerCase())
+        ? String(project.status).toLowerCase()
+        : 'in progress',
+    });
+    setIsEditingProject(true);
+  };
+
+  const handleSaveProject = async (e) => {
+    e.preventDefault();
+    if (!project) return;
+    try {
+      const updated = await projectService.updateProject(project.id, {
+        name: projectForm.name.trim(),
+        siteAddress: projectForm.siteAddress.trim(),
+        startDate: projectForm.startDate,
+        endDate: projectForm.endDate,
+        dueDate: projectForm.endDate,
+        targetDate: projectForm.endDate,
+        totalCost: Number(String(projectForm.totalCost).replace(/,/g, '')) || 0,
+        status: projectForm.status,
+      });
+      setProject({ ...project, ...updated });
+      setIsEditingProject(false);
+      toast.success('Project details updated');
+    } catch (err) {
+      toast.error('Failed to update project details');
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!project) return;
+    try {
+      await projectService.deleteProject(project.id);
+      toast.success('Project deleted');
+      navigate('/projects');
+    } catch (err) {
+      toast.error('Failed to delete project');
+    }
+  };
+
   // Add Stage for this project only
   const handleAddProjectStage = async (e) => {
     e.preventDefault();
@@ -442,14 +499,26 @@ export function ProjectDetailPage() {
           { label: project.name },
         ]}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            leadingIcon="arrow-left"
-            onClick={() => navigate('/projects')}
-          >
-            All Projects
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon="arrow-left"
+              onClick={() => navigate('/projects')}
+            >
+              All Projects
+            </Button>
+            {canManageProject && (
+              <Button variant="outline" size="sm" leadingIcon="edit" onClick={openEditProject}>
+                Edit
+              </Button>
+            )}
+            {canManageProject && (
+              <Button variant="danger" size="sm" leadingIcon="trash" onClick={() => setIsDeletingProject(true)}>
+                Delete
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -468,7 +537,6 @@ export function ProjectDetailPage() {
           }
           setActiveTab(tabId);
         }}
-        className="bg-surface rounded-t border px-2"
       />
 
       {/* TAB 1: OVERVIEW */}
@@ -1072,7 +1140,51 @@ export function ProjectDetailPage() {
         onCancel={() => setStagePendingDelete(null)}
       />
 
-      
+      <Modal
+        isOpen={isEditingProject}
+        onClose={() => setIsEditingProject(false)}
+        title="Edit Project"
+        subtitle={project ? `${project.id} · ${project.name}` : ''}
+        size="md"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsEditingProject(false)}>Cancel</Button>
+            <Button variant="primary" size="sm" onClick={handleSaveProject}>Save Changes</Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleSaveProject} className="space-y-4 py-1">
+          <Input label="Project Name" value={projectForm.name} onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })} required />
+          <Input label="Site Address" value={projectForm.siteAddress} onChange={(e) => setProjectForm({ ...projectForm, siteAddress: e.target.value })} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Start Date" type="date" value={projectForm.startDate} onChange={(e) => setProjectForm({ ...projectForm, startDate: e.target.value })} />
+            <Input label="Due Date" type="date" value={projectForm.endDate} onChange={(e) => setProjectForm({ ...projectForm, endDate: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Total Cost Estimate (₹)" type="number" value={projectForm.totalCost} onChange={(e) => setProjectForm({ ...projectForm, totalCost: e.target.value })} />
+            <Select
+              label="Project Status"
+              value={projectForm.status}
+              onChange={(e) => setProjectForm({ ...projectForm, status: e.target.value })}
+              options={[
+                { value: 'planning', label: 'Planning / Not Started' },
+                { value: 'in progress', label: 'In Progress' },
+                { value: 'completed', label: 'Completed & Handed Over' },
+                { value: 'on_hold', label: 'On Hold' },
+              ]}
+            />
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={isDeletingProject}
+        title="Delete project?"
+        message={`Remove "${project?.name || 'this project'}" and all of its stages, progress and team links? This cannot be undone.`}
+        confirmText="Delete Project"
+        onConfirm={handleDeleteProject}
+        onCancel={() => setIsDeletingProject(false)}
+      />
     </div>
   );
 }

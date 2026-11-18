@@ -13,49 +13,41 @@ import { isDebug } from '../config/env';
 import { validateRequired, validateGpsCoordinates, validatePositiveNumber } from '../utils/validators';
 
 import PageHeader from '../components/ui/PageHeader';
-import Card from '../components/ui/Card';
 import Tabs from '../components/ui/Tabs';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
-import IconButton from '../components/ui/IconButton';
-import StatusBadge from '../components/ui/StatusBadge';
 import Avatar from '../components/ui/Avatar';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Alert from '../components/ui/Alert';
+import DataToolbar from '../components/ui/DataToolbar';
+import StatCard from '../components/ui/StatCard';
+import { Badge } from '../components/ui/Badge';
 import { cn } from '../lib/utils';
 import {
-  FileSpreadsheetIcon,
   DownloadIcon,
   UploadIcon,
   RefreshIcon,
-  ArrowUpDownIcon,
   ArrowUpIcon,
   ArrowDownIcon,
   CalendarIcon,
-  BarChartIcon,
   ClockIcon,
   CheckIcon,
   AlertIcon,
   AlertCircleIcon,
-  UmbrellaIcon,
   LogInIcon,
   LogOutIcon,
-  InfoIcon,
   SearchIcon,
   MapPinIcon,
   EyeIcon,
   EditIcon,
   TrashIcon,
   PlusIcon,
-  MailIcon,
   NavigationIcon,
   ShieldIcon,
-  UserCheckIcon,
   XIcon,
-  FilterIcon,
 } from '../components/ui/icons';
 
 /** Today as DD-MM-YYYY, the format of the Daily attendance date box. */
@@ -266,7 +258,7 @@ export function AttendancePage({ defaultTab }) {
   const [staffMarkSubmitError, setStaffMarkSubmitError] = useState(null);
   const [staffMarkErrors, setStaffMarkErrors] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
   const [requestForm, setRequestForm] = useState({
     userId: 'u1',
     date: new Date().toISOString().split('T')[0],
@@ -284,7 +276,7 @@ export function AttendancePage({ defaultTab }) {
   const [selectedViewRequest, setSelectedViewRequest] = useState(null);
   const [requestTypeFilter, setRequestTypeFilter] = useState('ALL');
   const [requestCurrentPage, setRequestCurrentPage] = useState(1);
-  const requestPageSize = 10;
+  const [requestPageSize, setRequestPageSize] = useState(10);
 
   const [recordPendingDelete, setRecordPendingDelete] = useState(null);
   const [deleteRecordLoading, setDeleteRecordLoading] = useState(false);
@@ -1400,252 +1392,166 @@ export function AttendancePage({ defaultTab }) {
         }
       />
 
-      {/* SECTION 2: Live Geofence & 4 Overview Filter Cards */}
-      <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-card border border-border shadow-xs space-y-3">
-        {/* Top Header Row of Container Card */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* PWA GPS Geofence Real-time Info */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              {locating
-                ? 'PWA GPS Locating...'
-                : distanceToOffice !== null
-                ? distanceToOffice <= (officeLocation.radiusMeters || 500)
-                  ? `Inside Geofence • ${distanceToOffice}m from ${officeLocation.name}`
-                  : `Outside Geofence • ${distanceToOffice > 1000 ? (distanceToOffice / 1000).toFixed(1) + 'km' : distanceToOffice + 'm'} away`
-                : 'PWA GPS Active'}
-            </span>
-
-            <button
-              type="button"
-              onClick={startPwaLocationTracking}
-              title="Refresh GPS location via PWA"
-              className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs cursor-pointer"
-            >
-              <RefreshIcon className={cn('size-3.5', locating && 'animate-spin')} />
-            </button>
-          </div>
-
-          {/* User Check-In Status Badge */}
-          <span
-            className={`text-xs font-bold px-3 py-1 rounded-full border ${
-              isCheckedIn
-                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                : 'bg-muted/80 text-muted-foreground border-border'
-            }`}
-          >
-            {isCheckedIn ? 'Checked In' : 'Not Checked In'}
+      {/* SECTION 2: Geofence status + overview metrics */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            {locating
+              ? 'PWA GPS Locating...'
+              : distanceToOffice !== null
+              ? distanceToOffice <= (officeLocation.radiusMeters || 500)
+                ? `Inside Geofence • ${distanceToOffice}m from ${officeLocation.name}`
+                : `Outside Geofence • ${distanceToOffice > 1000 ? (distanceToOffice / 1000).toFixed(1) + 'km' : distanceToOffice + 'm'} away`
+              : 'PWA GPS Active'}
           </span>
-        </div>
-
-        {/* Metric Cards Row: Working Hours Card + 4 Status Filter Cards (Matching Design) */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full">
-          {/* Card 1: Working Hours (Live in middle of day / shift total) */}
-          <div className="p-3.5 sm:p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col items-center justify-center text-center transition-all group">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-              <ClockIcon className={cn("size-5", myWorkTimeStats?.isActive && "animate-pulse text-emerald-600")} />
-            </div>
-            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-              Working Hours
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight mt-1 tabular-nums">
-              {myWorkTimeStats?.hoursText || "0h 00m"}
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-1 truncate max-w-full font-medium">
-              {myWorkTimeStats?.subText || "Shift not started"}
-            </div>
-          </div>
-
-          {/* Card 2: Checked In */}
           <button
             type="button"
-            onClick={() => handleCardFilterToggle('checked-in')}
-            className={cn(
-              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-              cardFilter === 'checked-in'
-                ? 'border-blue-400 ring-2 ring-blue-400/20 bg-blue-50/70 shadow-xs'
-                : 'border-border bg-card hover:border-blue-400/40 hover:bg-muted/30 shadow-2xs'
-            )}
+            onClick={startPwaLocationTracking}
+            title="Refresh GPS location via PWA"
+            className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-info group-hover:scale-110 transition-transform">
-              <CheckIcon className="size-5 stroke-[2.5]" />
-            </div>
-            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-              Checked In
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-info tracking-tight mt-1 tabular-nums">
-              {overviewStats.checkedIn?.toLocaleString() || '4,500'}
-            </div>
-          </button>
-
-          {/* Card 3: Not Checked In */}
-          <button
-            type="button"
-            onClick={() => handleCardFilterToggle('not-checked-in')}
-            className={cn(
-              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-              cardFilter === 'not-checked-in'
-                ? 'border-rose-400 ring-2 ring-rose-400/20 bg-rose-50/70 shadow-xs'
-                : 'border-border bg-card hover:border-rose-400/40 hover:bg-muted/30 shadow-2xs'
-            )}
-          >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 group-hover:scale-110 transition-transform">
-              <AlertIcon className="size-5" />
-            </div>
-            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-              Not Checked In
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight mt-1 tabular-nums">
-              {overviewStats.notCheckedIn?.toLocaleString() || '500'}
-            </div>
-          </button>
-
-          {/* Card 4: On Leave */}
-          <button
-            type="button"
-            onClick={() => handleCardFilterToggle('on-leave')}
-            className={cn(
-              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-              cardFilter === 'on-leave'
-                ? 'border-emerald-400 ring-2 ring-emerald-400/20 bg-emerald-50/70 shadow-xs'
-                : 'border-border bg-card hover:border-emerald-400/40 hover:bg-muted/30 shadow-2xs'
-            )}
-          >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
-              <CalendarIcon className="size-5" />
-            </div>
-            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-              On Leave
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1 tabular-nums">
-              {overviewStats.onLeave?.toLocaleString() || '456'}
-            </div>
-          </button>
-
-          {/* Card 5: Checked Out */}
-          <button
-            type="button"
-            onClick={() => handleCardFilterToggle('checked-out')}
-            className={cn(
-              'p-3.5 sm:p-4 rounded-xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer group',
-              cardFilter === 'checked-out'
-                ? 'border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/70 shadow-xs'
-                : 'border-border bg-card hover:border-amber-400/40 hover:bg-muted/30 shadow-2xs'
-            )}
-          >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
-              <LogOutIcon className="size-5" />
-            </div>
-            <div className="text-xs sm:text-[13px] font-semibold text-muted-foreground mt-1">
-              Checked Out
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1 tabular-nums">
-              {overviewStats.checkedOut?.toLocaleString() || '180'}
-            </div>
+            <RefreshIcon className={cn('size-3.5', locating && 'animate-spin')} />
           </button>
         </div>
+
+        <Badge variant={isCheckedIn ? 'success' : 'neutral'} dot>
+          {isCheckedIn ? 'Checked In' : 'Not Checked In'}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <StatCard
+          variant="inline"
+          label="Working Hours"
+          value={myWorkTimeStats?.hoursText || '0h 00m'}
+          subtext={myWorkTimeStats?.subText || 'Shift not started'}
+          icon={<ClockIcon className={cn('size-5', myWorkTimeStats?.isActive && 'text-success')} />}
+          tone="primary"
+        />
+        <StatCard
+          variant="inline"
+          label="Checked In"
+          value={overviewStats.checkedIn?.toLocaleString() || '4,500'}
+          icon={<CheckIcon className="size-5" />}
+          tone="primary"
+          onClick={() => handleCardFilterToggle('checked-in')}
+          className={cardFilter === 'checked-in' ? 'border-primary bg-primary/5' : ''}
+        />
+        <StatCard
+          variant="inline"
+          label="Not Checked In"
+          value={overviewStats.notCheckedIn?.toLocaleString() || '500'}
+          icon={<AlertIcon className="size-5" />}
+          tone="danger"
+          onClick={() => handleCardFilterToggle('not-checked-in')}
+          className={cardFilter === 'not-checked-in' ? 'border-destructive bg-destructive/5' : ''}
+        />
+        <StatCard
+          variant="inline"
+          label="On Leave"
+          value={overviewStats.onLeave?.toLocaleString() || '456'}
+          icon={<CalendarIcon className="size-5" />}
+          tone="success"
+          onClick={() => handleCardFilterToggle('on-leave')}
+          className={cardFilter === 'on-leave' ? 'border-success bg-success/5' : ''}
+        />
+        <StatCard
+          variant="inline"
+          label="Checked Out"
+          value={overviewStats.checkedOut?.toLocaleString() || '180'}
+          icon={<LogOutIcon className="size-5" />}
+          tone="warning"
+          onClick={() => handleCardFilterToggle('checked-out')}
+          className={cardFilter === 'checked-out' ? 'border-warning bg-warning/5' : ''}
+        />
       </div>
 
       {/* SECTION 3: Tabs Switcher */}
       <Tabs
         tabs={[
-          { id: 'records', label: 'Records', icon: ClockIcon, count: filteredRecords.length },
-          { id: 'requests', label: 'Requests', icon: MailIcon, count: filteredRequests.length },
+          { id: 'records', label: 'Records', count: filteredRecords.length },
+          { id: 'requests', label: 'Requests', count: filteredRequests.length },
         ]}
         activeTab={activeTab}
         onChange={(tId) => { setActiveTab(tId); setSearchParams({ tab: tId }); }}
       />
 
-      {/* TAB 1: Attendance Records (Screenshot 1) */}
+      {/* TAB 1: Attendance records */}
       {activeTab === 'records' && (
-        <Card bodyClassName="p-5">
-          {/* Filters Bar with Increased Gap */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-            <div className="flex flex-wrap items-center gap-3 flex-1">
-              {/* Search by Name / Role / Site */}
-              <div className="relative min-w-[200px] flex-1 max-w-xs">
-                <SearchIcon className="size-4 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
-                <input
-                  type="text"
-                  value={recordSearch}
-                  onChange={(e) => setRecordSearch(e.target.value)}
-                  placeholder="Search staff, role, site..."
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        <div className="space-y-3">
+          <DataToolbar
+            variant="clean"
+            layout="inline"
+            searchValue={recordSearch}
+            onSearchChange={setRecordSearch}
+            searchPlaceholder="Search staff, role, site..."
+            filters={
+              <>
+                <Select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  placeholder=""
+                  className="h-9 w-32 text-xs"
+                  options={[
+                    { value: 'ALL', label: 'All Roles' },
+                    { value: 'Owner', label: 'Owner' },
+                    { value: 'Manager', label: 'Manager' },
+                    { value: 'Supervisor', label: 'Supervisor' },
+                    { value: 'Worker', label: 'Worker' },
+                  ]}
                 />
-              </div>
 
-              {/* Filter by Role */}
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="py-1.5 px-3 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-              >
-                <option value="ALL">All Roles</option>
-                <option value="Owner">Owner</option>
-                <option value="Manager">Manager</option>
-                <option value="Supervisor">Supervisor</option>
-                <option value="Worker">Worker</option>
-              </select>
-
-                            {/* Date Filters: From Date & To Date */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* From Date */}
-                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">From:</span>
-                  <input
-                    type="date"
-                    value={recordFromDate}
-                    onChange={(e) => setRecordFromDate(e.target.value)}
-                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
-                    title="From Date"
-                  />
+                <div className="flex items-center gap-2">
+                  <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
+                    From
+                    <input
+                      type="date"
+                      value={recordFromDate}
+                      onChange={(e) => setRecordFromDate(e.target.value)}
+                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      title="From Date"
+                    />
+                  </label>
+                  <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
+                    To
+                    <input
+                      type="date"
+                      value={recordToDate}
+                      onChange={(e) => setRecordToDate(e.target.value)}
+                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      title="To Date"
+                    />
+                  </label>
+                  {(recordFromDate || recordToDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecordFromDate('');
+                        setRecordToDate('');
+                      }}
+                      className="h-9 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Clear date filter"
+                    >
+                      Clear Dates
+                    </button>
+                  )}
+                  {(recordFromDate !== today || recordToDate !== today) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecordFromDate(today);
+                        setRecordToDate(today);
+                      }}
+                      className="h-9 px-2 text-xs font-medium text-primary hover:text-primary/80 cursor-pointer"
+                      title="Filter to today's records"
+                    >
+                      Today
+                    </button>
+                  )}
                 </div>
 
-                {/* To Date */}
-                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">To:</span>
-                  <input
-                    type="date"
-                    value={recordToDate}
-                    onChange={(e) => setRecordToDate(e.target.value)}
-                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
-                    title="To Date"
-                  />
-                </div>
-
-                {(recordFromDate || recordToDate) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRecordFromDate('');
-                      setRecordToDate('');
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded bg-muted border border-border cursor-pointer transition-colors"
-                    title="Clear date filter"
-                  >
-                    Clear Dates
-                  </button>
-                )}
-
-                {(recordFromDate !== today || recordToDate !== today) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRecordFromDate(today);
-                      setRecordToDate(today);
-                    }}
-                    className="text-[10px] text-primary hover:text-primary/80 px-2 py-1 rounded bg-primary/10 border border-primary/20 font-medium cursor-pointer transition-colors"
-                    title="Filter to today's records"
-                  >
-                    Today
-                  </button>
-                )}
-              </div>
-
-              {/* Active Card Filter Badge */}
-              {cardFilter && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-xs font-semibold text-primary">
-                  <span>
+                {cardFilter && (
+                  <Badge variant="primary" dot>
                     Status:{' '}
                     {cardFilter === 'checked-in'
                       ? 'Checked In'
@@ -1654,475 +1560,422 @@ export function AttendancePage({ defaultTab }) {
                       : cardFilter === 'on-leave'
                       ? 'On Leave'
                       : 'Checked Out'}
-                  </span>
+                    <button
+                      type="button"
+                      onClick={() => setCardFilter(null)}
+                      className="ml-1 p-0.5 hover:bg-primary/20 rounded cursor-pointer"
+                      title="Clear status filter"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </Badge>
+                )}
+
+                {(recordSearch || roleFilter !== 'ALL' || recordFromDate || recordToDate || cardFilter) && (
                   <button
                     type="button"
-                    onClick={() => setCardFilter(null)}
-                    className="p-0.5 hover:bg-primary/20 rounded transition-colors cursor-pointer"
-                    title="Clear status filter"
+                    onClick={() => {
+                      setRecordSearch('');
+                      setRoleFilter('ALL');
+                      setRecordFromDate('');
+                      setRecordToDate('');
+                      setCardFilter(null);
+                    }}
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
                   >
-                    <XIcon className="size-3" />
+                    Clear all
                   </button>
-                </div>
-              )}
-
-              {/* Clear All Filters */}
-              {(recordSearch || roleFilter !== 'ALL' || recordFromDate || recordToDate || cardFilter) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRecordSearch('');
-                    setRoleFilter('ALL');
-                    setRecordFromDate('');
-                    setRecordToDate('');
-                    setCardFilter(null);
-                  }}
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground px-2 py-1 rounded bg-muted border border-border cursor-pointer transition-colors"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
-
-            <div className="text-xs text-muted-foreground shrink-0 font-medium">
-              Showing <span className="font-bold text-foreground">{filteredRecords.length}</span> staff records
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-border bg-card">
-            <table className="w-full text-left text-xs border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Employee</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Assigned Office / Site</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Check-In</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Check-Out</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Location</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Hours</th>
-                  <th className="sticky top-0 z-20 bg-muted border-b border-border p-3 text-right font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground border-b border-border/60">
-                      No attendance records found matching filters.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedRecords.map((r) => (
-                    <tr key={r.id} className="hover:bg-muted/40 transition-colors">
-                      <td className="p-3 border-b border-border/60">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar name={r.userName} size="sm" />
-                          <div>
-                            <div className="font-semibold text-foreground">{r.userName}</div>
-                            <div className="text-[11px] text-muted-foreground">{r.role}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 border-b border-border/60">
-                        <div className="font-medium text-foreground flex items-center gap-1">
-                          <MapPinIcon className="size-3.5 text-primary shrink-0" />
-                          <span>{cleanLocationName(r.site || officeLocation.name)}</span>
-                        </div>
-                        {r.distanceMeters !== null && r.distanceMeters !== undefined && (
-                          <div className="text-[10px] text-muted-foreground mt-0.5">
-                            Distance: <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">{r.distanceMeters}m</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 border-b border-border/60">
-                        <span className="font-mono text-xs font-semibold text-foreground">
-                          {formatIndianTime(r.checkInTime)}
-                        </span>
-                      </td>
-                      <td className="p-3 border-b border-border/60">
-                        <span className="font-mono text-xs font-semibold text-foreground">
-                          {formatIndianTime(r.checkOutTime)}
-                        </span>
-                      </td>
-                      <td className="p-3 border-b border-border/60">
-                        {r.coordinates?.lat && r.coordinates?.lng ? (
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-1 font-medium text-foreground text-[11px]">
-                              <MapPinIcon className="size-3 text-emerald-600 shrink-0" />
-                              <span className="truncate">{cleanLocationName(r.punchLocation || r.site || 'Punch GPS Site')}</span>
-                            </div>
-                            <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
-                              {r.coordinates.lat.toFixed(4)}° N, {r.coordinates.lng.toFixed(4)}° E
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <MapPinIcon className="size-3 text-muted-foreground shrink-0" />
-                            <span>{cleanLocationName(r.site || officeLocation.name || 'Office Location')}</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 font-mono text-[11px] border-b border-border/60">
-                        <span className="text-foreground font-medium">
-                          {calculateWorkingHours(r.checkInTime, r.checkOutTime)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right border-b border-border/60">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* View Button */}
-                          <button
-                            type="button"
-                            onClick={() => setViewTargetRecord(r)}
-                            className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
-                            data-tooltip="View" aria-label="View"
-                          >
-                            <EyeIcon className="size-4" />
-                          </button>
-
-                          {/* Edit Button */}
-                          {isAdminOrManager && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCorrectionTarget(r);
-                                setCorrectionData({
-                                  status: r.status,
-                                  checkInTime: r.checkInTime || '09:00 AM',
-                                  checkOutTime: r.checkOutTime || '06:00 PM',
-                                  reason: r.correctionReason || '',
-                                });
-                              }}
-                              className="p-2 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
-                              data-tooltip="Edit" aria-label="Edit"
-                            >
-                              <EditIcon className="size-4" />
-                            </button>
-                          )}
-
-                          {/* Delete Button */}
-                          {isAdminOrManager && (
-                            <button
-                              type="button"
-                              onClick={() => setRecordPendingDelete(r)}
-                              className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer"
-                              data-tooltip="Delete" aria-label="Delete"
-                            >
-                              <TrashIcon className="size-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
                 )}
-              </tbody>
-            </table>
-          </div>
+              </>
+            }
+          />
 
-            {/* Pagination Controls (10 records per page) */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 py-2.5 bg-card border border-border rounded-xl mt-3">
-              <span className="text-xs text-muted-foreground">
-                Showing <strong className="text-foreground">{(currentPage - 1) * pageSize + (paginatedRecords.length > 0 ? 1 : 0)}</strong> to <strong className="text-foreground">{Math.min(currentPage * pageSize, filteredRecords.length)}</strong> of <strong className="text-foreground">{filteredRecords.length}</strong> staff
-              </span>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  ‹ Previous
-                </Button>
-                <span className="text-xs font-semibold px-2 text-foreground font-mono">
-                  {currentPage} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next ›
-                </Button>
-              </div>
-            </div>
-        </Card>
+          <Table
+            variant="clean"
+            columns={[
+              {
+                key: 'userName',
+                header: 'Employee',
+                render: (r) => (
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={r.userName} size="sm" />
+                    <div>
+                      <div className="font-semibold text-foreground">{r.userName}</div>
+                      <div className="text-[11px] text-muted-foreground">{r.role}</div>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: 'site',
+                header: 'Assigned Office / Site',
+                render: (r) => (
+                  <div>
+                    <div className="font-medium text-foreground flex items-center gap-1">
+                      <MapPinIcon className="size-3.5 text-primary shrink-0" />
+                      <span>{cleanLocationName(r.site || officeLocation.name)}</span>
+                    </div>
+                    {r.distanceMeters !== null && r.distanceMeters !== undefined && (
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Distance: <span className="font-mono text-success font-semibold">{r.distanceMeters}m</span>
+                      </div>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: 'checkInTime',
+                header: 'Check-In',
+                render: (r) => (
+                  <span className="font-mono text-xs font-semibold text-foreground">
+                    {formatIndianTime(r.checkInTime)}
+                  </span>
+                ),
+              },
+              {
+                key: 'checkOutTime',
+                header: 'Check-Out',
+                render: (r) => (
+                  <span className="font-mono text-xs font-semibold text-foreground">
+                    {formatIndianTime(r.checkOutTime)}
+                  </span>
+                ),
+              },
+              {
+                key: 'punchLocation',
+                header: 'Location',
+                render: (r) =>
+                  r.coordinates?.lat && r.coordinates?.lng ? (
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1 font-medium text-foreground text-[11px]">
+                        <MapPinIcon className="size-3 text-success shrink-0" />
+                        <span className="truncate">{cleanLocationName(r.punchLocation || r.site || 'Punch GPS Site')}</span>
+                      </div>
+                      <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                        {r.coordinates.lat.toFixed(4)}° N, {r.coordinates.lng.toFixed(4)}° E
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <MapPinIcon className="size-3 shrink-0" />
+                      <span>{cleanLocationName(r.site || officeLocation.name || 'Office Location')}</span>
+                    </div>
+                  ),
+              },
+              {
+                key: 'hours',
+                header: 'Hours',
+                render: (r) => (
+                  <span className="font-mono text-[11px] text-foreground font-medium">
+                    {calculateWorkingHours(r.checkInTime, r.checkOutTime)}
+                  </span>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Actions',
+                align: 'right',
+                render: (r) => (
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setViewTargetRecord(r)}
+                      className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
+                      aria-label="View"
+                      title="View"
+                    >
+                      <EyeIcon className="size-4" />
+                    </button>
+                    {isAdminOrManager && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCorrectionTarget(r);
+                          setCorrectionData({
+                            status: r.status,
+                            checkInTime: r.checkInTime || '09:00 AM',
+                            checkOutTime: r.checkOutTime || '06:00 PM',
+                            reason: r.correctionReason || '',
+                          });
+                        }}
+                        className="p-2 text-muted-foreground hover:text-warning hover:bg-warning/10 rounded-lg transition-colors cursor-pointer"
+                        aria-label="Edit"
+                        title="Edit"
+                      >
+                        <EditIcon className="size-4" />
+                      </button>
+                    )}
+                    {isAdminOrManager && (
+                      <button
+                        type="button"
+                        onClick={() => setRecordPendingDelete(r)}
+                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer"
+                        aria-label="Delete"
+                        title="Delete"
+                      >
+                        <TrashIcon className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            data={paginatedRecords}
+            keyField="id"
+            emptyTitle="No attendance records found"
+            emptyDescription="No attendance records match the current filters."
+            pagination={{
+              currentPage,
+              totalPages,
+              totalItems: filteredRecords.length,
+              pageSize,
+              onPageChange: setCurrentPage,
+              onPageSizeChange: (size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              },
+            }}
+          />
+        </div>
       )}
 
-      {/* TAB 2: Attendance request Screen */}
+      {/* TAB 2: Attendance requests */}
       {activeTab === 'requests' && (
-        <div className="space-y-4">
-          <Card bodyClassName="p-5 sm:p-6 space-y-4">
-            {/* Header Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
-                  Attendance request
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leadingIcon="plus"
-                  onClick={openRequestModal}
-                >
-                  Request
-                </Button>
-              </div>
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
+                Attendance request
+              </h2>
             </div>
+            <Button
+              variant="primary"
+              size="sm"
+              leadingIcon="plus"
+              onClick={openRequestModal}
+            >
+              Request
+            </Button>
+          </div>
 
-            {/* Filter and Live Search Toolbar */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border border-border">
-              {/* Search Field */}
-              <div className="relative flex-1 min-w-[200px]">
-                <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search by staff name or reason..."
-                  value={requestSearch}
-                  onChange={(e) => setRequestSearch(e.target.value)}
-                  className="w-full pl-9 pr-8 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          <DataToolbar
+            variant="clean"
+            layout="inline"
+            searchValue={requestSearch}
+            onSearchChange={setRequestSearch}
+            searchPlaceholder="Search by staff name or reason..."
+            filters={
+              <>
+                <div className="flex items-center gap-2">
+                  <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
+                    From
+                    <input
+                      type="date"
+                      value={requestFromDate}
+                      onChange={(e) => setRequestFromDate(e.target.value)}
+                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      title="From Date"
+                    />
+                  </label>
+                  <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
+                    To
+                    <input
+                      type="date"
+                      value={requestToDate}
+                      onChange={(e) => setRequestToDate(e.target.value)}
+                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      title="To Date"
+                    />
+                  </label>
+                </div>
+
+                <Select
+                  value={requestTypeFilter}
+                  onChange={(e) => setRequestTypeFilter(e.target.value)}
+                  placeholder=""
+                  className="h-9 w-40 text-xs"
+                  options={[
+                    { value: 'ALL', label: 'All Types' },
+                    { value: 'Punch Regularization', label: 'Punch Regularization' },
+                    { value: 'Missed Punch', label: 'Missed Punch' },
+                    { value: 'Field Duty', label: 'Field Duty' },
+                    { value: 'On-Duty (Site Visit)', label: 'On-Duty (Site Visit)' },
+                    { value: 'Work From Home', label: 'Work From Home' },
+                    { value: 'Other', label: 'Other' },
+                  ]}
                 />
-                {requestSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setRequestSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                  >
-                    <XIcon className="size-3.5" />
-                  </button>
-                )}
-              </div>
 
-              {/* Date Filters, Status Dropdown, Sorting Arrow */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* From Date */}
-                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">From:</span>
-                  <input
-                    type="date"
-                    value={requestFromDate}
-                    onChange={(e) => setRequestFromDate(e.target.value)}
-                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
-                    title="From Date"
-                  />
-                </div>
-
-                {/* To Date */}
-                <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">To:</span>
-                  <input
-                    type="date"
-                    value={requestToDate}
-                    onChange={(e) => setRequestToDate(e.target.value)}
-                    className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer"
-                    title="To Date"
-                  />
-                </div>
-
-                {/* Status Dropdown */}
-                <select
+                <Select
                   value={requestStatusFilter}
                   onChange={(e) => setRequestStatusFilter(e.target.value)}
-                  className="px-3 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium shadow-2xs"
-                  title="Filter by Status"
-                >
-                  <option value="ALL">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
+                  placeholder=""
+                  className="h-9 w-32 text-xs"
+                  options={[
+                    { value: 'ALL', label: 'All Status' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'approved', label: 'Approved' },
+                    { value: 'rejected', label: 'Rejected' },
+                  ]}
+                />
 
-                {/* Sorting Arrow */}
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setRequestSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors cursor-pointer shadow-2xs"
-                  title={requestSortOrder === 'desc' ? 'Showing newest first. Click to sort oldest first.' : 'Showing oldest first. Click to sort newest first.'}
+                  className="h-9 text-xs"
+                  title={
+                    requestSortOrder === 'desc'
+                      ? 'Showing newest first. Click to sort oldest first.'
+                      : 'Showing oldest first. Click to sort newest first.'
+                  }
                 >
                   {requestSortOrder === 'desc' ? (
                     <ArrowDownIcon className="size-3.5 text-primary" />
                   ) : (
                     <ArrowUpIcon className="size-3.5 text-primary" />
                   )}
-                  <span>{requestSortOrder === 'desc' ? 'Newest' : 'Oldest'}</span>
-                </button>
+                  {requestSortOrder === 'desc' ? 'Newest' : 'Oldest'}
+                </Button>
 
-                {/* Reset Filters */}
-                {(requestSearch || requestStatusFilter !== 'ALL' || requestFromDate || requestToDate) && (
+                {(requestSearch || requestStatusFilter !== 'ALL' || requestTypeFilter !== 'ALL' || requestFromDate || requestToDate) && (
                   <Button
                     variant="ghost"
-                    size="xs"
+                    size="sm"
                     onClick={() => {
                       setRequestSearch('');
                       setRequestStatusFilter('ALL');
+                      setRequestTypeFilter('ALL');
                       setRequestFromDate('');
                       setRequestToDate('');
                     }}
-                    className="text-xs text-muted-foreground hover:text-foreground"
+                    className="h-9 text-xs text-muted-foreground hover:text-foreground"
                   >
                     Reset
                   </Button>
                 )}
-              </div>
-            </div>
+              </>
+            }
+          />
 
-            {/* Table Format for Attendance Requests */}
-            <div className="overflow-x-auto rounded-xl border border-border bg-card">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/50 border-b border-border uppercase font-semibold text-[10px] text-muted-foreground tracking-wider">
-                  <tr>
-                    <th className="p-3.5">Person Name</th>
-                    <th className="p-3.5">Reason</th>
-                    <th className="p-3.5 text-center">Status</th>
-                    <th className="p-3.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paginatedRequests.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="p-12 text-center text-muted-foreground">
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="size-12 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
-                            <MailIcon className="size-6 opacity-70" />
-                          </div>
-                          <h4 className="text-sm font-semibold text-foreground">No attendance requests found</h4>
-                          <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                            {requestSearch || requestStatusFilter !== 'ALL' || requestFromDate || requestToDate
-                              ? 'No requests match your current filters. Try resetting the filters.'
-                              : 'No attendance requests submitted yet.'}
-                          </p>
+          <Table
+            variant="clean"
+            columns={[
+              {
+                key: 'employeeName',
+                header: 'Person Name',
+                render: (req) => {
+                  const personName = req.employeeName || req.userName || 'Staff Member';
+                  return (
+                    <div className="flex items-center gap-3 whitespace-nowrap">
+                      <Avatar name={personName} size="sm" />
+                      <div>
+                        <div className="font-semibold text-foreground text-xs sm:text-sm">
+                          {personName}
                         </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedRequests.map((req) => {
-                      const isPending = (req.status || '').toLowerCase() === 'pending';
-                      const isApproved = (req.status || '').toLowerCase() === 'approved';
-                      const isRejected = (req.status || '').toLowerCase() === 'rejected';
-                      const personName = req.employeeName || req.userName || 'Staff Member';
-
-                      return (
-                        <tr key={req.id} className="hover:bg-muted/40 transition-colors">
-                          {/* Person Name */}
-                          <td className="p-3.5 whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              <Avatar name={personName} size="sm" />
-                              <div>
-                                <div className="font-semibold text-foreground text-xs sm:text-sm">
-                                  {personName}
-                                </div>
-                                {req.role && (
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {req.role}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Reason */}
-                          <td className="p-3.5 max-w-xs sm:max-w-md">
-                            <p className="text-foreground text-xs leading-relaxed line-clamp-2" title={req.reason}>
-                              {req.reason}
-                            </p>
-                          </td>
-
-                          {/* Status / Quick Action */}
-                          <td className="p-3.5 text-center whitespace-nowrap">
-                            {isPending ? (
-                              <div className="inline-flex items-center justify-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDecideRequest(req.id, 'approve')}
-                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors cursor-pointer"
-                                  title="Approve Request"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDecideRequest(req.id, 'reject')}
-                                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer"
-                                  title="Reject Request"
-                                >
-                                  Reject
-                                </button>
-                              </div>
-                            ) : isApproved ? (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                                Approved
-                              </span>
-                            ) : isRejected ? (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-destructive/15 text-destructive border border-destructive/30">
-                                Rejected
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border capitalize">
-                                {req.status || 'Unknown'}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Action Buttons: View Details (Eye) and Delete Request (Trash) */}
-                          <td className="p-3.5 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedViewRequest(req)}
-                                className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                                title="View details"
-                              >
-                                <EyeIcon className="size-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteRequest(req.id)}
-                                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                                title="Delete request"
-                              >
-                                <TrashIcon className="size-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls for Requests */}
-            {sortedRequests.length > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 py-2.5 bg-card border border-border rounded-xl mt-3">
-                <span className="text-xs text-muted-foreground">
-                  Showing <strong className="text-foreground">{(requestCurrentPage - 1) * requestPageSize + (paginatedRequests.length > 0 ? 1 : 0)}</strong> to <strong className="text-foreground">{Math.min(requestCurrentPage * requestPageSize, sortedRequests.length)}</strong> of <strong className="text-foreground">{sortedRequests.length}</strong> requests
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={requestCurrentPage <= 1}
-                    onClick={() => setRequestCurrentPage((p) => Math.max(1, p - 1))}
-                  >
-                    ‹ Previous
-                  </Button>
-                  <span className="text-xs font-semibold px-2 text-foreground font-mono">
-                    {requestCurrentPage} / {requestTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={requestCurrentPage >= requestTotalPages}
-                    onClick={() => setRequestCurrentPage((p) => Math.min(requestTotalPages, p + 1))}
-                  >
-                    Next ›
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Card>
+                        {req.role && (
+                          <div className="text-[11px] text-muted-foreground">{req.role}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                },
+              },
+              {
+                key: 'reason',
+                header: 'Reason',
+                render: (req) => (
+                  <p className="text-foreground text-xs leading-relaxed line-clamp-2 max-w-md" title={req.reason}>
+                    {req.reason}
+                  </p>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                align: 'center',
+                render: (req) => {
+                  const status = (req.status || '').toLowerCase();
+                  if (status === 'pending') {
+                    return (
+                      <div className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleDecideRequest(req.id, 'approve')}
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-success/10 text-success border border-success/30 hover:bg-success/20 transition-colors cursor-pointer"
+                          title="Approve Request"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDecideRequest(req.id, 'reject')}
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer"
+                          title="Reject Request"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    );
+                  }
+                  if (status === 'approved') {
+                    return <Badge variant="success" dot>Approved</Badge>;
+                  }
+                  if (status === 'rejected') {
+                    return <Badge variant="danger" dot>Rejected</Badge>;
+                  }
+                  return <Badge variant="neutral">{req.status || 'Unknown'}</Badge>;
+                },
+              },
+              {
+                key: 'actions',
+                header: 'Action',
+                align: 'right',
+                render: (req) => (
+                  <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedViewRequest(req)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                      title="View details"
+                    >
+                      <EyeIcon className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRequest(req.id)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                      title="Delete request"
+                    >
+                      <TrashIcon className="size-4" />
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+            data={paginatedRequests}
+            keyField="id"
+            emptyTitle="No attendance requests found"
+            emptyDescription={
+              requestSearch || requestStatusFilter !== 'ALL' || requestTypeFilter !== 'ALL' || requestFromDate || requestToDate
+                ? 'No requests match your current filters. Try resetting the filters.'
+                : 'No attendance requests submitted yet.'
+            }
+            pagination={
+              sortedRequests.length > 0
+                ? {
+                    currentPage: requestCurrentPage,
+                    totalPages: requestTotalPages,
+                    totalItems: sortedRequests.length,
+                    pageSize: requestPageSize,
+                    onPageChange: setRequestCurrentPage,
+                    onPageSizeChange: (size) => {
+                      setRequestPageSize(size);
+                      setRequestCurrentPage(1);
+                    },
+                  }
+                : undefined
+            }
+          />
         </div>
       )}
 
@@ -2403,159 +2256,116 @@ export function AttendancePage({ defaultTab }) {
         </form>
       </Modal>
 
-      {/* MODAL 2: Punch Attendance Modal (Screenshot 2) */}
+      {/* MODAL 2: Mark attendance for staff */}
       <Modal
         isOpen={isMarkStaffModalOpen}
         onClose={() => setIsMarkStaffModalOpen(false)}
-        title="Punch Attendance"
-      >
-        <form onSubmit={handleMarkForStaffSubmit} className="space-y-4 text-xs">
-          {/* Red Alert / Error Box */}
-          {staffMarkSubmitError && (
-            <div
-              role="alert"
-              className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-start gap-2.5 animate-in fade-in duration-200"
-            >
-              <AlertCircleIcon className="size-4 shrink-0 mt-0.5 text-destructive" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-destructive">{staffMarkSubmitError}</p>
-                {Object.values(staffMarkErrors).filter(Boolean).length > 0 && (
-                  <ul className="mt-1 list-disc list-inside space-y-0.5 text-[11px] opacity-90 text-destructive">
-                    {Object.entries(staffMarkErrors)
-                      .filter(([, msg]) => Boolean(msg))
-                      .map(([key, msg]) => (
-                        <li key={key}>{msg}</li>
-                      ))}
-                  </ul>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setStaffMarkSubmitError(null)}
-                className="shrink-0 text-destructive/70 hover:text-destructive p-0.5 transition-colors cursor-pointer"
-                aria-label="Dismiss error"
-              >
-                <XIcon className="size-3.5" />
-              </button>
-            </div>
-          )}
-          {/* Punch In / Punch Out Segmented Switcher */}
-          <div className="inline-flex p-1 rounded-xl bg-muted/70 border border-border/60">
-            <button
-              type="button"
-              onClick={() => setStaffMarkForm((prev) => ({ ...prev, punchType: 'in' }))}
-              className={cn(
-                'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
-                staffMarkForm.punchType === 'in'
-                  ? 'bg-card text-foreground shadow-xs border border-border/80'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <LogInIcon className="size-4" />
-              <span>Punch In</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setStaffMarkForm((prev) => ({ ...prev, punchType: 'out' }))}
-              className={cn(
-                'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
-                staffMarkForm.punchType === 'out'
-                  ? 'bg-card text-foreground shadow-xs border border-border/80'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <LogOutIcon className="size-4" />
-              <span>Punch Out</span>
-            </button>
-          </div>
-
-          {/* Staff Member Dropdown (Only show Admin role) */}
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              STAFF MEMBER
-            </label>
-            <select
-              value={staffMarkForm.userId}
-              onChange={(e) => {
-                setStaffMarkForm({ ...staffMarkForm, userId: e.target.value });
-                if (staffMarkErrors.userId) setStaffMarkErrors((p) => ({ ...p, userId: null }));
-                if (staffMarkSubmitError) setStaffMarkSubmitError(null);
-              }}
-              className={cn(
-                'w-full px-3.5 py-2.5 border rounded-xl text-foreground font-medium bg-card focus:outline-none text-xs sm:text-sm transition-all cursor-pointer',
-                staffMarkErrors.userId
-                  ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
-                  : 'border-border focus:ring-2 focus:ring-primary/20 focus:border-primary'
-              )}
-            >
-              <option value="" disabled>Select staff...</option>
-              {staffOptions.map((staff) => (
-                <option key={staff.id} value={staff.id}>
-                  {staff.isAdmin ? `${staff.name} (Admin)` : staff.name}
-                </option>
-              ))}
-            </select>
-            {staffMarkErrors.userId && (
-              <p className="text-[11px] font-medium text-destructive mt-1">{staffMarkErrors.userId}</p>
-            )}
-          </div>
-
-          {/* Attendance Date Row */}
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              SELECT ATTENDANCE DATE
-            </label>
-            <div className="relative">
-              <input
-                type="date"
-                value={staffMarkForm.date}
-                onChange={(e) => setStaffMarkForm({ ...staffMarkForm, date: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-border rounded-xl text-foreground font-medium bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs sm:text-sm transition-all cursor-pointer"
-              />
-            </div>
-          </div>
-
-          {/* Punch Time Row */}
-          <TimePicker
-            label={staffMarkForm.punchType === 'out' ? 'CHECK-OUT' : 'CHECK-IN'}
-            value={staffMarkForm.punchTime}
-            onChange={(val) => {
-              setStaffMarkForm((prev) => ({ ...prev, punchTime: val }));
-              if (staffMarkErrors?.punchTime) setStaffMarkErrors((p) => ({ ...p, punchTime: null }));
-              if (staffMarkSubmitError) setStaffMarkSubmitError(null);
-            }}
-            error={staffMarkErrors?.punchTime}
-            required
-          />
-
-          {/* Admin Override Alert */}
-          <div className="p-3.5 rounded-xl border border-warning/30 bg-warning/10 text-foreground flex items-start gap-2.5">
-            <ShieldIcon className="size-4 text-warning shrink-0 mt-0.5" />
-            <p className="text-xs text-foreground font-medium leading-relaxed">
-              <strong className="text-warning font-semibold">Admin/Manager override:</strong> Location check bypassed for manual attendance.
-            </p>
-          </div>
-
-          {/* Modal Footer Actions */}
-          <div className="flex items-center justify-between gap-3 pt-2">
+        title="Mark attendance for staff"
+        subtitle="Record a manual punch on behalf of a team member"
+        size="lg"
+        footer={
+          <>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => setIsMarkStaffModalOpen(false)}
-              className="flex-1"
             >
               Cancel
             </Button>
             <Button
               type="submit"
+              form="mark-staff-form"
               variant="primary"
               size="sm"
-              className="flex-1"
               leadingIcon="check"
             >
               {staffMarkForm.punchType === 'out' ? 'Punch Out' : 'Punch In'}
             </Button>
+          </>
+        }
+      >
+        <form id="mark-staff-form" onSubmit={handleMarkForStaffSubmit} className="space-y-5">
+          {staffMarkSubmitError && (
+            <Alert
+              type="danger"
+              title="Could not mark attendance"
+              onDismiss={() => setStaffMarkSubmitError(null)}
+            >
+              <p>{staffMarkSubmitError}</p>
+              {Object.values(staffMarkErrors).filter(Boolean).length > 0 && (
+                <ul className="mt-1 list-disc list-inside space-y-0.5">
+                  {Object.entries(staffMarkErrors)
+                    .filter(([, msg]) => Boolean(msg))
+                    .map(([key, msg]) => (
+                      <li key={key}>{msg}</li>
+                    ))}
+                </ul>
+              )}
+            </Alert>
+          )}
+
+          <Tabs
+            tabs={[
+              { id: 'in', label: 'Punch In', icon: LogInIcon },
+              { id: 'out', label: 'Punch Out', icon: LogOutIcon },
+            ]}
+            activeTab={staffMarkForm.punchType}
+            onChange={(punchType) =>
+              setStaffMarkForm((prev) => ({ ...prev, punchType }))
+            }
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2 space-y-1.5">
+              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Staff member
+              </label>
+              <Select
+                value={staffMarkForm.userId}
+                onChange={(e) => {
+                  setStaffMarkForm({ ...staffMarkForm, userId: e.target.value });
+                  if (staffMarkErrors.userId) setStaffMarkErrors((p) => ({ ...p, userId: null }));
+                  if (staffMarkSubmitError) setStaffMarkSubmitError(null);
+                }}
+                error={staffMarkErrors.userId}
+                placeholder="Select staff..."
+                options={staffOptions.map((staff) => ({
+                  value: staff.id,
+                  label: staff.isAdmin ? `${staff.name} (Admin)` : staff.name,
+                }))}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Attendance date
+              </label>
+              <Input
+                type="date"
+                value={staffMarkForm.date}
+                onChange={(e) => setStaffMarkForm({ ...staffMarkForm, date: e.target.value })}
+              />
+            </div>
+
+            <TimePicker
+              label={staffMarkForm.punchType === 'out' ? 'Check-out time' : 'Check-in time'}
+              value={staffMarkForm.punchTime}
+              onChange={(val) => {
+                setStaffMarkForm((prev) => ({ ...prev, punchTime: val }));
+                if (staffMarkErrors?.punchTime) setStaffMarkErrors((p) => ({ ...p, punchTime: null }));
+                if (staffMarkSubmitError) setStaffMarkSubmitError(null);
+              }}
+              error={staffMarkErrors?.punchTime}
+              required
+            />
+          </div>
+
+          <div className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-3">
+            <ShieldIcon className="size-4 text-warning shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Location verification is bypassed for manual punches. The entry will be saved against the selected staff member.
+            </p>
           </div>
         </form>
       </Modal>

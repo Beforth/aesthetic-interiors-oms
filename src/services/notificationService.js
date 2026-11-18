@@ -1,4 +1,6 @@
 import { ROLES } from '../config/roles';
+import { apiClient } from './apiClient';
+import { withBackend } from './serviceMode';
 
 const STORAGE_KEY = 'osm_notifications_v2';
 const EVENT_NAME = 'osm_notifications_updated';
@@ -429,7 +431,137 @@ export function addNotification({ title, description, category = 'attendance', b
   return newRecord;
 }
 
-export const notificationService = {
+// ---------------------------------------------------------------------------
+// Live (backend) implementation. The page keeps its friendlier category names,
+// so they are translated on the way to the API and back again on each row.
+// ---------------------------------------------------------------------------
+
+const NOTIFICATIONS_URL = '/notifications/';
+
+const CATEGORY_ALIASES = {
+  leads: 'announcements',
+  shifts: 'announcements',
+  expenses: 'payments',
+  payroll: 'dsr',
+};
+
+const REVERSE_CATEGORY_ALIASES = {
+  payments: 'expenses',
+  dsr: 'payroll',
+};
+
+const BADGE_CATEGORY_HINTS = {
+  leads: 'leads',
+  shifts: 'shifts',
+};
+
+const CATEGORY_PERMISSIONS = {
+  attendance: 'notifications.attendance',
+  shifts: 'notifications.shifts',
+  tasks: 'notifications.tasks',
+  stages: 'notifications.stages',
+  dsr: 'notifications.dsr',
+  expenses: 'notifications.payments',
+  payments: 'notifications.payments',
+  leave: 'notifications.leave',
+  leads: 'notifications.leads',
+  announcements: 'notifications.announcements',
+};
+
+/** The API only stores native categories; the page's older names are aliases. */
+function toBackendCategory(category) {
+  if (!category || category === 'all') return undefined;
+  return CATEGORY_ALIASES[category] || category;
+}
+
+/** Same readable format as the sample rows, e.g. "30 Oct 2026, 06:20 pm". */
+function formatNotificationTime(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : '';
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const hours = date.getHours();
+  const h12 = hours % 12 || 12;
+  return `${pad(date.getDate())} ${months[date.getMonth()]} ${date.getFullYear()}, ${pad(h12)}:${pad(date.getMinutes())} ${hours >= 12 ? 'pm' : 'am'}`;
+}
+
+/** Backend row -> the shape the existing page rows already use. */
+function normalizeNotification(row) {
+  const storedCategory = row?.category || row?.kind || 'announcements';
+  const badge = row?.badge || '';
+  const badgeHint = badge.toLowerCase();
+  const category =
+    REVERSE_CATEGORY_ALIASES[storedCategory] ||
+    (storedCategory === 'announcements' && BADGE_CATEGORY_HINTS[badgeHint]
+      ? BADGE_CATEGORY_HINTS[badgeHint]
+      : storedCategory);
+  const timestamp = new Date(row?.time).getTime();
+
+  return {
+    id: row?.id,
+    title: row?.title || '',
+    category,
+    permission: `notifications.${CATEGORY_ALIASES[category] || category}`,
+    kind: row?.kind || storedCategory,
+    badge,
+    badgeVariant: row?.badgeVariant || 'secondary',
+    description: row?.description || '',
+    time: formatNotificationTime(row?.time),
+    timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+    unread: Boolean(row?.unread),
+    path: row?.path || '',
+  };
+}
+
+/** Backend rows have numeric ids; the sample rows have `notif-*` ids. */
+function isBackendId(id) {
+  return /^\d+$/.test(String(id));
+}
+
+/** Same permission rule the mock applies, but to rows that came from the API. */
+function filterVisibleNotifications(list, currentUser, hasPermission) {
+  if (!currentUser) return [];
+  const isOwner =
+    currentUser?.role === ROLES.ADMIN ||
+    currentUser?.role === 'owner' ||
+    currentUser?.role === 'admin';
+  if (isOwner) return list;
+
+  return list.filter((n) => {
+    if (!hasPermission || typeof hasPermission !== 'function') return true;
+    if (n.permission) return hasPermission(n.permission);
+    const perm = CATEGORY_PERMISSIONS[n.category];
+    return perm ? hasPermission(perm) : true;
+  });
+}
+
+async function fetchBackendRows() {
+  const data = await apiClient.get(NOTIFICATIONS_URL);
+  return Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
+}
+
+// A successful clear in this session means an empty reply is genuinely empty;
+// without this, the local sample rows would come straight back after "Delete All".
+let backendFeedCleared = false;
+
+/** Use the server feed when it has rows; otherwise keep the local sample data. */
+async function loadBackendNotifications(currentUser, hasPermission) {
+  try {
+    const rows = await fetchBackendRows();
+    if (rows.length > 0) {
+      backendFeedCleared = false;
+      return filterVisibleNotifications(rows.map(normalizeNotification), currentUser, hasPermission);
+    }
+    if (backendFeedCleared) return [];
+  } catch (error) {
+    console.warn('Notifications backend unavailable; using local data', error);
+  }
+  return filterVisibleNotifications(getStoredNotifications(), currentUser, hasPermission);
+}
+
+const mockNotificationService = {
   getStoredNotifications,
   getVisibleNotifications,
   markNotificationAsRead,
@@ -439,7 +571,70 @@ export const notificationService = {
   deleteAllNotifications,
   addAnnouncement,
   addNotification,
-  EVENT_NAME,
 };
+
+const liveNotificationService = {
+  async getVisibleNotifications(currentUser, hasPermission) {
+    return loadBackendNotifications(currentUser, hasPermission);
+  },
+
+  async markNotificationAsRead(id) {
+    if (isBackendId(id)) {
+      const updated = await apiClient.post(`${NOTIFICATIONS_URL}${id}/read/`, {});
+      // Keep any matching local fallback row in step as well.
+      mockNotificationService.markNotificationAsRead(id);
+      return updated ? normalizeNotification(updated) : updated;
+    }
+    return mockNotificationService.markNotificationAsRead(id);
+  },
+
+  async markAllNotificationsAsRead(category = null) {
+    const backendCategory = toBackendCategory(category);
+    const result = await apiClient.post(
+      `${NOTIFICATIONS_URL}read-all/`,
+      backendCategory ? { category: backendCategory } : {}
+    );
+    mockNotificationService.markAllNotificationsAsRead(category);
+    return result;
+  },
+
+  async deleteNotification(id) {
+    if (isBackendId(id)) {
+      await apiClient.delete(`${NOTIFICATIONS_URL}${id}/`);
+      backendFeedCleared = true;
+    }
+    return mockNotificationService.deleteNotification(id);
+  },
+
+  async deleteNotifications(ids = []) {
+    const backendIds = ids.filter(isBackendId);
+    if (backendIds.length > 0) {
+      await apiClient.post(`${NOTIFICATIONS_URL}clear/`, { ids: backendIds.map(Number) });
+      backendFeedCleared = true;
+    }
+    return mockNotificationService.deleteNotifications(ids);
+  },
+
+  async deleteAllNotifications(category = null) {
+    const backendCategory = toBackendCategory(category);
+    await apiClient.post(`${NOTIFICATIONS_URL}clear/`, backendCategory ? { category: backendCategory } : {});
+    backendFeedCleared = true;
+    return mockNotificationService.deleteAllNotifications(category);
+  },
+
+  async addAnnouncement({ title, description, category = 'announcements' }) {
+    return apiClient.post(`${NOTIFICATIONS_URL}announcements/`, {
+      title: (title || '').trim(),
+      description: (description || '').trim(),
+      // The backend has no `leads` alias, so it is sent as an announcement.
+      category: toBackendCategory(category) || 'announcements',
+    });
+  },
+};
+
+export const notificationService = withBackend(mockNotificationService, liveNotificationService);
+
+// withBackend wraps every key in a function, so re-attach the plain event name.
+notificationService.EVENT_NAME = EVENT_NAME;
 
 export default notificationService;

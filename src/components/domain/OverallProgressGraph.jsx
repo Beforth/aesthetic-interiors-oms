@@ -42,7 +42,7 @@ export function OverallProgressGraph({
       <div className="flex items-center justify-between pb-2 border-b border-border/80 relative z-10">
         <div>
           <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-            <span className={cn('w-2.5 h-2.5 rounded-full transition-all', previewProjectName ? 'bg-indigo-600 animate-ping' : 'bg-primary animate-pulse')} />
+            <span className={cn('size-2.5 rounded-full transition-all', previewProjectName ? 'bg-primary animate-ping' : 'bg-primary animate-pulse')} />
             <span>{previewProjectName ? 'Project Progress Preview' : 'Overall Progress'}</span>
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -50,7 +50,7 @@ export function OverallProgressGraph({
           </p>
         </div>
         <span className={cn('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border transition-colors',
-          previewProjectName ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-primary/10 text-primary border-primary/20'
+          previewProjectName ? 'bg-primary/20 text-primary border-primary/30' : 'bg-primary/10 text-primary border-primary/20'
         )}>
           {previewProjectName ? 'Project Preview' : 'Live Portfolio'}
         </span>

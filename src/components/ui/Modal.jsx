@@ -80,6 +80,7 @@ export function Modal({
               ariaLabel="Close modal"
               size="sm"
               onClick={onClose}
+              data-no-tooltip
               className="-mr-1 -mt-1 text-muted-foreground hover:text-text-main"
             />
           </div>

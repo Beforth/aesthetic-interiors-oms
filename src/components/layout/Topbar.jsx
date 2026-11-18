@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { navigationItems } from '../../config/navigation';
 import { projectService } from '../../services/projectService';
 import { clientService } from '../../services/clientService';
 import { taskService } from '../../services/taskService';
@@ -12,9 +11,7 @@ import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
 import { SidebarTrigger } from '../ui/sidebar';
 import TaskAllocationModal from '../common/TaskAllocationModal';
-import { XIcon, CheckIcon, TrashIcon, LockIcon, EyeIcon, EyeOffIcon } from '../ui/icons';
 import Modal from '../ui/Modal';
-import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { useToast } from '../../context/ToastContext';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -30,9 +27,7 @@ export function Topbar({ onToggleMobileMenu }) {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const notificationContainerRef = useRef(null);
-  const [notifications, setNotifications] = useNotifications([
+  const [notifications] = useNotifications([
     {
       id: 'n1',
       title: 'Rohit Kumar punched in',
@@ -517,125 +512,19 @@ export function Topbar({ onToggleMobileMenu }) {
 
         {/* Right Section: Notifications, Avatar & Logout Icon */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Notification Bell with Active Panel */}
-          <div ref={notificationContainerRef} className="relative">
+          {/* Notifications — the bell opens the full notifications page */}
+          <div className="relative">
             <IconButton
               icon="bell"
               size="sm"
               ariaLabel="View notifications"
-              onClick={() => setIsNotificationsOpen((prev) => !prev)}
+              onClick={() => navigate('/notifications')}
               className="cursor-pointer"
             />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
                 {unreadCount}
               </span>
-            )}
-
-            {/* Notification Panel Dropdown */}
-            {isNotificationsOpen && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-border/60 animate-fadeIn">
-                <div className="p-3 bg-slate-50 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-text-main">Notifications</span>
-                    {unreadCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground font-mono">
-                        {unreadCount} new
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    {unreadCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
-                        }
-                        className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                      >
-                        Mark all read
-                      </button>
-                    )}
-                    {notifications.length > 0 && (
-                      <button
-                        type="button"
-                        title="Clear all notifications"
-                        onClick={() => setNotifications([])}
-                        className="text-[11px] font-semibold text-text-muted hover:text-destructive flex items-center gap-1 cursor-pointer transition-colors"
-                      >
-                        <TrashIcon className="size-3" />
-                        <span>Clear all</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="max-h-80 overflow-y-auto divide-y divide-border/40">
-                  {notifications.length === 0 ? (
-                    <div className="py-8 px-4 text-center">
-                      <CheckIcon className="size-6 text-emerald-500 mx-auto mb-1.5" />
-                      <p className="text-xs font-semibold text-text-main">No notifications</p>
-                      <p className="text-[11px] text-text-muted mt-0.5">You're all caught up!</p>
-                    </div>
-                  ) : (
-                    notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        onClick={() => {
-                          setNotifications((prev) =>
-                            prev.map((item) => (item.id === n.id ? { ...item, unread: false } : item))
-                          );
-                          setIsNotificationsOpen(false);
-                          navigate(n.path);
-                        }}
-                        className={`p-3 hover:bg-slate-50 transition-colors flex items-start gap-3 cursor-pointer group relative ${
-                          n.unread ? 'bg-primary/5' : ''
-                        }`}
-                      >
-                        <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border border-border/60 ${n.iconColor}`}>
-                          <Icon name={n.icon} size={15} />
-                        </div>
-                        <div className="flex-1 min-w-0 pr-2">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className={`text-xs truncate ${n.unread ? 'font-bold text-text-main' : 'font-medium text-text-muted'}`}>
-                              {n.title}
-                            </span>
-                            <span className="text-[10px] text-text-muted shrink-0">{n.time}</span>
-                          </div>
-                          <p className="text-[11px] text-text-muted mt-0.5 truncate">{n.description}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0 self-center">
-                          {n.unread && <span className="w-2 h-2 rounded-full bg-primary" />}
-                          <button
-                            type="button"
-                            title="Dismiss notification"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setNotifications((prev) => prev.filter((item) => item.id !== n.id));
-                            }}
-                            className="size-5 rounded flex items-center justify-center text-text-muted hover:text-destructive hover:bg-slate-200/70 transition-colors cursor-pointer"
-                          >
-                            <XIcon className="size-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="p-2.5 text-center bg-slate-50 border-t border-border/60">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsNotificationsOpen(false);
-                      navigate('/notifications');
-                    }}
-                    className="text-xs font-semibold text-primary hover:underline cursor-pointer"
-                  >
-                    View All Notifications & Updates →
-                  </button>
-                </div>
-              </div>
             )}
           </div>
 

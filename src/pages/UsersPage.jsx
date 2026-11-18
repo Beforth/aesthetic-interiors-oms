@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatDate } from '../utils/formatters';
 import { validatePhone, sanitizePhone, validateEmail, validateRequired, validatePassword } from '../utils/validators';
+import { usePagination } from '../hooks/usePagination';
 
 export function formatDobToPassword(dob) {
   if (!dob) return '';
@@ -126,7 +127,7 @@ export function UsersPage() {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
 
   // Confirm dialog state for deactivation
   const [confirmTarget, setConfirmTarget] = useState(null);
@@ -173,6 +174,8 @@ export function UsersPage() {
     () => roles.map((role) => ({ value: role.key, label: role.label })),
     [roles]
   );
+
+  const rolePager = usePagination(roles);
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
@@ -596,13 +599,12 @@ export function UsersPage() {
         ]}
         activeTab={activeTab}
         onChange={setActiveTab}
-        className="bg-surface rounded-t border px-2"
       />
 
       {activeTab === 'directory' ? (
         <>
           {/* Filter and Search Bar */}
-          <Card>
+          <div className="py-2">
             <div className="flex flex-col sm:flex-row items-center gap-3">
               <div className="flex-1 w-full">
                 <SearchInput
@@ -625,20 +627,8 @@ export function UsersPage() {
                   ]}
                 />
               </div>
-
-              <div className="w-full sm:w-36 shrink-0">
-                <Select
-                  value={pageSize}
-                  onChange={(e) => setPageSize(Number(e.target.value))}
-                  options={[
-                    { value: 5, label: '5 per page' },
-                    { value: 10, label: '10 per page' },
-                    { value: 20, label: '20 per page' },
-                  ]}
-                />
-              </div>
             </div>
-          </Card>
+          </div>
 
           {/* Users Table */}
           <Table
@@ -653,6 +643,10 @@ export function UsersPage() {
               totalItems: filteredUsers.length,
               pageSize,
               onPageChange: setCurrentPage,
+              onPageSizeChange: (size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              },
             }}
           />
         </>
@@ -671,7 +665,7 @@ export function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {roles.map((role) => (
+                {rolePager.paginatedItems.map((role) => (
                   <tr key={role.key} className="border-b border-border last:border-0 align-top">
                     <td className="py-3 pr-4">
                       <div className="font-semibold text-text-main">{role.label}</div>
@@ -724,6 +718,11 @@ export function UsersPage() {
               </tbody>
             </table>
           </div>
+          {Array.isArray(roles) && roles.length > 0 && (
+            <div className="border-t border-border px-4 py-3">
+              <Pagination {...rolePager.pagination} />
+            </div>
+          )}
         </Card>
       ) : null}
 

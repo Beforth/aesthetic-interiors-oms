@@ -149,7 +149,6 @@ export function ComponentsShowcasePage() {
         tabs={showcaseTabs}
         activeTab={activeTab}
         onChange={setActiveTab}
-        className="bg-surface rounded-t border px-2"
       />
 
       {/* TAB 1: COLOR PALETTE & CONTRAST */}

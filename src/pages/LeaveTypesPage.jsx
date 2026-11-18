@@ -10,6 +10,8 @@ import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { Textarea } from '../components/ui/Textarea';
 import { SearchIcon, PlusIcon, EditIcon, TrashIcon, SortIcon, ArrowUpDownIcon } from '../components/ui/icons';
+import Pagination from '../components/ui/Pagination';
+import { usePagination } from '../hooks/usePagination';
 
 /**
  * Leave Types Management Page
@@ -41,7 +43,8 @@ export function LeaveTypesPage() {
   });
   const [formErrors, setFormErrors] = useState({});
 
-  // Fetch initial leave types
+  // Fetch initial leave types on mount. The service reads GET /leave/type-definitions/ in live
+  // mode and falls back to the full local sample list when the backend is empty or unreachable.
   const fetchTypes = async () => {
     try {
       setLoading(true);
@@ -91,6 +94,9 @@ export function LeaveTypesPage() {
     });
     return list;
   }, [filteredTypes, sortField, sortAsc]);
+
+  // Client-side pagination (10 / 25 / 30 rows per page, default 10)
+  const pager = usePagination(sortedTypes);
 
   const handleToggleSort = (field) => {
     if (sortField === field) {
@@ -148,6 +154,8 @@ export function LeaveTypesPage() {
     if (Object.keys(errors).length > 0) return;
 
     try {
+      // The service writes to /leave/type-definitions/ when the backend is reachable and keeps
+      // the localStorage implementation as a fallback for offline/mock use.
       if (editingType) {
         await attendanceService.updateLeaveType(editingType.id, {
           ...formData,
@@ -176,6 +184,7 @@ export function LeaveTypesPage() {
   const handleConfirmDelete = async () => {
     if (!deletingType) return;
     try {
+      // The service deletes from /leave/type-definitions/ when the backend is reachable.
       await attendanceService.deleteLeaveType(deletingType.id);
       toast.success(`Leave type "${deletingType.name}" deleted`);
       setDeletingType(null);
@@ -205,7 +214,7 @@ export function LeaveTypesPage() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-border bg-card shadow-2xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 py-2">
         {/* Search */}
         <div className="relative flex-1 min-w-[220px]">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
@@ -290,7 +299,7 @@ export function LeaveTypesPage() {
                   </td>
                 </tr>
               ) : (
-                sortedTypes.map((lt) => (
+                pager.paginatedItems.map((lt) => (
                   <tr
                     key={lt.id}
                     className="hover:bg-muted/30 transition-colors"
@@ -363,28 +372,12 @@ export function LeaveTypesPage() {
           </table>
         </div>
 
-        {/* Table Footer / Counter */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/10 text-xs text-muted-foreground">
-          <span>
-            Showing {sortedTypes.length > 0 ? `1-${sortedTypes.length}` : '0'} of {sortedTypes.length} types
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled
-              className="h-7 w-7 rounded-md border border-border bg-background flex items-center justify-center opacity-40 cursor-not-allowed text-xs"
-            >
-              &lt;
-            </button>
-            <button
-              type="button"
-              disabled
-              className="h-7 w-7 rounded-md border border-border bg-background flex items-center justify-center opacity-40 cursor-not-allowed text-xs"
-            >
-              &gt;
-            </button>
+        {/* Table Footer / Pagination */}
+        {sortedTypes.length > 0 && (
+          <div className="border-t border-border bg-muted/10 px-4 py-3">
+            <Pagination {...pager.pagination} />
           </div>
-        </div>
+        )}
       </div>
 
       {/* Add / Edit Leave Type Modal */}
