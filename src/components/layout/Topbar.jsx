@@ -579,7 +579,7 @@ export function Topbar({ onToggleMobileMenu }) {
               className="cursor-pointer"
             />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
                 {unreadCount}
               </span>
             )}
