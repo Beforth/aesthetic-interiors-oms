@@ -444,7 +444,7 @@ export function NotificationsPage() {
                       <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80 mb-1">
                         <span>{notif.category || 'update'}</span>
                         <span className="size-0.5 rounded-full bg-muted-foreground/50" />
-                        <span className="font-mono normal-case tracking-normal">{notif.time}</span>
+                        <span className="normal-case tracking-normal">{notif.time}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span
