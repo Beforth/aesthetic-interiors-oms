@@ -167,14 +167,33 @@ export function AgenciesPage() {
     const updated = saveCustomTrade(tradeObj);
     setCustomTrades(updated);
     setFormData((prev) => {
-      const alreadyAdded = prev.trade === trimmed || (prev.additionalTrades || []).includes(trimmed);
-      return alreadyAdded
-        ? prev
-        : { ...prev, additionalTrades: [...(prev.additionalTrades || []), trimmed] };
+      // Picking "+ Add" from the dropdown leaves the placeholder selected; replace it
+      // with the real category once it has been created. The side "+" keeps the
+      // current primary trade and only appends an extra one.
+      const trade = prev.trade === ADD_TRADE_OPTION ? trimmed : prev.trade;
+      const alreadyAdded = trade === trimmed || (prev.additionalTrades || []).includes(trimmed);
+      return {
+        ...prev,
+        trade,
+        additionalTrades: alreadyAdded
+          ? prev.additionalTrades || []
+          : [...(prev.additionalTrades || []), trimmed],
+      };
     });
     setNewTradeName('');
     setIsAddTradeModalOpen(false);
     toast.success(`Trade category "${trimmed}" added. Use + again to add more.`);
+  };
+
+  const closeAddTradeModal = () => {
+    // Cancelling after choosing "+ Add" must not keep the placeholder as the trade.
+    setFormData((prev) =>
+      prev.trade === ADD_TRADE_OPTION
+        ? { ...prev, trade: TRADE_OPTIONS[0]?.value || 'Ceiling' }
+        : prev
+    );
+    setNewTradeName('');
+    setIsAddTradeModalOpen(false);
   };
 
   // Full Page Form view state instead of cramped popup
@@ -1127,7 +1146,7 @@ export function AgenciesPage() {
         {/* Add New Trade Category Modal (in form view) */}
         <Modal
           isOpen={isAddTradeModalOpen}
-          onClose={() => setIsAddTradeModalOpen(false)}
+          onClose={closeAddTradeModal}
           title="Add New Trade Category"
           size="sm"
           footer={
@@ -1135,7 +1154,7 @@ export function AgenciesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsAddTradeModalOpen(false)}
+                onClick={closeAddTradeModal}
               >
                 Cancel
               </Button>
@@ -1617,7 +1636,7 @@ export function AgenciesPage() {
       {/* Add New Trade Category Modal (Directory view) */}
       <Modal
         isOpen={isAddTradeModalOpen}
-        onClose={() => setIsAddTradeModalOpen(false)}
+        onClose={closeAddTradeModal}
         title="Add New Trade Category"
         size="sm"
         footer={
@@ -1625,7 +1644,7 @@ export function AgenciesPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsAddTradeModalOpen(false)}
+              onClick={closeAddTradeModal}
             >
               Cancel
             </Button>
