@@ -292,6 +292,18 @@ const mockAttendanceService = {
     }, 'Office location fetched');
   },
 
+  /** The rules used to pre-fill timings in the report drawers. */
+  async getAttendanceSettings() {
+    const office = getStoredOfficeLocation();
+    return {
+      shiftStart: office.officeStartTime || '09:30',
+      shiftEnd: office.officeEndTime || '18:30',
+      graceMinutes: Number(office.gracePeriodMinutes ?? 15),
+      halfDayBelowMinutes: 240,
+      overtimeMinMinutes: 30,
+    };
+  },
+
   async updateOfficeLocation(settings) {
     return apiClient.execute(async () => {
       const current = getStoredOfficeLocation();
@@ -969,19 +981,21 @@ const DAILY_LABELS = {
   present: 'Present',
   late: 'Late',
   'half-day': 'Half Day',
+  overtime: 'Overtime',
   absent: 'Absent',
   leave: 'Leave',
   'not-marked': 'Not marked',
   off: 'Not marked',
 };
 
-/** The summary dialog's status choices -> what the API takes (null means "remove the record"). */
+/** The report drawer's status choices -> what the API takes (null means "remove the record"). */
 const DAY_STATUS = {
   Present: 'present',
   Late: 'late',
   'Half Day': 'half-day',
   Overtime: 'overtime',
   Absent: 'absent',
+  Leave: 'leave',
   'Unmarked Working Days': null,
 };
 
@@ -1027,6 +1041,11 @@ const liveAttendanceService = {
 
   async getOfficeLocation() {
     return apiClient.getCached(`${BASE}/office/`);
+  },
+
+  /** Shift and rule timings come from the same settings the reports use. */
+  async getAttendanceSettings() {
+    return apiClient.getCached(`${BASE}/settings/`);
   },
 
   async updateOfficeLocation(settings) {
@@ -1329,22 +1348,43 @@ const liveAttendanceService = {
     return days.map((day) => ({
       date: day.date,
       recordId: day.recordId,
-      status: base,
+      // The clicked metric chooses which days to show; the day's own status is what the editor must change.
+      status: day.status || base,
       checkIn: to12h(day.checkIn),
       checkOut: to12h(day.checkOut),
+      hoursWorked: day.hoursWorked ?? 0,
+      overtimeHrs: day.overtimeHrs ?? 0,
     }));
   },
 
-  /** Change one day from the summary dialog. "Unmarked" removes the record; anything else records or corrects it. */
-  async setDayStatus({ userId, date, recordId, status }) {
+  /**
+   * Change one day from a report drawer. "Unmarked" removes the record; anything else records or corrects it.
+   * Timings are always sent for worked days so the report cannot re-derive a different status from invented times.
+   */
+  async setDayStatus({ userId, date, recordId, status, checkInTime, checkOutTime }) {
     const wanted = DAY_STATUS[status];
-    const reason = 'Changed from the attendance summary';
+    const reason = 'Changed from an attendance report';
+    if (wanted === undefined) throw new Error(`Unknown attendance status: ${status}`);
+
     if (wanted === null) {
       if (recordId) await apiClient.delete(`${BASE}/records/${recordId}/`);
       return null;
     }
-    if (recordId) return apiClient.patch(`${BASE}/records/${recordId}/`, { status: wanted, reason });
-    return apiClient.post(`${BASE}/records/`, { userId: Number(userId), date, status: wanted, notes: reason });
+
+    const timings =
+      wanted === 'absent' || wanted === 'leave'
+        ? {}
+        : { checkInTime: checkInTime || null, checkOutTime: checkOutTime || null };
+    if (recordId) {
+      return apiClient.patch(`${BASE}/records/${recordId}/`, { status: wanted, reason, ...timings });
+    }
+    return apiClient.post(`${BASE}/records/`, {
+      userId: Number(userId),
+      date,
+      status: wanted,
+      notes: reason,
+      ...timings,
+    });
   },
 };
 
