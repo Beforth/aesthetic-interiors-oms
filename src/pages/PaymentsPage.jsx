@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { numericOnChange } from '../utils/numberInput';
 import {
   mockProjectPaymentSchedules,
   mockAgencyPayouts,
@@ -20,6 +21,7 @@ import Avatar from '../components/ui/Avatar';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import DataToolbar from '../components/ui/DataToolbar';
 import StatCard from '../components/ui/StatCard';
 import Table from '../components/ui/Table';
@@ -49,6 +51,7 @@ export function PaymentsPage({ mode }) {
   const toast = useToast();
   const toastRef = useRef(toast);
   const location = useLocation();
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     toastRef.current = toast;
@@ -321,15 +324,18 @@ export function PaymentsPage({ mode }) {
 
   const agencyTotalPages = Math.ceil(filteredAgencyPayouts.length / agencyRowsPerPage) || 1;
 
-  const handleDeleteAgencyPayout = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this agency bill record?')) return;
+  const handleDeleteAgencyPayout = (id) => setDeleteTarget({ id });
+
+  const confirmDeleteAgencyPayout = async () => {
+    if (!deleteTarget) return;
     try {
-      await paymentService.deleteAgencyPayout(id);
+      await paymentService.deleteAgencyPayout(deleteTarget.id);
       await refreshAgencyPayouts();
       toast.success('Agency bill record deleted');
     } catch (err) {
       toast.error(err?.message || 'Failed to delete agency bill record');
     }
+    setDeleteTarget(null);
   };
 
   const handleOpenAgencyPayment = () => {
@@ -818,7 +824,7 @@ export function PaymentsPage({ mode }) {
                           className="w-full max-w-[170px] -ml-1 px-1 py-0.5 text-xs font-semibold text-foreground bg-transparent border border-transparent hover:border-border focus:border-border rounded transition-colors focus:outline-none"
                         />
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <div className="relative w-16">
+                          <div className="relative w-24">
                             <input
                               type="number"
                               min="0"
@@ -837,7 +843,7 @@ export function PaymentsPage({ mode }) {
                                 };
                                 setPaymentForm({ ...paymentForm, installments: updated });
                               }}
-                              className="w-full h-7 px-2 pr-5 border border-border rounded-md bg-background text-foreground font-mono text-[11px] focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
+                              className="w-full h-9 px-2.5 pr-6 border border-border rounded-md bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
                               title="Percentage of remaining balance"
                             />
                             <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">
@@ -1597,7 +1603,7 @@ export function PaymentsPage({ mode }) {
                   <input
                     type="number"
                     value={paymentSettings.defaultAdvancePercent}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultAdvancePercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultAdvancePercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1607,7 +1613,7 @@ export function PaymentsPage({ mode }) {
                   <input
                     type="number"
                     value={paymentSettings.defaultInstallmentsCount}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultInstallmentsCount: parseInt(e.target.value, 10) || 1 })}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultInstallmentsCount: numericOnChange(e.target.value, (v) => parseInt(v, 10)) })}
                     className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1617,7 +1623,7 @@ export function PaymentsPage({ mode }) {
                   <input
                     type="number"
                     value={paymentSettings.gracePeriodDays}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, gracePeriodDays: parseInt(e.target.value, 10) || 0 })}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, gracePeriodDays: numericOnChange(e.target.value, (v) => parseInt(v, 10)) })}
                     className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1627,7 +1633,7 @@ export function PaymentsPage({ mode }) {
                   <input
                     type="number"
                     value={paymentSettings.defaultGstPercent}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultGstPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultGstPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1649,7 +1655,7 @@ export function PaymentsPage({ mode }) {
                     type="number"
                     step="0.1"
                     value={paymentSettings.tdsRateOnContracts}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, tdsRateOnContracts: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, tdsRateOnContracts: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1659,7 +1665,7 @@ export function PaymentsPage({ mode }) {
                   <input
                     type="number"
                     value={paymentSettings.retentionHoldPercent}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, retentionHoldPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, retentionHoldPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -2057,6 +2063,15 @@ export function PaymentsPage({ mode }) {
           </Modal>
         );
       })()}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteAgencyPayout}
+        title="Delete agency bill?"
+        message="Are you sure you want to delete this agency bill record? This action cannot be undone."
+        confirmText="Delete"
+      />
     </div>
   );
 }

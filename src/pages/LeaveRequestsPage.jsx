@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { leaveService } from '../services/leaveService';
@@ -12,6 +13,7 @@ import { usePagination } from '../hooks/usePagination';
 // BefUI Components
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { Badge } from '../components/ui/badge';
 
 // BefUI Icons strictly from '@/components/ui/icons'
@@ -42,6 +44,8 @@ export function LeaveRequestsPage() {
 
   // Active action menu row ID
   const [openActionId, setOpenActionId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const actionMenuRef = useRef(null);
 
   // View Details Modal State
@@ -79,8 +83,15 @@ export function LeaveRequestsPage() {
         setOpenActionId(null);
       }
     };
+    const close = () => setOpenActionId(null);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
   }, []);
 
   // Filtered & Sorted Requests
@@ -162,16 +173,20 @@ export function LeaveRequestsPage() {
     setOpenActionId(null);
   };
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete leave application for ${name}?`)) {
-      try {
-        await leaveService.deleteLeave(id);
-        toast.success(`Leave application deleted`);
-      } catch (err) {
-        toast.error(err.message || 'Could not delete the request');
-      }
-      setOpenActionId(null);
+  const handleDelete = (id, name) => {
+    setOpenActionId(null);
+    setDeleteTarget({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await leaveService.deleteLeave(deleteTarget.id);
+      toast.success('Leave application deleted');
+    } catch (err) {
+      toast.error(err.message || 'Could not delete the request');
     }
+    setDeleteTarget(null);
   };
 
   const handleApplySubmit = async (e) => {
@@ -478,50 +493,75 @@ export function LeaveRequestsPage() {
                           {/* More Options Menu */}
                           <button
                             type="button"
-                            onClick={() => setOpenActionId(openActionId === item.id ? null : item.id)}
+                            onClick={(e) => {
+                              if (openActionId === item.id) {
+                                setOpenActionId(null);
+                                return;
+                              }
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const menuWidth = 128;
+                              const openUp = window.innerHeight - rect.bottom < 160;
+                              setActionMenuAnchor({
+                                left: Math.max(
+                                  8,
+                                  Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
+                                ),
+                                top: openUp ? rect.top - 8 : rect.bottom + 6,
+                                openUp,
+                              });
+                              setOpenActionId(item.id);
+                            }}
                             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                             title="Actions"
                           >
                             <MoreIcon className="size-4" />
                           </button>
 
-                          {/* Action Popover Menu */}
-                          {openActionId === item.id && (
-                            <div
-                              ref={actionMenuRef}
-                              className="absolute right-0 top-9 w-32 py-1.5 bg-card border border-border rounded-xl shadow-lg z-30 text-xs text-left animate-in fade-in zoom-in-95 duration-150"
-                            >
-                              {isPending ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApprove(item.id, item.employeeName)}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-success hover:bg-success/10 transition-colors cursor-pointer font-medium"
-                                  >
-                                    <CheckIcon className="size-3.5" />
-                                    <span>Approve</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReject(item.id, item.employeeName)}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-destructive hover:bg-destructive/10 transition-colors cursor-pointer font-medium"
-                                  >
-                                    <XIcon className="size-3.5" />
-                                    <span>Reject</span>
-                                  </button>
-                                  <div className="my-1 border-t border-border" />
-                                </>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(item.id, item.employeeName)}
-                                className="w-full flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-destructive hover:bg-muted transition-colors cursor-pointer"
+                          {/* Action Popover Menu — portaled so the table cannot clip it */}
+                          {openActionId === item.id && actionMenuAnchor &&
+                            createPortal(
+                              <div
+                                ref={actionMenuRef}
+                                style={{
+                                  position: 'fixed',
+                                  top: actionMenuAnchor.top,
+                                  left: actionMenuAnchor.left,
+                                  transform: actionMenuAnchor.openUp ? 'translateY(-100%)' : undefined,
+                                }}
+                                className="w-32 py-1.5 bg-card border border-border rounded-xl shadow-lg z-50 text-xs text-left animate-in fade-in zoom-in-95 duration-150"
                               >
-                                <TrashIcon className="size-3.5" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
-                          )}
+                                {isPending ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApprove(item.id, item.employeeName)}
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-success hover:bg-success/10 transition-colors cursor-pointer font-medium"
+                                    >
+                                      <CheckIcon className="size-3.5" />
+                                      <span>Approve</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleReject(item.id, item.employeeName)}
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-destructive hover:bg-destructive/10 transition-colors cursor-pointer font-medium"
+                                    >
+                                      <XIcon className="size-3.5" />
+                                      <span>Reject</span>
+                                    </button>
+                                    <div className="my-1 border-t border-border" />
+                                  </>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(item.id, item.employeeName)}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-destructive hover:bg-muted transition-colors cursor-pointer"
+                                >
+                                  <TrashIcon className="size-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>,
+                              document.body
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -588,7 +628,16 @@ export function LeaveRequestsPage() {
               </label>
               <select
                 value={applyForm.leaveType}
-                onChange={(e) => setApplyForm({ ...applyForm, leaveType: e.target.value })}
+                onChange={(e) => {
+                  const leaveType = e.target.value;
+                  const isLwp = leaveType === 'Leave Without Pay';
+                  setApplyForm({
+                    ...applyForm,
+                    leaveType,
+                    paidDays: isLwp ? 0 : applyForm.durationDays,
+                    lwpDays: isLwp ? Math.max(1, applyForm.durationDays) : 0,
+                  });
+                }}
                 className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
               >
                 <option value="Privileged Leave">Privileged Leave</option>
@@ -611,12 +660,16 @@ export function LeaveRequestsPage() {
                   onChange={(e) => {
                     const s = e.target.value;
                     const d = calculateDays(s, applyForm.endDate);
+                    const lwp =
+                      applyForm.leaveType === 'Leave Without Pay'
+                        ? Math.max(applyForm.lwpDays || 1, d)
+                        : 0;
                     setApplyForm({
                       ...applyForm,
                       startDate: s,
                       durationDays: d,
-                      paidDays: d,
-                      lwpDays: 0,
+                      paidDays: Math.max(0, d - lwp),
+                      lwpDays: lwp,
                     });
                   }}
                   className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
@@ -634,12 +687,16 @@ export function LeaveRequestsPage() {
                   onChange={(e) => {
                     const ed = e.target.value;
                     const d = calculateDays(applyForm.startDate, ed);
+                    const lwp =
+                      applyForm.leaveType === 'Leave Without Pay'
+                        ? Math.max(applyForm.lwpDays || 1, d)
+                        : 0;
                     setApplyForm({
                       ...applyForm,
                       endDate: ed,
                       durationDays: d,
-                      paidDays: d,
-                      lwpDays: 0,
+                      paidDays: Math.max(0, d - lwp),
+                      lwpDays: lwp,
                     });
                   }}
                   className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
@@ -678,7 +735,7 @@ export function LeaveRequestsPage() {
                 <input
                   type="number"
                   min="0"
-                  max={applyForm.durationDays}
+                  max="365"
                   value={applyForm.lwpDays}
                   onChange={(e) => {
                     const l = Number(e.target.value) || 0;
@@ -690,6 +747,7 @@ export function LeaveRequestsPage() {
                   }}
                   className="w-full px-2 py-1 text-xs border border-border rounded bg-background font-mono text-foreground focus:outline-none"
                 />
+                <span className="text-[10px] text-muted-foreground">LWP can be more than 1 day.</span>
               </div>
             </div>
 
@@ -826,6 +884,15 @@ export function LeaveRequestsPage() {
           </div>
         </Modal>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete leave request?"
+        message={`Are you sure you want to delete the leave request for ${deleteTarget?.name || 'this employee'}? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </div>
   );
 }

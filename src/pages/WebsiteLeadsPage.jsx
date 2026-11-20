@@ -13,6 +13,7 @@ import { Table } from '../components/ui/Table';
 import { Badge } from '../components/ui/badge';
 import StatCard from '../components/ui/StatCard';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import {
   EyeIcon,
   GlobeIcon,
@@ -79,6 +80,7 @@ export function WebsiteLeadsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [viewing, setViewing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const reload = useCallback(async () => {
     try {
@@ -149,16 +151,19 @@ export function WebsiteLeadsPage() {
     }
   };
 
-  const handleDelete = async (lead) => {
-    if (!window.confirm(`Delete the lead for ${lead.name}?`)) return;
+  const handleDelete = (lead) => setDeleteTarget(lead);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await leadService.deleteLead(lead.id);
+      await leadService.deleteLead(deleteTarget.id);
       toast.success('Lead deleted');
       setViewing(null);
       await reload();
     } catch {
       toast.error('Failed to delete lead');
     }
+    setDeleteTarget(null);
   };
 
   const columns = [
@@ -332,6 +337,15 @@ export function WebsiteLeadsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete lead?"
+        message={`Are you sure you want to delete the lead for ${deleteTarget?.name || 'this person'}? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </div>
   );
 }

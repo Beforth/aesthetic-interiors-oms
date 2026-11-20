@@ -15,6 +15,7 @@ import { usePagination } from '../hooks/usePagination';
 import PageHeader from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Avatar from '../components/ui/Avatar';
 import Tabs from '../components/ui/Tabs';
 import DataToolbar from '../components/ui/DataToolbar';
@@ -126,6 +127,9 @@ export function ExpensesPage({ mode }) {
   const toast = useToast();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Shared delete confirmation target
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Tab State: 'claims' (Business Claims) or 'advances' (Salary Advances)
   const currentTab = useMemo(() => {
@@ -347,15 +351,25 @@ export function ExpensesPage({ mode }) {
     }
   };
 
-  const handleDeleteExpense = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this expense record?')) return;
+  const handleDeleteExpense = (id) => setDeleteTarget({ type: 'expense', id });
+
+  const confirmDelete = async () => {
+    const target = deleteTarget;
+    if (!target) return;
     try {
-      await expenseService.deleteExpense(id);
-      toast.success('Expense record deleted');
-      fetchExpenses();
+      if (target.type === 'expense') {
+        await expenseService.deleteExpense(target.id);
+        toast.success('Expense record deleted');
+        fetchExpenses();
+      } else {
+        await expenseService.deleteSalaryAdvance(target.id, advances);
+        await fetchAdvances();
+        toast.success('Salary advance record deleted');
+      }
     } catch {
-      toast.error('Failed to delete expense record');
+      toast.error(target.type === 'expense' ? 'Failed to delete expense record' : 'Failed to delete salary advance');
     }
+    setDeleteTarget(null);
   };
 
   // ---------------------------------------------------------------------------
@@ -467,16 +481,7 @@ export function ExpensesPage({ mode }) {
     }
   };
 
-  const handleDeleteAdvance = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this salary advance request?')) return;
-    try {
-      await expenseService.deleteSalaryAdvance(id, advances);
-      await fetchAdvances();
-      toast.success('Salary advance record deleted');
-    } catch {
-      toast.error('Failed to delete salary advance');
-    }
-  };
+  const handleDeleteAdvance = (id) => setDeleteTarget({ type: 'advance', id });
 
   // ---------------------------------------------------------------------------
   // 3. SALARY ADVANCES VIEW MODAL STATE
@@ -1524,6 +1529,17 @@ export function ExpensesPage({ mode }) {
           </div>
         </Modal>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Confirm delete"
+        message={`Are you sure you want to delete this ${
+          deleteTarget?.type === 'expense' ? 'expense record' : 'salary advance request'
+        }? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </div>
   );
 }

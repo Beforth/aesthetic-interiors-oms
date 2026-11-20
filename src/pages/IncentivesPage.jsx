@@ -365,7 +365,7 @@ export function IncentivesPage() {
       paymentMethod: 'Cash',
       category: INCENTIVE_CATEGORIES[0] || 'On-Time Completion',
       amount: '',
-      tax: '0',
+      tax: '',
       time: new Date().toTimeString().slice(0, 5),
       proof: null,
       proofName: '',
@@ -469,7 +469,7 @@ export function IncentivesPage() {
         paymentMethod: 'Cash',
         category: INCENTIVE_CATEGORIES[1] || 'Quality Excellence',
         amount: '',
-        tax: '0',
+        tax: '',
         time: new Date().toTimeString().slice(0, 5),
         proof: null,
         proofName: '',
@@ -519,7 +519,7 @@ export function IncentivesPage() {
       setFormDescription('');
       setPaymentsList([{
         id: 'p-1', title: '', paymentMethod: 'Cash',
-        category: INCENTIVE_CATEGORIES[0], amount: '', tax: '0',
+        category: INCENTIVE_CATEGORIES[0], amount: '', tax: '',
         time: new Date().toTimeString().slice(0, 5), proof: null, proofName: '',
       }]);
     } catch { toast.error('Failed to save incentive'); }

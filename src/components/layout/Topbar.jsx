@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { projectService } from '../../services/projectService';
@@ -15,6 +15,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { useToast } from '../../context/ToastContext';
 import { useNotifications } from '../../hooks/useNotifications';
+import notificationService from '../../services/notificationService';
 
 /**
  * Top navigation bar with live global search, Task Allocation shortcut,
@@ -27,7 +28,7 @@ export function Topbar({ onToggleMobileMenu }) {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [notifications] = useNotifications([
+  const [notifications, setNotifications] = useNotifications([
     {
       id: 'n1',
       title: 'Rohit Kumar punched in',
@@ -71,6 +72,61 @@ export function Topbar({ onToggleMobileMenu }) {
   ]);
 
   const unreadCount = notifications.filter((n) => n.unread).length;
+  const recentNotifications = notifications.slice(0, 5);
+
+  // Notifications bell popover
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef(null);
+
+  const markNotificationsRead = useCallback(() => {
+    setNotifications((prev) =>
+      prev.some((n) => n.unread) ? prev.map((n) => ({ ...n, unread: false })) : prev
+    );
+    notificationService.markAllNotificationsAsRead().catch(() => {
+      // The badge is cleared locally even if the server is unavailable.
+    });
+  }, [setNotifications]);
+
+  const handleBellClick = () => {
+    const opening = !isNotificationsOpen;
+    setIsNotificationsOpen(opening);
+    if (opening) markNotificationsRead();
+  };
+
+  const handleSeeMore = () => {
+    setIsNotificationsOpen(false);
+    markNotificationsRead();
+    navigate('/notifications');
+  };
+
+  // Close the bell popover on outside click / Escape
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') setIsNotificationsOpen(false);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Keep the badge in sync when notifications are read from the notifications page
+  useEffect(() => {
+    const handleNotificationsUpdated = () => {
+      setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    };
+    window.addEventListener(notificationService.EVENT_NAME, handleNotificationsUpdated);
+    return () =>
+      window.removeEventListener(notificationService.EVENT_NAME, handleNotificationsUpdated);
+  }, [setNotifications]);
 
   // Task Allocation modal state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -512,19 +568,80 @@ export function Topbar({ onToggleMobileMenu }) {
 
         {/* Right Section: Notifications, Avatar & Logout Icon */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Notifications — the bell opens the full notifications page */}
-          <div className="relative">
+          {/* Notifications — the bell opens a small popover with recent items */}
+          <div className="relative" ref={notificationRef}>
             <IconButton
               icon="bell"
               size="sm"
               ariaLabel="View notifications"
-              onClick={() => navigate('/notifications')}
+              aria-expanded={isNotificationsOpen}
+              onClick={handleBellClick}
               className="cursor-pointer"
             />
             {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
                 {unreadCount}
               </span>
+            )}
+
+            {isNotificationsOpen && (
+              <div
+                role="dialog"
+                aria-label="Recent notifications"
+                className="absolute right-0 top-full mt-2 z-50 w-[19rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-in fade-in zoom-in-95 duration-150"
+              >
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                  <span className="text-xs font-bold text-foreground">Notifications</span>
+                  {unreadCount > 0 && (
+                    <span className="text-[10px] font-semibold text-primary">
+                      {unreadCount} new
+                    </span>
+                  )}
+                </div>
+
+                {recentNotifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                    No recent notifications
+                  </div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                    {recentNotifications.map((notification) => (
+                      <button
+                        key={notification.id}
+                        type="button"
+                        onClick={() => {
+                          setIsNotificationsOpen(false);
+                          navigate(notification.path || '/notifications');
+                        }}
+                        className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-muted/60 transition-colors cursor-pointer"
+                      >
+                        <span className="size-7 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                          <Icon name={notification.icon || 'bell'} size={14} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-semibold text-foreground truncate">
+                            {notification.title}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground truncate">
+                            {notification.description}
+                          </span>
+                          <span className="block text-[10px] text-muted-foreground mt-0.5">
+                            {notification.time}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSeeMore}
+                  className="w-full px-3 py-2.5 border-t border-border text-xs font-semibold text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                >
+                  See more
+                </button>
+              </div>
             )}
           </div>
 

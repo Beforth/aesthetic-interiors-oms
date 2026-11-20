@@ -769,7 +769,7 @@ export default function NewProjectPage() {
                               onChange={(e) =>
                                 handleUpdatePhase(idx, 'plannedHours', e.target.value)
                               }
-                              className="w-16 bg-background border border-border rounded-md px-2 py-1.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring text-right"
+                              className="w-24 bg-background border border-border rounded-md px-2.5 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring text-right"
                               placeholder="0"
                             />
                             <span className="text-[11px] text-muted-foreground font-medium shrink-0">hrs</span>

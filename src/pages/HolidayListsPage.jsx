@@ -477,7 +477,7 @@ export function HolidayListsPage() {
                   }}
                   placeholder="e.g. FY 2026–2027 Holidays"
                   className={cn(
-                    'w-full h-9 px-3 text-xs rounded-lg bg-background border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all',
+                    'w-full h-10 px-3 text-sm rounded-lg bg-background border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all',
                     nameError
                       ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
                       : 'border-border focus:border-primary'
@@ -493,7 +493,7 @@ export function HolidayListsPage() {
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
                 />
               </div>
 
@@ -505,7 +505,7 @@ export function HolidayListsPage() {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
                 />
               </div>
 
@@ -516,7 +516,7 @@ export function HolidayListsPage() {
                 <select
                   value={weeklyOffDay}
                   onChange={(e) => setWeeklyOffDay(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
                 >
                   {WEEKDAYS.map((day) => (
                     <option key={day} value={day}>
@@ -563,7 +563,7 @@ export function HolidayListsPage() {
                   type="date"
                   value={customDate}
                   onChange={(e) => setCustomDate(e.target.value)}
-                  className="h-8.5 px-2.5 text-xs rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+                  className="h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer"
                   title="Pick custom holiday date"
                   data-tooltip="Pick holiday date"
                 />
@@ -572,7 +572,7 @@ export function HolidayListsPage() {
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   placeholder="e.g. Regional Festival, Annual Day"
-                  className="flex-1 h-8.5 px-3 text-xs rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="flex-1 h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
                 <Button
                   type="submit"
@@ -615,13 +615,13 @@ export function HolidayListsPage() {
 
               {builderHolidays.length > 0 && (
                 <div className="relative sm:w-60">
-                  <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                  <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                   <input
                     type="text"
                     value={tableSearch}
                     onChange={(e) => setTableSearch(e.target.value)}
                     placeholder="Filter holidays in table..."
-                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full h-10 pl-9 pr-3 text-sm rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
               )}
@@ -737,14 +737,14 @@ export function HolidayListsPage() {
             <div className="flex items-center justify-between gap-2.5 overflow-x-auto">
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
                 {/* Search Bar */}
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <div className="relative flex-1 min-w-[260px] max-w-md">
+                  <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search holiday lists by name, dates..."
-                    className="w-full h-9 pl-8 pr-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full h-10 pl-9 pr-3 text-sm rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                   {searchQuery && (
                     <button
@@ -762,7 +762,7 @@ export function HolidayListsPage() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-9 px-2.5 text-xs font-semibold rounded-lg border border-border bg-background text-foreground hover:bg-muted/50 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="h-10 px-3 text-sm font-semibold rounded-lg border border-border bg-background text-foreground hover:bg-muted/50 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="ALL">All Schedules ({holidayLists.length})</option>
                     <option value="ACTIVE">Active Only</option>
@@ -778,7 +778,7 @@ export function HolidayListsPage() {
                       setSearchQuery('');
                       setStatusFilter('ALL');
                     }}
-                    className="h-9 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    className="h-10 px-3 text-sm font-semibold text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <XIcon className="size-3" />
                     <span>Clear Filter</span>

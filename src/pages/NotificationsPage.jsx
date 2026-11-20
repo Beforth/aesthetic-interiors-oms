@@ -13,6 +13,7 @@ import Select from '../components/ui/Select';
 import Checkbox from '../components/ui/Checkbox';
 import Badge from '../components/ui/badge';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Pagination from '../components/ui/Pagination';
 import { usePagination } from '../hooks/usePagination';
 import {
@@ -58,6 +59,9 @@ export function NotificationsPage() {
   // All visible notifications according to user's granular role permissions
   const [notifications, setNotifications] = useState([]);
 
+  // Delete confirmation target: { ids, label }
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
   // Announcement Modal State
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState({
@@ -86,6 +90,11 @@ export function NotificationsPage() {
     return () => {
       mountedRef.current = false;
     };
+  }, []);
+
+  // Opening the notifications page means all of them have been seen, so clear the bell badge.
+  useEffect(() => {
+    notificationService.markAllNotificationsAsRead().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -135,48 +144,40 @@ export function NotificationsPage() {
     loadNotifications();
   };
 
-  // Handle single item deletion
-  const handleDeleteSingle = async (id, e) => {
+  // All deletion paths go through one confirmation dialog
+  const handleDeleteSingle = (id, e) => {
     e?.stopPropagation();
-    try {
-      await notificationService.deleteNotification(id);
-      setSelectedIds((prev) => prev.filter((i) => i !== id));
-      await loadNotifications();
-      toast.success('Notification removed');
-    } catch (error) {
-      showActionError(error, 'Unable to remove notification');
-    }
+    setDeleteTarget({ ids: [id], label: 'this notification' });
   };
 
-  // Handle Delete All / Clear
-  const handleDeleteAll = async () => {
+  const handleDeleteAll = () => {
     if (filteredNotifications.length === 0) return;
-    try {
-      await notificationService.deleteAllNotifications(activeTab);
-      setSelectedIds([]);
-      await loadNotifications();
-      toast.success(
-        activeTab === 'all'
-          ? 'All notifications cleared'
-          : `All ${activeTab} notifications cleared`
-      );
-    } catch (error) {
-      showActionError(error, 'Unable to clear notifications');
-    }
+    setDeleteTarget({
+      ids: filteredNotifications.map((n) => n.id),
+      label: activeTab === 'all' ? 'all notifications' : `all ${activeTab} notifications`,
+    });
   };
 
-  // Handle batch deletion
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     if (selectedIds.length === 0) return;
-    const count = selectedIds.length;
+    setDeleteTarget({
+      ids: [...selectedIds],
+      label: `${selectedIds.length} selected notification(s)`,
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { ids, label } = deleteTarget;
     try {
-      await notificationService.deleteNotifications(selectedIds);
-      setSelectedIds([]);
+      await notificationService.deleteNotifications(ids);
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
       await loadNotifications();
-      toast.success(`Removed ${count} notification(s)`);
+      toast.success(`Removed ${label}`);
     } catch (error) {
       showActionError(error, 'Unable to remove notifications');
     }
+    setDeleteTarget(null);
   };
 
   // Handle batch mark as read
@@ -573,6 +574,15 @@ export function NotificationsPage() {
           </form>
         </Modal>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete notifications?"
+        message={`Are you sure you want to delete ${deleteTarget?.label || 'these notifications'}? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </div>
   );
 }

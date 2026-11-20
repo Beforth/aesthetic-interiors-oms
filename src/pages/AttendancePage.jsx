@@ -177,6 +177,8 @@ export function AttendancePage({ defaultTab }) {
   });
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [requestsList, setRequestsList] = useState([]);
+  const [requestPendingDelete, setRequestPendingDelete] = useState(null);
+  const [leaveTypePendingDelete, setLeaveTypePendingDelete] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1065,15 +1067,19 @@ export function AttendancePage({ defaultTab }) {
     }
   };
 
-  const handleDeleteLeaveType = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete leave type "${name}"?`)) return;
+  const handleDeleteLeaveType = (id, name) =>
+    setLeaveTypePendingDelete({ id, name });
+
+  const confirmDeleteLeaveType = async () => {
+    if (!leaveTypePendingDelete) return;
     try {
-      await attendanceService.deleteLeaveType(id);
-      toast.success(`Leave type deleted`);
+      await attendanceService.deleteLeaveType(leaveTypePendingDelete.id);
+      toast.success('Leave type deleted');
       loadData();
     } catch (err) {
       toast.error('Failed to delete leave type');
     }
+    setLeaveTypePendingDelete(null);
   };
 
   // Submit Regularization Request
@@ -1188,8 +1194,12 @@ export function AttendancePage({ defaultTab }) {
     }
   };
 
-  const handleDeleteRequest = (id) => {
-    setRequestsList((prev) => prev.filter((r) => r.id !== id));
+  const handleDeleteRequest = (id) => setRequestPendingDelete(id);
+
+  const confirmDeleteRequest = () => {
+    if (!requestPendingDelete) return;
+    setRequestsList((prev) => prev.filter((r) => r.id !== requestPendingDelete));
+    setRequestPendingDelete(null);
     toast.success('Attendance request deleted');
   };
 
@@ -1901,27 +1911,37 @@ export function AttendancePage({ defaultTab }) {
                         <button
                           type="button"
                           onClick={() => handleDecideRequest(req.id, 'approve')}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-success/10 text-success border border-success/30 hover:bg-success/20 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-success/10 text-success border border-success/30 hover:bg-success/20 transition-colors cursor-pointer"
                           title="Approve Request"
                         >
+                          <CheckIcon className="size-3.5" />
                           Approve
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDecideRequest(req.id, 'reject')}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer"
                           title="Reject Request"
                         >
+                          <XIcon className="size-3.5" />
                           Reject
                         </button>
                       </div>
                     );
                   }
                   if (status === 'approved') {
-                    return <Badge variant="success" dot>Approved</Badge>;
+                    return (
+                      <Badge variant="success">
+                        <CheckIcon className="size-3.5" /> Approved
+                      </Badge>
+                    );
                   }
                   if (status === 'rejected') {
-                    return <Badge variant="danger" dot>Rejected</Badge>;
+                    return (
+                      <Badge variant="danger">
+                        <XIcon className="size-3.5" /> Rejected
+                      </Badge>
+                    );
                   }
                   return <Badge variant="neutral">{req.status || 'Unknown'}</Badge>;
                 },
@@ -2074,7 +2094,7 @@ export function AttendancePage({ defaultTab }) {
                       radiusMeters: val === '' ? '' : parseInt(val, 10) || 0,
                     });
                   }}
-                  className="w-20 h-8 px-2 text-center font-bold text-xs border border-border rounded-lg text-foreground bg-background"
+                  className="w-24 h-9 px-2.5 text-center font-bold text-xs border border-border rounded-lg text-foreground bg-background"
                   placeholder="0"
                 />
                 <span className="text-xs text-muted-foreground font-medium">m</span>
@@ -2866,6 +2886,28 @@ export function AttendancePage({ defaultTab }) {
           }
         }}
         onCancel={() => setRecordPendingDelete(null)}
+      />
+
+      {/* ConfirmDialog for Deleting Attendance Request */}
+      <ConfirmDialog
+        isOpen={!!requestPendingDelete}
+        title="Delete attendance request?"
+        message="Are you sure you want to delete this attendance request? This action cannot be undone."
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={confirmDeleteRequest}
+        onCancel={() => setRequestPendingDelete(null)}
+      />
+
+      {/* ConfirmDialog for Deleting Leave Type */}
+      <ConfirmDialog
+        isOpen={!!leaveTypePendingDelete}
+        title="Delete leave type?"
+        message={`Are you sure you want to delete the leave type "${leaveTypePendingDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={confirmDeleteLeaveType}
+        onCancel={() => setLeaveTypePendingDelete(null)}
       />
 
       {/* Confirm Check-Out Dialog */}

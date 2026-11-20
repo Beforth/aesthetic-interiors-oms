@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { numericOnChange } from '../utils/numberInput';
 import { mockPayslips } from '../data/leaves';
 import { mockUsers } from '../data/users';
 import { cn } from '../lib/utils';
@@ -19,7 +21,9 @@ import payrollService, {
 import Button from '../components/ui/Button';
 import Avatar from '../components/ui/Avatar';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { Badge } from '../components/ui/Badge';
+import Pagination from '../components/ui/Pagination';
 import Select from '../components/ui/Select';
 import Tabs from '../components/ui/Tabs';
 import DataToolbar from '../components/ui/DataToolbar';
@@ -188,11 +192,11 @@ export function PayslipsPage() {
     note: '',
     payModel: 'Monthly Salary',
     ctc: '',
-    basic: 0,
-    hra: 0,
-    conveyance: 0,
-    specialAllowance: 0,
-    overtimeRate: 0,
+    basic: '',
+    hra: '',
+    conveyance: '',
+    specialAllowance: '',
+    overtimeRate: '',
     pfEnabled: true,
     pfRate: 12,
     esicEnabled: true,
@@ -210,8 +214,13 @@ export function PayslipsPage() {
   const [showPayslip, setShowPayslip] = useState(false);
   const [selectedStaffSlip, setSelectedStaffSlip] = useState(null);
 
+  // Shared delete confirmation target
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
   // Cycle breakdown row-action state
   const [openMenuEmpId, setOpenMenuEmpId] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const rowActionMenuRef = useRef(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [holdingEmployee, setHoldingEmployee] = useState(null);
   const [adjustingEmployee, setAdjustingEmployee] = useState(null);
@@ -244,6 +253,24 @@ export function PayslipsPage() {
 
   const cyclePager = usePagination(filteredCycles);
   const structurePager = usePagination(structures);
+
+  useEffect(() => {
+    if (!openMenuEmpId) return undefined;
+    const handleOutsideClick = (event) => {
+      if (rowActionMenuRef.current && !rowActionMenuRef.current.contains(event.target)) {
+        setOpenMenuEmpId(null);
+      }
+    };
+    const close = () => setOpenMenuEmpId(null);
+    document.addEventListener('mousedown', handleOutsideClick);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [openMenuEmpId]);
 
   // ---------------------------------------------------------------------------
   // EXACT SALARY CALCULATION FORMULA (Specified by user)
@@ -308,6 +335,13 @@ export function PayslipsPage() {
       totalNet: Math.round(totalNet * 100) / 100,
     };
   };
+
+  // Detailed salary table uses the same 10 / 25 / 30 pagination as every other table.
+  const detailCalc = useMemo(
+    () => (viewingCycle ? calculateCycleForMonth(viewingCycle) : null),
+    [viewingCycle]
+  );
+  const detailPager = usePagination(detailCalc?.staffList || []);
 
   // Check if the selected period has already been generated
   const isPeriodAlreadyGenerated = useMemo(() => {
@@ -442,37 +476,39 @@ export function PayslipsPage() {
   };
 
   // Delete a cycle
-  const handleDeleteCycle = async (cycleId) => {
-    if (!window.confirm('Delete this payroll cycle run?')) return;
-    try {
-      const removed = await payrollService.deleteCycle(cycleId);
-      if (!removed) throw new Error('Failed to delete payroll run');
-      const rows = await refreshCycles();
-      setCycles(rows.filter((row) => String(row.id) !== String(cycleId)));
-      if (viewingCycle && String(viewingCycle.id) === String(cycleId)) {
-        setViewingCycle(null);
-        setSelectedEmployee(null);
-        setShowPayslip(false);
-        setSelectedStaffSlip(null);
-      }
-      toast.success('Payroll run removed');
-    } catch (err) {
-      toast.error(err?.message || 'Failed to delete payroll run');
-    }
-  };
+  const handleDeleteCycle = (cycleId) => setDeleteTarget({ type: 'cycle', id: cycleId });
 
   // Delete a salary structure template
-  const handleDeleteStructure = async (structureId) => {
-    if (!window.confirm('Delete this salary structure template?')) return;
+  const handleDeleteStructure = (structureId) =>
+    setDeleteTarget({ type: 'structure', id: structureId });
+
+  const confirmDelete = async () => {
+    const target = deleteTarget;
+    if (!target) return;
     try {
-      const removed = await payrollService.deleteStructure(structureId);
-      if (!removed) throw new Error('Failed to delete salary structure template');
-      const rows = await refreshStructures();
-      setStructures(rows.filter((row) => String(row.id) !== String(structureId)));
-      toast.success('Salary structure template removed');
+      if (target.type === 'cycle') {
+        const removed = await payrollService.deleteCycle(target.id);
+        if (!removed) throw new Error('Failed to delete payroll run');
+        const rows = await refreshCycles();
+        setCycles(rows.filter((row) => String(row.id) !== String(target.id)));
+        if (viewingCycle && String(viewingCycle.id) === String(target.id)) {
+          setViewingCycle(null);
+          setSelectedEmployee(null);
+          setShowPayslip(false);
+          setSelectedStaffSlip(null);
+        }
+        toast.success('Payroll run removed');
+      } else {
+        const removed = await payrollService.deleteStructure(target.id);
+        if (!removed) throw new Error('Failed to delete salary structure template');
+        const rows = await refreshStructures();
+        setStructures(rows.filter((row) => String(row.id) !== String(target.id)));
+        toast.success('Salary structure template removed');
+      }
     } catch (err) {
-      toast.error(err?.message || 'Failed to delete salary structure template');
+      toast.error(err?.message || 'Failed to delete record');
     }
+    setDeleteTarget(null);
   };
 
   // Create Salary Structure Template (Screenshot 3 & 4)
@@ -522,11 +558,11 @@ export function PayslipsPage() {
         note: '',
         payModel: 'Monthly Salary',
         ctc: '',
-        basic: 0,
-        hra: 0,
-        conveyance: 0,
-        specialAllowance: 0,
-        overtimeRate: 0,
+        basic: '',
+        hra: '',
+        conveyance: '',
+        specialAllowance: '',
+        overtimeRate: '',
         pfEnabled: true,
         pfRate: 12,
         esicEnabled: true,
@@ -821,7 +857,7 @@ export function PayslipsPage() {
   // IN-PAGE VIEW: PAY CYCLE BREAKDOWN (whole page)
   // ===========================================================================
   if (viewingCycle) {
-    const calc = calculateCycleForMonth(viewingCycle);
+    const calc = detailCalc;
 
     return (
       <div className="space-y-5 pb-16 animate-in fade-in duration-200">
@@ -955,7 +991,7 @@ export function PayslipsPage() {
                     </td>
                   </tr>
                 ) : (
-                  calc.staffList.map((emp) => (
+                  detailPager.paginatedItems.map((emp) => (
                     <tr
                       key={emp.id}
                       onClick={() => setSelectedEmployee(emp)}
@@ -1028,37 +1064,67 @@ export function PayslipsPage() {
                         </Badge>
                       </td>
 
-                      {/* Actions — ··· dots menu */}
+                      {/* Actions — ··· dots menu (portaled so the table cannot clip it) */}
                       <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="relative inline-block text-left">
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setOpenMenuEmpId(openMenuEmpId === emp.id ? null : emp.id); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (openMenuEmpId === emp.id) {
+                                setOpenMenuEmpId(null);
+                                return;
+                              }
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const menuWidth = 176;
+                              const openUp = window.innerHeight - rect.bottom < 220;
+                              setMenuAnchor({
+                                left: Math.max(
+                                  8,
+                                  Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
+                                ),
+                                top: openUp ? rect.top - 8 : rect.bottom + 6,
+                                openUp,
+                              });
+                              setOpenMenuEmpId(emp.id);
+                            }}
                             className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
                           >
                             <MoreIcon className="size-4" />
                           </button>
-                          {openMenuEmpId === emp.id && (
-                            <div className="absolute right-0 top-full mt-1 z-30 w-44 rounded-xl border border-border bg-card shadow-lg py-1 animate-in fade-in duration-100">
-                              <button onClick={() => { setSelectedStaffSlip(emp); setShowPayslip(true); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                <FileTextIcon className="size-3.5 text-muted-foreground" /> Payslip
-                              </button>
-                              <button onClick={() => { openEditEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                <EditIcon className="size-3.5 text-muted-foreground" /> Edit
-                              </button>
-                              <div className="my-1 border-t border-border" />
-                              <button onClick={() => { openHoldEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                <LockIcon className="size-3.5 text-muted-foreground" /> Hold amount
-                              </button>
-                              <button onClick={() => { openAdjustEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                <WalletIcon className="size-3.5 text-muted-foreground" /> Adjust amount paid
-                              </button>
-                              <div className="my-1 border-t border-border" />
-                              <button onClick={() => { setRemovingEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 cursor-pointer">
-                                <TrashIcon className="size-3.5" /> Remove from run
-                              </button>
-                            </div>
-                          )}
+                          {openMenuEmpId === emp.id && menuAnchor &&
+                            createPortal(
+                              <div
+                                ref={rowActionMenuRef}
+                                style={{
+                                  position: 'fixed',
+                                  top: menuAnchor.top,
+                                  left: menuAnchor.left,
+                                  transform: menuAnchor.openUp ? 'translateY(-100%)' : undefined,
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="z-50 w-44 rounded-xl border border-border bg-card shadow-lg py-1 animate-in fade-in duration-100"
+                              >
+                                <button onClick={() => { setSelectedStaffSlip(emp); setShowPayslip(true); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                  <FileTextIcon className="size-3.5 text-muted-foreground" /> Payslip
+                                </button>
+                                <button onClick={() => { openEditEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                  <EditIcon className="size-3.5 text-muted-foreground" /> Edit
+                                </button>
+                                <div className="my-1 border-t border-border" />
+                                <button onClick={() => { openHoldEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                  <LockIcon className="size-3.5 text-muted-foreground" /> Hold amount
+                                </button>
+                                <button onClick={() => { openAdjustEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
+                                  <WalletIcon className="size-3.5 text-muted-foreground" /> Adjust amount paid
+                                </button>
+                                <div className="my-1 border-t border-border" />
+                                <button onClick={() => { setRemovingEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 cursor-pointer">
+                                  <TrashIcon className="size-3.5" /> Remove from run
+                                </button>
+                              </div>,
+                              document.body
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -1067,9 +1133,23 @@ export function PayslipsPage() {
               </tbody>
             </table>
           </div>
+          <div className="border-t border-border px-4 py-3">
+            <Pagination {...detailPager.pagination} />
+          </div>
         </div>
 
         <p className="text-[11px] text-muted-foreground">Click any row to open the full salary breakdown.</p>
+
+        <ConfirmDialog
+          isOpen={!!deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+          title="Confirm delete"
+          message={`Are you sure you want to delete this ${
+            deleteTarget?.type === 'cycle' ? 'payroll cycle run' : 'salary structure template'
+          }? This action cannot be undone.`}
+          confirmText="Delete"
+        />
       </div>
     );
   }
@@ -1508,7 +1588,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.pfPercent}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, pfPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, pfPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1521,7 +1601,7 @@ export function PayslipsPage() {
                     type="number"
                     step="0.01"
                     value={payrollSettings.esicPercent}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, esicPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, esicPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1533,7 +1613,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.esicCap}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, esicCap: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, esicCap: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1545,7 +1625,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.ptAmount}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, ptAmount: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, ptAmount: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1557,7 +1637,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.defaultTds}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, defaultTds: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, defaultTds: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1583,7 +1663,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.payDaysInMonth}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, payDaysInMonth: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, payDaysInMonth: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1595,7 +1675,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.basicPercent}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, basicPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, basicPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1607,7 +1687,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.hraPercent}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, hraPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, hraPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1619,7 +1699,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.conveyancePercent}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, conveyancePercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, conveyancePercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1632,7 +1712,7 @@ export function PayslipsPage() {
                     type="number"
                     step="0.01"
                     value={payrollSettings.pfEmployerPercent}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, pfEmployerPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, pfEmployerPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1645,7 +1725,7 @@ export function PayslipsPage() {
                     type="number"
                     step="0.01"
                     value={payrollSettings.esicEmployerPercent}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, esicEmployerPercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, esicEmployerPercent: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1657,7 +1737,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={payrollSettings.pfWageCap}
-                    onChange={(e) => setPayrollSettings({ ...payrollSettings, pfWageCap: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setPayrollSettings({ ...payrollSettings, pfWageCap: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                 </div>
@@ -1938,14 +2018,14 @@ export function PayslipsPage() {
                   
                   value={templateForm.ctc}
                   onChange={(e) => {
-                    const ctcVal = parseFloat(e.target.value) || 0;
+                    const ctcVal = numericOnChange(e.target.value, parseFloat);
                     setTemplateForm({
                       ...templateForm,
                       ctc: e.target.value,
-                      basic: Math.round(ctcVal * 0.5),
-                      hra: Math.round(ctcVal * 0.2),
-                      conveyance: Math.round(ctcVal * 0.1),
-                      specialAllowance: Math.round(ctcVal * 0.2),
+                      basic: ctcVal === '' ? '' : Math.round(ctcVal * 0.5),
+                      hra: ctcVal === '' ? '' : Math.round(ctcVal * 0.2),
+                      conveyance: ctcVal === '' ? '' : Math.round(ctcVal * 0.1),
+                      specialAllowance: ctcVal === '' ? '' : Math.round(ctcVal * 0.2),
                     });
                   }}
                   className="w-full pl-7 pr-3 py-2 border border-border rounded-lg bg-background text-foreground font-mono font-bold text-xs focus:ring-1 focus:ring-primary focus:outline-none"
@@ -1970,7 +2050,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={templateForm.basic}
-                    onChange={(e) => setTemplateForm({ ...templateForm, basic: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setTemplateForm({ ...templateForm, basic: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
                   />
                 </div>
@@ -1979,7 +2059,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={templateForm.hra}
-                    onChange={(e) => setTemplateForm({ ...templateForm, hra: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setTemplateForm({ ...templateForm, hra: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
                   />
                 </div>
@@ -1988,7 +2068,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={templateForm.conveyance}
-                    onChange={(e) => setTemplateForm({ ...templateForm, conveyance: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setTemplateForm({ ...templateForm, conveyance: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
                   />
                 </div>
@@ -1997,7 +2077,7 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={templateForm.specialAllowance}
-                    onChange={(e) => setTemplateForm({ ...templateForm, specialAllowance: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => setTemplateForm({ ...templateForm, specialAllowance: numericOnChange(e.target.value, parseFloat) })}
                     className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
                   />
                 </div>
@@ -2013,7 +2093,7 @@ export function PayslipsPage() {
                 type="number"
                 min="0"
                 value={templateForm.overtimeRate}
-                onChange={(e) => setTemplateForm({ ...templateForm, overtimeRate: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setTemplateForm({ ...templateForm, overtimeRate: numericOnChange(e.target.value, parseFloat) })}
                 className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
               />
             </div>
@@ -2044,8 +2124,8 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={templateForm.pfRate}
-                    onChange={(e) => setTemplateForm({ ...templateForm, pfRate: parseFloat(e.target.value) || 0 })}
-                    className="w-16 px-2 py-1 border border-border rounded bg-background font-mono text-xs text-right"
+                    onChange={(e) => setTemplateForm({ ...templateForm, pfRate: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-24 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
                   />
                 </div>
               </div>
@@ -2070,15 +2150,15 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={templateForm.esicRate}
-                    onChange={(e) => setTemplateForm({ ...templateForm, esicRate: parseFloat(e.target.value) || 0 })}
-                    className="w-14 px-2 py-1 border border-border rounded bg-background font-mono text-xs text-right"
+                    onChange={(e) => setTemplateForm({ ...templateForm, esicRate: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-24 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
                   />
                   <span className="text-muted-foreground">₹</span>
                   <input
                     type="number"
                     value={templateForm.esicThreshold}
-                    onChange={(e) => setTemplateForm({ ...templateForm, esicThreshold: parseFloat(e.target.value) || 0 })}
-                    className="w-20 px-2 py-1 border border-border rounded bg-background font-mono text-xs text-right"
+                    onChange={(e) => setTemplateForm({ ...templateForm, esicThreshold: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-28 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
                   />
                 </div>
               </div>
@@ -2103,8 +2183,8 @@ export function PayslipsPage() {
                   <input
                     type="number"
                     value={templateForm.ptAmount}
-                    onChange={(e) => setTemplateForm({ ...templateForm, ptAmount: parseFloat(e.target.value) || 0 })}
-                    className="w-16 px-2 py-1 border border-border rounded bg-background font-mono text-xs text-right"
+                    onChange={(e) => setTemplateForm({ ...templateForm, ptAmount: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-24 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
                   />
                 </div>
               </div>
@@ -2122,6 +2202,16 @@ export function PayslipsPage() {
         </Modal>
       )}
 
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Confirm delete"
+        message={`Are you sure you want to delete this ${
+          deleteTarget?.type === 'cycle' ? 'payroll cycle run' : 'salary structure template'
+        }? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </div>
   );
 }

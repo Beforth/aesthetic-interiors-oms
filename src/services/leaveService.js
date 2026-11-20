@@ -206,7 +206,11 @@ let watching = false;
 
 /** What the pages expect: the mock's field names, plus paid/LWP days (the pay rules are not decided yet). */
 function fromApi(row) {
-  return { ...row, paidDays: row.durationDays, lwpDays: 0 };
+  return {
+    ...row,
+    paidDays: row.paidDays ?? row.paid_days ?? row.durationDays,
+    lwpDays: row.lwpDays ?? row.lwp_days ?? 0,
+  };
 }
 
 async function refresh() {
@@ -240,6 +244,8 @@ const liveLeaveService = {
       leaveType: req.leaveType,
       startDate: req.startDate,
       ...(req.endDate && req.endDate !== req.startDate ? { endDate: req.endDate } : {}),
+      paidDays: req.paidDays,
+      lwpDays: req.lwpDays,
       reason: (req.reason || '').trim(),
     });
     await refresh();
