@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clientService } from '../services/clientService';
 import { projectService } from '../services/projectService';
+import { userService } from '../services/userService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { usePermission } from '../hooks/usePermission';
-import { validatePhone, sanitizePhone, validateEmail, validateRequired } from '../utils/validators';
+import { validatePhone, sanitizePhone, validateEmail, validateRequired, validatePassword } from '../utils/validators';
+import { ResetPasswordModal } from '../components/domain/PasswordModals';
 import { cn } from '../lib/utils';
 
 import PageHeader from '../components/ui/PageHeader';
@@ -15,12 +17,17 @@ import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import Textarea from '../components/ui/Textarea';
 import Select from '../components/ui/Select';
+import Switch from '../components/ui/Switch';
 import FileImportDialog from '../components/ui/FileImportDialog';
 import PermissionGate from '../components/ui/PermissionGate';
 import Avatar from '../components/ui/Avatar';
 import Icon from '../components/ui/Icon';
 import IconButton from '../components/ui/IconButton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import DateInput from '../components/ui/DateInput';
+import MoneyInput from '../components/ui/MoneyInput';
+import SelectField from '../components/ui/SelectField';
+import SearchInput from '../components/ui/SearchInput';
 
 export function ClientsPage() {
   const navigate = useNavigate();
@@ -28,6 +35,8 @@ export function ClientsPage() {
   const toast = useToast();
   const canManageClients = usePermission('clients.manage');
   const canImportClients = usePermission('clients.import');
+  const canManageUsers = usePermission('users.manage'); // creating a login is a user-management action
+  const [resetTarget, setResetTarget] = useState(null);
 
   const [clients, setClients] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -302,6 +311,8 @@ export function ClientsPage() {
       quotation: '',
       startDate: new Date().toISOString().split('T')[0],
       targetDate: '',
+      loginEnabled: false,
+      loginPassword: '',
     });
     setFormErrors({});
     setIsModalOpen(true);
@@ -324,10 +335,15 @@ export function ClientsPage() {
       quotation: '',
       startDate: new Date().toISOString().split('T')[0],
       targetDate: '',
+      loginEnabled: false,
+      loginPassword: '',
     });
     setFormErrors({});
     setIsModalOpen(true);
   };
+
+  // A new login is wanted when the switch is on and this client has none yet
+  const wantsNewLogin = canManageUsers && formData.loginEnabled && !editingClient?.userId;
 
   const validate = () => {
     const errs = {};
@@ -339,6 +355,12 @@ export function ClientsPage() {
 
     const emailErr = validateEmail(formData.email, { required: false, fieldLabel: 'Email address' });
     if (emailErr) errs.email = emailErr;
+
+    if (wantsNewLogin) {
+      if (!formData.email.trim()) errs.email = 'The login is made with the client\'s email, so enter it';
+      const passwordErr = validatePassword(formData.loginPassword, { minLength: 8, required: true });
+      if (passwordErr) errs.loginPassword = passwordErr;
+    }
 
     if (!editingClient) {
       if (formData.projectOption === 'link' && !formData.existingProjectId) {
@@ -369,11 +391,34 @@ export function ClientsPage() {
         status: type,
       };
 
+      /** Gives the client their own sign-in and links it to the record, so they see only their projects. */
+      const createLogin = async (client) => {
+        try {
+          const login = await userService.createUser({
+            name: formData.name.trim(),
+            email: formData.email.trim(),
+            phone: formData.phone,
+            password: formData.loginPassword,
+            role: 'client',
+            title: 'Client',
+          });
+          await clientService.updateClient(client.id, { userId: login.id });
+          return true;
+        } catch (loginErr) {
+          const detail = loginErr?.errors?.password?.[0] || loginErr?.errors?.email?.[0] || loginErr?.message || 'Please try again';
+          toast.error(`Client saved, but the login could not be created: ${detail}`);
+          return false;
+        }
+      };
+
       if (editingClient) {
         await clientService.updateClient(editingClient.id, clientPayload);
-        toast.success(`Client ${formData.name} updated successfully`);
+        const loggedIn = wantsNewLogin ? await createLogin(editingClient) : null;
+        if (loggedIn) toast.success(`Client ${formData.name} updated and can now sign in`);
+        else if (loggedIn === null) toast.success(`Client ${formData.name} updated successfully`);
       } else {
         const createdClient = await clientService.createClient(clientPayload);
+        const loggedIn = wantsNewLogin ? await createLogin(createdClient) : null;
 
         // Project Linking / Creation
         if (formData.projectOption === 'link' && formData.existingProjectId) {
@@ -406,7 +451,8 @@ export function ClientsPage() {
           }
         }
 
-        toast.success(`Client ${formData.name} created successfully`);
+        if (loggedIn) toast.success(`Client ${formData.name} created and can now sign in`);
+        else if (loggedIn === null) toast.success(`Client ${formData.name} created successfully`);
       }
       setIsModalOpen(false);
       fetchClientsAndProjects();
@@ -639,58 +685,41 @@ export function ClientsPage() {
         <div className="flex items-center justify-between gap-2.5 overflow-x-auto">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             {/* Search bar: searches name, phone, address, email, notes */}
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Icon
-                name="search"
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-              />
-              <input
-                type="text"
+            <div className="flex-1 min-w-[200px] max-w-sm">
+              <SearchInput
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by name, phone, address, email..."
-                className="w-full h-9 pl-9 pr-8 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 text-foreground placeholder:text-muted-foreground transition-all shadow-2xs"
               />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
-                  title="Clear search"
-                >
-                  <Icon name="x" size={13} />
-                </button>
-              )}
             </div>
 
             {/* Client Type Dropdown (Replaces separate All/New/Existing tab buttons) */}
-            <select
+            <SelectField
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-9 px-3 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
+              className="w-auto min-w-[7rem]"
               title="Filter by client type"
             >
               <option value="ALL">All Clients ({counts.total})</option>
               <option value="new">New Clients ({counts.newClients})</option>
               <option value="old">Existing Clients ({counts.oldClients})</option>
-            </select>
+            </SelectField>
 
             {/* Sorting Filter */}
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground font-medium flex items-center gap-1 shrink-0">
                 <Icon name="arrow-up-down" size={13} /> Sort:
               </span>
-              <select
+              <SelectField
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="h-9 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
+                className="w-auto min-w-[7rem]"
               >
                 <option value="date_desc">Newest Registered</option>
                 <option value="date_asc">Oldest Registered</option>
                 <option value="name_asc">Name (A → Z)</option>
                 <option value="name_desc">Name (Z → A)</option>
-              </select>
+              </SelectField>
             </div>
 
             {/* Onboarding Date Filter */}
@@ -698,35 +727,35 @@ export function ClientsPage() {
               <span className="text-muted-foreground font-medium flex items-center gap-1 shrink-0">
                 <Icon name="calendar" size={13} /> Onboarding:
               </span>
-              <select
+              <SelectField
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="h-9 px-2.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer shadow-2xs hover:border-muted-foreground/40 transition-colors"
+                className="w-auto min-w-[7rem]"
               >
                 <option value="ALL">All Time</option>
                 <option value="THIS_MONTH">This Month</option>
                 <option value="LAST_30">Last 30 Days</option>
                 <option value="THIS_YEAR">This Year</option>
                 <option value="CUSTOM">Custom Date Range</option>
-              </select>
+              </SelectField>
             </div>
 
             {/* Custom Date Inputs if CUSTOM selected */}
             {dateFilter === 'CUSTOM' && (
               <div className="flex items-center gap-1.5 text-xs">
-                <input
-                  type="date"
+                <DateInput
+                 
                   value={customFromDate}
                   onChange={(e) => setCustomFromDate(e.target.value)}
-                  className="h-9 px-2 bg-background border border-border rounded-lg text-xs text-foreground shadow-2xs"
+                  className="w-auto min-w-[9.5rem]"
                   title="From Date"
                 />
                 <span className="text-muted-foreground">to</span>
-                <input
-                  type="date"
+                <DateInput
+                 
                   value={customToDate}
                   onChange={(e) => setCustomToDate(e.target.value)}
-                  className="h-9 px-2 bg-background border border-border rounded-lg text-xs text-foreground shadow-2xs"
+                  className="w-auto min-w-[9.5rem]"
                   title="To Date"
                 />
               </div>
@@ -865,6 +894,44 @@ export function ClientsPage() {
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           />
 
+          {canManageUsers && (
+            <div className="pt-3 border-t border-border space-y-3">
+              <span className="text-xs font-semibold text-foreground">Client login</span>
+              {editingClient?.userId ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                  <p className="min-w-0 text-xs text-muted-foreground">
+                    This client can sign in and see only their own projects.
+                  </p>
+                  <Button type="button" variant="outline" size="sm" leadingIcon="lock" onClick={() => setResetTarget({ id: editingClient.userId, name: editingClient.name })}>
+                    Reset password
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Switch
+                    label="Give this client a login"
+                    description="They sign in with their email and see only their own projects and site updates."
+                    checked={Boolean(formData.loginEnabled)}
+                    onChange={(checked) => setFormData({ ...formData, loginEnabled: checked })}
+                  />
+                  {formData.loginEnabled && (
+                    <Input
+                      label="Password for the client"
+                      required
+                      leadingIcon="lock"
+                      type="password"
+                      autoComplete="new-password"
+                      value={formData.loginPassword}
+                      onChange={(e) => setFormData({ ...formData, loginPassword: e.target.value })}
+                      error={formErrors.loginPassword}
+                      helperText={`They sign in with ${formData.email.trim() || 'the email above'}. At least 8 characters; not too common.`}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {!editingClient && (
             <div className="pt-3 border-t border-border space-y-3">
               <div className="flex items-center justify-between">
@@ -941,9 +1008,9 @@ export function ClientsPage() {
                     error={formErrors.existingProjectId}
                   />
 
-                  <Input
+                  <MoneyInput
                     label="Quotation Amount (₹)"
-                    type="number"
+                   
                     value={formData.quotation}
                     onChange={(e) => setFormData({ ...formData, quotation: e.target.value })}
                   />
@@ -966,9 +1033,9 @@ export function ClientsPage() {
                     error={formErrors.newProjectName}
                   />
 
-                  <Input
+                  <MoneyInput
                     label="Quotation / Total Cost (₹)"
-                    type="number"
+                   
                     value={formData.quotation}
                     onChange={(e) => setFormData({ ...formData, quotation: e.target.value })}
                   />
@@ -1073,6 +1140,9 @@ export function ClientsPage() {
           </div>
         </Modal>
       )}
+
+      {/* An administrator sets the client's password (confirming with their own) */}
+      <ResetPasswordModal isOpen={Boolean(resetTarget)} onClose={() => setResetTarget(null)} user={resetTarget} />
     </div>
   );
 }

@@ -55,7 +55,7 @@ export function Avatar({
         />
       ) : (
         <div
-          className="size-full rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center border border-border/80"
+          className="size-full rounded-full bg-brand-50 text-primary font-semibold flex items-center justify-center border border-border/80"
           title={name}
         >
           {initials}

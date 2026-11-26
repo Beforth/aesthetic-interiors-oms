@@ -215,8 +215,8 @@ function fromApi(row) {
 
 async function refresh() {
   const rows = await apiClient.getAll(LEAVE_URL);
-  // a withdrawn request is the person's own business; managers only follow pending and decided ones
-  cache = rows.filter((r) => r.status !== 'withdrawn').map(fromApi);
+  // withdrawn requests stay in the list so a manager sees them greyed out
+  cache = rows.map(fromApi);
   loaded = true;
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('osm_leave_applications_updated', { detail: cache }));
   return cache;

@@ -73,8 +73,8 @@ export const navigationItems = [
     label: 'Payments',
     path: '/payments/received',
     icon: 'payments',
-    permissions: ['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage'],
-    roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.CLIENT],
+    permissions: ['payments.client.manage', 'payments.labour.manage'], // staff only: a client has no Payments tab
+    roles: [ROLES.ADMIN, ROLES.MANAGER],
     bottomNavPriority: 4,
     items: [
       {
@@ -84,10 +84,12 @@ export const navigationItems = [
       {
         label: 'Pay',
         path: '/payments/pay',
+        permission: 'payments.labour.manage', // a client sees just their own payments page
       },
       {
         label: 'Settings',
         path: '/payments/settings',
+        permission: 'payments.client.manage',
       },
     ],
   },
@@ -96,7 +98,7 @@ export const navigationItems = [
     label: 'Expenses',
     path: '/expenses/claims',
     icon: 'receipt',
-    permissions: ['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn'],
+    permissions: ['payments.labour.manage', 'expenses.requestOwn'],
     roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.SUPERVISOR, ROLES.WORKER],
     items: [
       {
@@ -132,10 +134,12 @@ export const navigationItems = [
       {
         label: 'Type',
         path: '/leave/types',
+        permission: 'leave.approve', // a worker's Leave tab shows only requests
       },
       {
         label: 'Holiday List',
         path: '/leave/holidays',
+        permission: 'leave.approve',
       },
     ],
   },
@@ -210,10 +214,17 @@ export function getNavigationForUser(hasPermission) {
       }
       return true;
     })
-    .map((item) =>
+    .map((item) => {
+      // a client reads the reports instead of writing them, so their DSR tab is called "Site updates"
+      if (item.id === 'daily-reports' && !hasPermission('dsr.submit') && !hasPermission('dsr.viewAll')) {
+        return { ...item, label: 'Site updates' };
+      }
+      if (!item.items) return item;
       // sub-items may carry their own permission (for example Leave > Type is only for people who approve leave)
-      item.items ? { ...item, items: item.items.filter((sub) => !sub.permission || hasPermission(sub.permission)) } : item
-    );
+      const visible = item.items.filter((sub) => !sub.permission || hasPermission(sub.permission));
+      // a menu with a single page left is just a link to it (a worker's Leave tab is only requests)
+      return visible.length > 1 ? { ...item, items: visible } : { ...item, items: undefined };
+    });
 }
 
 /**

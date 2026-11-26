@@ -12,6 +12,8 @@ import { Textarea } from '../components/ui/Textarea';
 import { SearchIcon, PlusIcon, EditIcon, TrashIcon, SortIcon, ArrowUpDownIcon } from '../components/ui/icons';
 import Pagination from '../components/ui/Pagination';
 import { usePagination } from '../hooks/usePagination';
+import StepperInput from '../components/ui/StepperInput';
+import SearchInput from '../components/ui/SearchInput';
 
 /**
  * Leave Types Management Page
@@ -199,7 +201,7 @@ export function LeaveTypesPage() {
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Leave Types</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Leave Types</h1>
           <p className="text-xs text-muted-foreground mt-0.5">Manage leave categories</p>
         </div>
         <Button
@@ -216,14 +218,11 @@ export function LeaveTypesPage() {
       {/* Filter and Search Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 py-2">
         {/* Search */}
-        <div className="relative flex-1 min-w-[220px]">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search leave types..."
+        <div className="flex-1 min-w-[220px]">
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+            placeholder="Search leave types..."
           />
         </div>
 
@@ -410,13 +409,13 @@ export function LeaveTypesPage() {
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
+            <StepperInput
               label="Days / Year"
               required
-              type="number"
+             
               min={1}
               max={365}
-              placeholder="e.g. 12"
+             
               value={formData.daysPerYear}
               onChange={(e) => setFormData({ ...formData, daysPerYear: e.target.value })}
               error={formErrors.daysPerYear}

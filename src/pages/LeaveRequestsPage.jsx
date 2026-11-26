@@ -28,6 +28,11 @@ import {
   MoreIcon,
   EyeIcon,
 } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import SelectField from '../components/ui/SelectField';
+import StepperInput from '../components/ui/StepperInput';
+import SearchInput from '../components/ui/SearchInput';
+import Textarea from '../components/ui/Textarea';
 
 export function LeaveRequestsPage() {
   const toast = useToast();
@@ -248,7 +253,7 @@ export function LeaveRequestsPage() {
       {/* 1. Header with Apply Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Leave Requests
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -269,67 +274,63 @@ export function LeaveRequestsPage() {
       {/* 2. Top Filter Bar (Directly matching UI screenshot) */}
       <div className="flex flex-wrap items-center gap-2.5">
         {/* Search */}
-        <div className="relative flex-1 min-w-[220px]">
-          <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search employee, reason, department..."
+        <div className="flex-1 min-w-[220px]">
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+            placeholder="Search employee, reason, department..."
           />
         </div>
 
         {/* All Status Dropdown */}
         <div className="relative">
-          <select
+          <SelectField
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="pl-3 pr-8 py-2 text-xs font-medium rounded-xl bg-card border border-border text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs appearance-none"
+            className="w-auto min-w-[7rem]"
           >
             <option value="ALL">All Status</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
-          </select>
-          <ArrowUpDownIcon className="size-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <option value="withdrawn">Withdrawn</option>
+          </SelectField>
         </div>
 
         {/* All Types Dropdown */}
         <div className="relative">
-          <select
+          <SelectField
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="pl-3 pr-8 py-2 text-xs font-medium rounded-xl bg-card border border-border text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs appearance-none"
+            className="w-auto min-w-[7rem]"
           >
             <option value="ALL">All Types</option>
             <option value="Privileged Leave">Privileged Leave</option>
             <option value="Medical Leave">Medical Leave</option>
             <option value="Casual Leave">Casual Leave</option>
             <option value="Leave Without Pay">Leave Without Pay</option>
-          </select>
-          <ArrowUpDownIcon className="size-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          </SelectField>
         </div>
 
         {/* From Date */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card border border-border text-xs text-muted-foreground shadow-2xs">
           <span className="uppercase text-[10px] font-bold tracking-wider">FROM</span>
-          <input
-            type="date"
+          <DateInput bare
+           
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer"
+            className="w-auto min-w-[9.5rem]"
           />
         </div>
 
         {/* To Date */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card border border-border text-xs text-muted-foreground shadow-2xs">
           <span className="uppercase text-[10px] font-bold tracking-wider">TO</span>
-          <input
-            type="date"
+          <DateInput bare
+           
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer"
+            className="w-auto min-w-[9.5rem]"
           />
         </div>
 
@@ -401,6 +402,7 @@ export function LeaveRequestsPage() {
                   const isPending = status === 'pending';
                   const isApproved = status === 'approved';
                   const isRejected = status === 'rejected';
+                  const isWithdrawn = status === 'withdrawn';
 
                   // Format date range display
                   let datesText = formatDate(item.startDate);
@@ -421,7 +423,7 @@ export function LeaveRequestsPage() {
                   }
 
                   return (
-                    <tr key={item.id} className="hover:bg-muted/40 transition-colors">
+                    <tr key={item.id} className={`hover:bg-muted/40 transition-colors ${isWithdrawn ? 'bg-muted/30 opacity-60' : ''}`}>
                       {/* Employee */}
                       <td className="py-3 px-4">
                         <span className="font-semibold text-foreground text-xs block">
@@ -468,6 +470,11 @@ export function LeaveRequestsPage() {
                         {isRejected && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                             Rejected
+                          </span>
+                        )}
+                        {isWithdrawn && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-muted text-muted-foreground border border-border">
+                            Withdrawn
                           </span>
                         )}
                       </td>
@@ -598,7 +605,7 @@ export function LeaveRequestsPage() {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Employee Name <span className="text-destructive">*</span>
               </label>
-              <select
+              <SelectField
                 value={applyForm.employeeName}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -610,7 +617,7 @@ export function LeaveRequestsPage() {
                   if (val === 'Neha Kulkarni') dept = 'Operations';
                   setApplyForm({ ...applyForm, employeeName: val, department: dept });
                 }}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                className="w-full"
               >
                 <option value="Amit Deshmukh">Amit Deshmukh (Interior Design)</option>
                 <option value="nilesh">nilesh (Execution)</option>
@@ -618,7 +625,7 @@ export function LeaveRequestsPage() {
                 <option value="Rohit Kumar">Rohit Kumar (Owner)</option>
                 <option value="Neha Kulkarni">Neha Kulkarni (Operations)</option>
                 <option value="Suresh Gaikwad">Suresh Gaikwad (Site Worker)</option>
-              </select>
+              </SelectField>
             </div>
 
             {/* Leave Type */}
@@ -626,7 +633,7 @@ export function LeaveRequestsPage() {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Leave Type <span className="text-destructive">*</span>
               </label>
-              <select
+              <SelectField
                 value={applyForm.leaveType}
                 onChange={(e) => {
                   const leaveType = e.target.value;
@@ -638,13 +645,13 @@ export function LeaveRequestsPage() {
                     lwpDays: isLwp ? Math.max(1, applyForm.durationDays) : 0,
                   });
                 }}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                className="w-full"
               >
                 <option value="Privileged Leave">Privileged Leave</option>
                 <option value="Medical Leave">Medical Leave</option>
                 <option value="Casual Leave">Casual Leave</option>
                 <option value="Leave Without Pay">Leave Without Pay (LWP)</option>
-              </select>
+              </SelectField>
             </div>
 
             {/* Start & End Dates */}
@@ -653,8 +660,8 @@ export function LeaveRequestsPage() {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   From Date <span className="text-destructive">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   required
                   value={applyForm.startDate}
                   onChange={(e) => {
@@ -672,7 +679,7 @@ export function LeaveRequestsPage() {
                       lwpDays: lwp,
                     });
                   }}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 />
               </div>
 
@@ -680,8 +687,8 @@ export function LeaveRequestsPage() {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   To Date <span className="text-destructive">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   required
                   value={applyForm.endDate}
                   onChange={(e) => {
@@ -699,7 +706,7 @@ export function LeaveRequestsPage() {
                       lwpDays: lwp,
                     });
                   }}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 />
               </div>
             </div>
@@ -714,8 +721,8 @@ export function LeaveRequestsPage() {
               </div>
               <div>
                 <label className="text-muted-foreground block text-[10px] uppercase font-bold">Paid Days</label>
-                <input
-                  type="number"
+                <StepperInput
+                 
                   min="0"
                   max={applyForm.durationDays}
                   value={applyForm.paidDays}
@@ -727,13 +734,13 @@ export function LeaveRequestsPage() {
                       lwpDays: Math.max(0, applyForm.durationDays - p),
                     });
                   }}
-                  className="w-full px-2 py-1 text-xs border border-border rounded bg-background font-mono text-foreground focus:outline-none"
+                 
                 />
               </div>
               <div>
                 <label className="text-muted-foreground block text-[10px] uppercase font-bold">LWP Days</label>
-                <input
-                  type="number"
+                <StepperInput
+                 
                   min="0"
                   max="365"
                   value={applyForm.lwpDays}
@@ -745,7 +752,7 @@ export function LeaveRequestsPage() {
                       paidDays: Math.max(0, applyForm.durationDays - l),
                     });
                   }}
-                  className="w-full px-2 py-1 text-xs border border-border rounded bg-background font-mono text-foreground focus:outline-none"
+                 
                 />
                 <span className="text-[10px] text-muted-foreground">LWP can be more than 1 day.</span>
               </div>
@@ -756,12 +763,12 @@ export function LeaveRequestsPage() {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Reason
               </label>
-              <textarea
+              <Textarea
                 rows={2}
                 placeholder="Reason for leave request..."
                 value={applyForm.reason}
                 onChange={(e) => setApplyForm({ ...applyForm, reason: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs resize-none focus:ring-1 focus:ring-primary focus:outline-none"
+                className="w-full resize-none"
               />
             </div>
 
@@ -866,6 +873,11 @@ export function LeaveRequestsPage() {
                 {selectedLeaveDetails.status?.toLowerCase() === 'pending' && (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                     Pending
+                  </span>
+                )}
+                {selectedLeaveDetails.status?.toLowerCase() === 'withdrawn' && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-muted text-muted-foreground border border-border">
+                    Withdrawn
                   </span>
                 )}
               </div>

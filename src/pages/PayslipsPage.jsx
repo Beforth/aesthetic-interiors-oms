@@ -11,6 +11,7 @@ import { mockPayslips } from '../data/leaves';
 import { mockUsers } from '../data/users';
 import { cn } from '../lib/utils';
 import { usePagination } from '../hooks/usePagination';
+import PayrollRunView from '../components/domain/PayrollRunView';
 import payrollService, {
   initialCycles,
   initialStructures,
@@ -61,6 +62,10 @@ import {
   EditIcon,
   MoreIcon,
 } from '../components/ui/icons';
+import MoneyInput from '../components/ui/MoneyInput';
+import NumberInput from '../components/ui/NumberInput';
+import StepperInput from '../components/ui/StepperInput';
+import Input from '../components/ui/Input';
 
 export function PayslipsPage() {
   const toast = useToast();
@@ -272,77 +277,6 @@ export function PayslipsPage() {
     };
   }, [openMenuEmpId]);
 
-  // ---------------------------------------------------------------------------
-  // EXACT SALARY CALCULATION FORMULA (Specified by user)
-  // Daily rate = monthly salary / days in the month.
-  // Pay = daily rate x (total days - unworked Sundays - unpaid leave days) + (1 paid leave encashed if unused) + (Sunday work)
-  // ---------------------------------------------------------------------------
-  const calculateCycleForMonth = (cycle) => {
-    const daysInMonth = cycle.totalDays || 30;
-    const sundays = cycle.sundaysCount || 4;
-
-    // Active employees to calculate
-    const staffList = mockPayslips.slice(0, cycle.employeesCount || 5).map((ps, idx) => {
-      const monthlySalary = ps.basicPay + ps.hra + ps.specialAllowance + (ps.siteExecutionBonus || 0);
-      const dailyRate = Math.round((monthlySalary / daysInMonth) * 100) / 100;
-
-      // Sundays are weekly off (unpaid by default unless worked)
-      const unworkedSundays = sundays;
-      const sundayWorkDays = idx === 1 ? 1 : 0; // manager assigned Sunday work if any
-
-      // 1 paid leave rule: covered if taken, encashed as cash if not taken
-      const leavesTaken = ps.unpaidLeaves || 0;
-      const unpaidLeaveDays = Math.max(0, leavesTaken - 1);
-      const unusedPaidLeaveEncashed = leavesTaken === 0 ? 1 : 0; // encashed 1 day if 0 leaves taken
-
-      const payableDays = daysInMonth - unworkedSundays - unpaidLeaveDays + sundayWorkDays;
-      const basePay = Math.round(dailyRate * payableDays * 100) / 100;
-      const leaveEncashment = Math.round(unusedPaidLeaveEncashed * dailyRate * 100) / 100;
-      const gross = Math.round((basePay + leaveEncashment) * 100) / 100;
-
-      const pf = Math.round((gross * 0.12) > 1800 ? 1800 : (gross * 0.12));
-      const pt = 200;
-      const tds = ps.tdsTax || 0;
-      const deductions = pf + pt + tds;
-      const netPay = Math.round((gross - deductions) * 100) / 100;
-
-      return {
-        ...ps,
-        monthlySalary,
-        daysInMonth,
-        dailyRate,
-        payableDays,
-        unworkedSundays,
-        sundayWorkDays,
-        leavesTaken,
-        unpaidLeaveDays,
-        unusedPaidLeaveEncashed,
-        leaveEncashment,
-        calculatedGross: gross,
-        calculatedDeductions: deductions,
-        calculatedNetPay: netPay,
-      };
-    });
-
-    const totalGross = staffList.reduce((sum, s) => sum + s.calculatedGross, 0);
-    const totalDeductions = staffList.reduce((sum, s) => sum + s.calculatedDeductions, 0);
-    const totalNet = staffList.reduce((sum, s) => sum + s.calculatedNetPay, 0);
-
-    return {
-      staffList,
-      totalGross: Math.round(totalGross * 100) / 100,
-      totalDeductions: Math.round(totalDeductions * 100) / 100,
-      totalNet: Math.round(totalNet * 100) / 100,
-    };
-  };
-
-  // Detailed salary table uses the same 10 / 25 / 30 pagination as every other table.
-  const detailCalc = useMemo(
-    () => (viewingCycle ? calculateCycleForMonth(viewingCycle) : null),
-    [viewingCycle]
-  );
-  const detailPager = usePagination(detailCalc?.staffList || []);
-
   // Check if the selected period has already been generated
   const isPeriodAlreadyGenerated = useMemo(() => {
     const norm = normalizePeriod(generatePeriod);
@@ -380,98 +314,26 @@ export function PayslipsPage() {
       return;
     }
 
-    const periodName = generatePeriod.replace(',', '');
-    const is31 = periodName.includes('October') || periodName.includes('December') || periodName.includes('January');
-    const totalDays = is31 ? 31 : 30;
-
-    const newCycle = {
-      id: `cycle-${Date.now()}`,
-      period: generatePeriod,
-      createdDate: new Date().toLocaleDateString('en-GB'),
-      monthKey: new Date().toISOString().slice(0, 7),
-      totalDays,
-      sundaysCount: 4,
-      employeesCount: 5,
-      gross: 0,
-      deductions: 0,
-      netPay: 0,
-      status: 'Draft',
-    };
-
     try {
-      const created = await payrollService.createCycle(newCycle);
+      const created = await payrollService.createCycle({ period: generatePeriod });
       if (!created) throw new Error('Failed to create payroll run');
       const rows = await refreshCycles();
       setCycles(upsertById(rows, created));
-      toast.success(`Created draft payroll run for ${generatePeriod}! Click Calculate  to process.`);
+      toast.success(`Draft run created for ${created.period}. Open it, check the employees, then Calculate.`);
       setIsGenerateModalOpen(false);
     } catch (err) {
       toast.error(err?.message || 'Failed to create payroll run');
     }
   };
 
-  // Run calculation on a cycle
-  const handleExecuteCalculation = async (cycleId) => {
-    const cycle = cycles.find((c) => String(c.id) === String(cycleId));
-    if (!cycle) return;
-    const res = calculateCycleForMonth(cycle);
-
+  /** Calculate or approve from the list; everything else happens inside the run. */
+  const handleRunAction = async (cycleId, action, done) => {
     try {
-      const updated = await payrollService.calculateCycle(cycleId, {
-        gross: res.totalGross,
-        deductions: res.totalDeductions,
-        netPay: res.totalNet,
-      });
-      if (!updated) throw new Error('Failed to calculate pay cycle');
-
-      const rows = await refreshCycles();
-      const merged = upsertById(rows, updated);
-      setCycles(merged);
-      const fresh = merged.find((row) => String(row.id) === String(cycleId));
-      setViewingCycle((prev) =>
-        prev && String(prev.id) === String(cycleId) ? fresh || updated : prev
-      );
-      toast.success('Pay cycle calculated using daily rate & attendance rules!');
+      await payrollService.runAction(cycleId, action);
+      await refreshCycles();
+      toast.success(done);
     } catch (err) {
-      toast.error(err?.message || 'Failed to calculate pay cycle');
-    }
-  };
-
-  // Approve a cycle
-  const handleApproveCycle = async (cycleId) => {
-    try {
-      const updated = await payrollService.approveCycle(cycleId);
-      if (!updated) throw new Error('Failed to approve pay cycle');
-
-      const rows = await refreshCycles();
-      const merged = upsertById(rows, updated);
-      setCycles(merged);
-      const fresh = merged.find((row) => String(row.id) === String(cycleId));
-      setViewingCycle((prev) =>
-        prev && String(prev.id) === String(cycleId) ? fresh || updated : prev
-      );
-      toast.success('Payroll run approved for disbursement!');
-    } catch (err) {
-      toast.error(err?.message || 'Failed to approve pay cycle');
-    }
-  };
-
-  // Mark an approved cycle as paid
-  const handlePayCycle = async (cycleId) => {
-    try {
-      const updated = await payrollService.payCycle(cycleId);
-      if (!updated) throw new Error('Failed to mark payroll run as paid');
-
-      const rows = await refreshCycles();
-      const merged = upsertById(rows, updated);
-      setCycles(merged);
-      const fresh = merged.find((row) => String(row.id) === String(cycleId));
-      setViewingCycle((prev) =>
-        prev && String(prev.id) === String(cycleId) ? fresh || updated : prev
-      );
-      toast.success('Payroll run marked as paid!');
-    } catch (err) {
-      toast.error(err?.message || 'Failed to mark payroll run as paid');
+      toast.error(err?.message || 'That action could not be done');
     }
   };
 
@@ -579,580 +441,22 @@ export function PayslipsPage() {
   };
 
   // ===========================================================================
-  // IN-PAGE VIEW: PAYSLIP PREVIEW (print only this sheet)
-  // ===========================================================================
-  if (showPayslip && selectedStaffSlip) {
-    const slip = selectedStaffSlip;
-    const pt = 200;
-    const tds = slip.tdsTax || 0;
-    const pf = Math.max(0, Math.round(((slip.calculatedDeductions || 0) - pt - tds) * 100) / 100);
-    const slipPeriod = viewingCycle?.period || slip.month || '';
-
-    return (
-      <div className="space-y-4 pb-16 animate-in fade-in duration-200">
-        <div className="flex items-center justify-between gap-3 no-print">
-          <button
-            type="button"
-            onClick={() => { setShowPayslip(false); setSelectedStaffSlip(null); }}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            <ArrowLeftIcon className="size-4" />
-            Back to {slip.employeeName}
-          </button>
-          <Button variant="primary" size="sm" onClick={() => window.print()} className="flex items-center gap-1.5 font-semibold">
-            <DownloadIcon className="size-4" />
-            <span>Download / Print</span>
-          </Button>
-        </div>
-
-        <div className="print-payslip mx-auto max-w-3xl rounded-xl border border-border bg-card shadow-2xs p-6 sm:p-8 space-y-5">
-          <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
-            <div>
-              <h2 className="text-lg font-bold text-foreground">{payrollSettings.companyName}</h2>
-              <p className="text-[11px] text-muted-foreground">{payrollSettings.companyAddress}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">PF: {payrollSettings.pfNumber} - PAN: {payrollSettings.panNumber}</p>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Payslip</span>
-              <p className="text-xs font-semibold text-foreground">{slipPeriod}</p>
-              <p className="text-[11px] text-muted-foreground">{viewingCycle?.status || slip.payoutStatus || 'Draft'}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Employee</span>
-              <span className="font-semibold text-foreground">{slip.employeeName}</span>
-            </div>
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Role</span>
-              <span className="font-semibold text-foreground">{slip.role}</span>
-            </div>
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Payable Days</span>
-              <span className="font-semibold text-foreground">{slip.payableDays} / {slip.daysInMonth}</span>
-            </div>
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Payment Mode</span>
-              <span className="font-semibold text-foreground">{slip.paymentMode || 'Bank Transfer'}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="px-3 py-2 bg-muted/30 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Earnings</div>
-              <div className="divide-y divide-border text-xs">
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Basic Pay</span><span className="font-mono text-foreground">{formatCurrency(slip.basicPay)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">HRA</span><span className="font-mono text-foreground">{formatCurrency(slip.hra)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Special Allowance</span><span className="font-mono text-foreground">{formatCurrency(slip.specialAllowance)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Site Execution Bonus</span><span className="font-mono text-foreground">{formatCurrency(slip.siteExecutionBonus || 0)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Leave Encashment</span><span className="font-mono text-success">{formatCurrency(slip.leaveEncashment)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2 bg-muted/20 font-semibold"><span className="text-foreground">Gross</span><span className="font-mono text-foreground">{formatCurrency(slip.calculatedGross)}</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="px-3 py-2 bg-muted/30 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Deductions</div>
-              <div className="divide-y divide-border text-xs">
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Provident Fund (12%)</span><span className="font-mono text-foreground">{formatCurrency(pf)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">Professional Tax</span><span className="font-mono text-foreground">{formatCurrency(pt)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2"><span className="text-muted-foreground">TDS</span><span className="font-mono text-foreground">{formatCurrency(tds)}</span></div>
-                <div className="flex items-center justify-between px-3 py-2 bg-muted/20 font-semibold"><span className="text-foreground">Total Deductions</span><span className="font-mono text-destructive">{formatCurrency(slip.calculatedDeductions)}</span></div>
-              </div>
-
-              <div className="px-3 py-3 bg-success/10 border-t border-border flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Net Pay</span>
-                <span className="text-sm font-bold font-mono text-success">{formatCurrency(slip.calculatedNetPay)}</span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-[10px] text-muted-foreground border-t border-border pt-3">
-            Daily Rate = CTC / {slip.daysInMonth} days - Sundays weekly off - 1 paid leave covered or encashed
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ===========================================================================
-  // IN-PAGE VIEW: EMPLOYEE SALARY BREAKDOWN
-  // ===========================================================================
-  if (selectedEmployee) {
-    const emp = selectedEmployee;
-    const pt = 200;
-    const tds = emp.tdsTax || 0;
-    const pf = Math.max(0, Math.round(((emp.calculatedDeductions || 0) - pt - tds) * 100) / 100);
-    const basePay = Math.round(emp.dailyRate * emp.payableDays * 100) / 100;
-
-    return (
-      <div className="space-y-5 pb-16 animate-in fade-in duration-200">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => setSelectedEmployee(null)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            <ArrowLeftIcon className="size-4" />
-            Back to {viewingCycle?.period || 'pay cycles'}
-          </button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => { setSelectedStaffSlip(emp); setShowPayslip(true); }}
-            className="flex items-center gap-1.5 font-semibold"
-          >
-            <FileTextIcon className="size-4" />
-            <span>View Payslip</span>
-          </Button>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card shadow-2xs overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5">
-            <div className="flex items-center gap-3.5 min-w-0">
-              <Avatar name={emp.employeeName} size="lg" className="shrink-0" />
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold tracking-tight text-foreground truncate">{emp.employeeName}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">{emp.role}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">Payroll period: {viewingCycle?.period}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Badge variant={viewingCycle?.status === 'Paid' ? 'success' : viewingCycle?.status === 'Approved' ? 'info' : 'warning'}>
-                {viewingCycle?.status}
-              </Badge>
-              <span className="text-[11px] text-muted-foreground">Employee ID: {emp.employeeId}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border border-t border-border">
-            <div className="relative bg-card p-4 pr-11">
-              <span className="text-[11px] text-muted-foreground block">Monthly CTC</span>
-              <span className="mt-1 block text-base font-bold font-mono text-foreground">{formatCurrency(emp.monthlySalary)}</span>
-              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:size-3.5">
-                <IndianRupeeIcon />
-              </div>
-            </div>
-            <div className="relative bg-card p-4 pr-11">
-              <span className="text-[11px] text-muted-foreground block">Daily Rate</span>
-              <span className="mt-1 block text-base font-bold font-mono text-foreground">{formatCurrency(emp.dailyRate)}</span>
-              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-info/10 text-info [&>svg]:size-3.5">
-                <CalendarIcon />
-              </div>
-            </div>
-            <div className="relative bg-card p-4 pr-11">
-              <span className="text-[11px] text-muted-foreground block">Payable Days</span>
-              <span className="mt-1 block text-base font-bold text-foreground">{emp.payableDays} <span className="text-[11px] font-medium text-muted-foreground">of {emp.daysInMonth}</span></span>
-              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-success/10 text-success [&>svg]:size-3.5">
-                <CheckCircleIcon />
-              </div>
-            </div>
-            <div className="relative bg-primary/5 p-4 pr-11">
-              <span className="text-[11px] text-muted-foreground block">Net Pay</span>
-              <span className="mt-1 block text-base font-bold font-mono text-success">{formatCurrency(emp.calculatedNetPay)}</span>
-              <div className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:size-3.5">
-                <ReceiptIcon />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-2 rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
-            <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
-              <ClockIcon className="size-3.5 text-muted-foreground" />
-              <span className="text-xs font-semibold text-foreground">Attendance and Days</span>
-            </div>
-            <div className="divide-y divide-border text-xs">
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-muted-foreground">Total days in month</span>
-                <span className="font-semibold text-foreground">{emp.daysInMonth}</span>
-              </div>
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-muted-foreground">Sundays (weekly off)</span>
-                <span className="font-semibold text-foreground">-{emp.unworkedSundays}</span>
-              </div>
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-muted-foreground">Sunday work</span>
-                <span className="font-semibold text-success">+{emp.sundayWorkDays}</span>
-              </div>
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-muted-foreground">Leaves taken</span>
-                <span className="font-semibold text-foreground">{emp.leavesTaken}</span>
-              </div>
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-muted-foreground">Unpaid leave days</span>
-                <span className="font-semibold text-destructive">-{emp.unpaidLeaveDays}</span>
-              </div>
-              <div className="flex items-center justify-between px-4 py-3 bg-muted/20">
-                <span className="font-semibold text-foreground">Payable days</span>
-                <span className="font-bold text-foreground">{emp.payableDays}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-3 rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
-            <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
-              <IndianRupeeIcon className="size-3.5 text-muted-foreground" />
-              <span className="text-xs font-semibold text-foreground">Earnings and Deductions</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border text-xs">
-              <div>
-                <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/10">Earnings</div>
-                <div className="divide-y divide-border">
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-muted-foreground">Base pay (daily rate x payable days)</span>
-                    <span className="font-mono font-semibold text-foreground">{formatCurrency(basePay)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-muted-foreground">Paid leave encashment</span>
-                    <span className="font-mono font-semibold text-success">{formatCurrency(emp.leaveEncashment)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20">
-                    <span className="font-semibold text-foreground">Gross earnings</span>
-                    <span className="font-mono font-bold text-foreground">{formatCurrency(emp.calculatedGross)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/10">Deductions</div>
-                <div className="divide-y divide-border">
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-muted-foreground">Provident Fund (12% capped)</span>
-                    <span className="font-mono font-semibold text-destructive">-{formatCurrency(pf)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-muted-foreground">Professional Tax</span>
-                    <span className="font-mono font-semibold text-destructive">-{formatCurrency(pt)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-muted-foreground">TDS</span>
-                    <span className="font-mono font-semibold text-destructive">-{formatCurrency(tds)}</span>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20">
-                    <span className="font-semibold text-foreground">Total deductions</span>
-                    <span className="font-mono font-bold text-destructive">{formatCurrency(emp.calculatedDeductions)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-3.5 bg-success/10 border-t border-border">
-              <span className="text-sm font-bold text-foreground">Net Pay</span>
-              <span className="text-base font-bold font-mono text-success">{formatCurrency(emp.calculatedNetPay)}</span>
-            </div>
-          </div>
-        </div>
-
-        <p className="text-[11px] text-muted-foreground">
-          Calculation: (Monthly CTC / {emp.daysInMonth} days) x payable days + paid leave encashment - statutory deductions. Sundays are weekly off.
-        </p>
-      </div>
-    );
-  }
-
-  // ===========================================================================
-  // IN-PAGE VIEW: PAY CYCLE BREAKDOWN (whole page)
+  // IN-PAGE VIEW: ONE PAYROLL RUN
   // ===========================================================================
   if (viewingCycle) {
-    const calc = detailCalc;
-
     return (
-      <div className="space-y-5 pb-16 animate-in fade-in duration-200">
-
-        {/* ── Header Row: Title + Status + Action Buttons ── */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          {/* Left: title + badge */}
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-tight">
-                {viewingCycle.period}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <button
-                type="button"
-                onClick={() => { setViewingCycle(null); setSelectedEmployee(null); setShowPayslip(false); setSelectedStaffSlip(null); }}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-medium"
-              >
-                ← Payroll run
-              </button>
-              <Badge
-                variant={
-                  viewingCycle.status === 'Calculated'
-                    ? 'warning'
-                    : viewingCycle.status === 'Draft'
-                    ? 'neutral'
-                    : viewingCycle.status === 'Approved'
-                    ? 'info'
-                    : 'success'
-                }
-              >
-                {viewingCycle.status}
-              </Badge>
-            </div>
-          </div>
-
-          {/* Right: action buttons — no Register, no Reports */}
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => toast.info('Sync employees coming soon')}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
-            >
-              <RefreshIcon className="size-3.5 text-muted-foreground" />
-              Sync employees
-            </button>
-            <button
-              type="button"
-              onClick={() => handleExecuteCalculation(viewingCycle.id)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
-            >
-              <ZapIcon className="size-3.5 text-amber-500" />
-              Recalculate
-            </button>
-            <button
-              type="button"
-              onClick={() => handleApproveCycle(viewingCycle.id)}
-              disabled={viewingCycle.status === 'Approved' || viewingCycle.status === 'Paid'}
-              className={cn(
-                'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer',
-                viewingCycle.status === 'Approved' || viewingCycle.status === 'Paid'
-                  ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-60 border border-border'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent'
-              )}
-            >
-              <CheckCircleIcon className="size-3.5" />
-              Approve Run
-            </button>
-            {viewingCycle.status === 'Approved' && (
-              <button
-                type="button"
-                onClick={() => handlePayCycle(viewingCycle.id)}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
-              >
-                <WalletIcon className="size-3.5 text-success" />
-                Mark Paid
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => handleExecuteCalculation(viewingCycle.id)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
-            >
-              <RefreshIcon className="size-3.5 text-muted-foreground" />
-              Regenerate
-            </button>
-            <button
-              type="button"
-              onClick={() => { handleDeleteCycle(viewingCycle.id); setViewingCycle(null); }}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-destructive/30 bg-destructive/5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-            >
-              <TrashIcon className="size-3.5" />
-              Delete
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard variant="inline" label="Employees" value={viewingCycle.employeesCount} icon={<FileTextIcon className="size-5" />} />
-          <StatCard variant="inline" label="Gross" value={formatCurrency(calc.totalGross)} tone="primary" icon={<IndianRupeeIcon className="size-5" />} />
-          <StatCard variant="inline" label="Deductions" value={formatCurrency(calc.totalDeductions)} tone="danger" icon={<XCircleIcon className="size-5" />} />
-          <StatCard variant="inline" label="Net Pay" value={formatCurrency(calc.totalNet)} tone="success" icon={<IndianRupeeIcon className="size-5" />} />
-        </div>
-
-        {/* ── Employee Breakdown Table ── */}
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <span className="inline-flex items-center gap-1">Employee <span className="text-muted-foreground/60">↑</span></span>
-                  </th>
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Type</th>
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Attendance</th>
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">Gross</th>
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">Deductions</th>
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">
-                    <span className="inline-flex items-center gap-1">Net <span className="text-muted-foreground/60">↕</span></span>
-                  </th>
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="py-3 px-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {calc.staffList.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground text-xs">
-                      No employees in this payroll run. Click Recalculate to populate.
-                    </td>
-                  </tr>
-                ) : (
-                  detailPager.paginatedItems.map((emp) => (
-                    <tr
-                      key={emp.id}
-                      onClick={() => setSelectedEmployee(emp)}
-                      className="hover:bg-muted/30 transition-colors cursor-pointer"
-                    >
-                      {/* Employee name + role */}
-                      <td className="py-3.5 px-4">
-                        <span className="text-sm font-semibold text-foreground block leading-tight">{emp.employeeName}</span>
-                        <span className="text-[11px] text-muted-foreground">{emp.role}</span>
-                      </td>
-
-                      {/* Type — purple text, no badge background */}
-                      <td className="py-3.5 px-4">
-                        <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">Monthly</span>
-                      </td>
-
-                      {/* Attendance — P · H · LOP format */}
-                      <td className="py-3.5 px-4">
-                        <span className="text-xs text-foreground font-mono">
-                          P {emp.payableDays} · H {emp.unusedPaidLeaveEncashed} · LOP {emp.unpaidLeaveDays}
-                        </span>
-                        {emp.sundayWorkDays > 0 && (
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold block">
-                            +{formatCurrency(emp.leaveEncashment)} OT
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Gross */}
-                      <td className="py-3.5 px-4 text-right">
-                        <span className="text-sm font-semibold font-mono text-foreground">{formatCurrency(emp.calculatedGross)}</span>
-                      </td>
-
-                      {/* Deductions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <span className={cn(
-                          'text-sm font-semibold font-mono',
-                          emp.calculatedDeductions > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-muted-foreground'
-                        )}>
-                          {formatCurrency(emp.calculatedDeductions)}
-                        </span>
-                      </td>
-
-                      {/* Net */}
-                      <td className="py-3.5 px-4 text-right">
-                        <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                          {formatCurrency(emp.calculatedNetPay)}
-                        </span>
-                        {emp.holdAmount > 0 && (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium block">
-                            Hold {formatCurrency(emp.holdAmount)}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <Badge
-                          variant={
-                            viewingCycle.status === 'Calculated'
-                              ? 'warning'
-                              : viewingCycle.status === 'Draft'
-                              ? 'neutral'
-                              : viewingCycle.status === 'Approved'
-                              ? 'info'
-                              : 'success'
-                          }
-                        >
-                          {viewingCycle.status}
-                        </Badge>
-                      </td>
-
-                      {/* Actions — ··· dots menu (portaled so the table cannot clip it) */}
-                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="relative inline-block text-left">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (openMenuEmpId === emp.id) {
-                                setOpenMenuEmpId(null);
-                                return;
-                              }
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const menuWidth = 176;
-                              const openUp = window.innerHeight - rect.bottom < 220;
-                              setMenuAnchor({
-                                left: Math.max(
-                                  8,
-                                  Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
-                                ),
-                                top: openUp ? rect.top - 8 : rect.bottom + 6,
-                                openUp,
-                              });
-                              setOpenMenuEmpId(emp.id);
-                            }}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            <MoreIcon className="size-4" />
-                          </button>
-                          {openMenuEmpId === emp.id && menuAnchor &&
-                            createPortal(
-                              <div
-                                ref={rowActionMenuRef}
-                                style={{
-                                  position: 'fixed',
-                                  top: menuAnchor.top,
-                                  left: menuAnchor.left,
-                                  transform: menuAnchor.openUp ? 'translateY(-100%)' : undefined,
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="z-50 w-44 rounded-xl border border-border bg-card shadow-lg py-1 animate-in fade-in duration-100"
-                              >
-                                <button onClick={() => { setSelectedStaffSlip(emp); setShowPayslip(true); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                  <FileTextIcon className="size-3.5 text-muted-foreground" /> Payslip
-                                </button>
-                                <button onClick={() => { openEditEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                  <EditIcon className="size-3.5 text-muted-foreground" /> Edit
-                                </button>
-                                <div className="my-1 border-t border-border" />
-                                <button onClick={() => { openHoldEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                  <LockIcon className="size-3.5 text-muted-foreground" /> Hold amount
-                                </button>
-                                <button onClick={() => { openAdjustEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-muted cursor-pointer">
-                                  <WalletIcon className="size-3.5 text-muted-foreground" /> Adjust amount paid
-                                </button>
-                                <div className="my-1 border-t border-border" />
-                                <button onClick={() => { setRemovingEmployee(emp); setOpenMenuEmpId(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 cursor-pointer">
-                                  <TrashIcon className="size-3.5" /> Remove from run
-                                </button>
-                              </div>,
-                              document.body
-                            )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="border-t border-border px-4 py-3">
-            <Pagination {...detailPager.pagination} />
-          </div>
-        </div>
-
-        <p className="text-[11px] text-muted-foreground">Click any row to open the full salary breakdown.</p>
-
-        <ConfirmDialog
-          isOpen={!!deleteTarget}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={confirmDelete}
-          title="Confirm delete"
-          message={`Are you sure you want to delete this ${
-            deleteTarget?.type === 'cycle' ? 'payroll cycle run' : 'salary structure template'
-          }? This action cannot be undone.`}
-          confirmText="Delete"
-        />
-      </div>
+      <PayrollRunView
+        cycle={viewingCycle}
+        company={payrollSettings}
+        onBack={() => {
+          setViewingCycle(null);
+          refreshCycles().catch(() => {});
+        }}
+        onChanged={setViewingCycle}
+      />
     );
   }
+
   return (
     <div className="space-y-5 pb-16 animate-in fade-in duration-200">
       <Tabs
@@ -1172,7 +476,7 @@ export function PayslipsPage() {
         <div className="space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Payroll</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Payroll</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Salary structures, pay cycles and payouts</p>
             </div>
             {isAdminOrManager && (
@@ -1321,27 +625,27 @@ export function PayslipsPage() {
                     >
                       <EyeIcon className="size-3.5" />
                     </button>
-                    {isAdminOrManager && (
+                    {isAdminOrManager && (cycle.status === 'Draft' || cycle.status === 'Calculated') && (
                       <button
                         type="button"
-                        onClick={() => handleExecuteCalculation(cycle.id)}
+                        onClick={() => handleRunAction(cycle.id, 'calculate', 'Payroll run calculated')}
                         className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                        title="Recalculate"
+                        title={cycle.status === 'Draft' ? 'Calculate' : 'Recalculate'}
                       >
                         <ZapIcon className="size-3.5" />
                       </button>
                     )}
-                    {isAdminOrManager && cycle.status !== 'Approved' && cycle.status !== 'Paid' && (
+                    {isAdminOrManager && cycle.status === 'Calculated' && (
                       <button
                         type="button"
-                        onClick={() => handleApproveCycle(cycle.id)}
+                        onClick={() => handleRunAction(cycle.id, 'approve', 'Payroll run approved. Payslips are now visible to staff.')}
                         className="size-7 rounded-lg flex items-center justify-center text-success hover:bg-success/15 transition-colors cursor-pointer"
                         title="Approve"
                       >
                         <CheckCircleIcon className="size-3.5" />
                       </button>
                     )}
-                    {isAdminOrManager && (
+                    {isAdminOrManager && cycle.status !== 'Paid' && (
                       <button
                         type="button"
                         onClick={() => handleDeleteCycle(cycle.id)}
@@ -1371,7 +675,7 @@ export function PayslipsPage() {
         <div className="space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Salary Structures</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Salary Structures</h1>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Define earnings packages, daily rate models, and statutory deduction templates
               </p>
@@ -1485,7 +789,7 @@ export function PayslipsPage() {
       {activeSubTab === 'settings' && (
         <div className="space-y-5 w-full">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Payroll</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Payroll</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               Salary structures, pay cycles and payouts
             </p>
@@ -1509,12 +813,12 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     COMPANY NAME
                   </label>
-                  <input
+                  <Input
                     type="text"
                     required
                     value={payrollSettings.companyName}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, companyName: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1522,12 +826,12 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     COMPANY ADDRESS
                   </label>
-                  <input
+                  <Input
                     type="text"
                     required
                     value={payrollSettings.companyAddress}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, companyAddress: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1535,11 +839,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     PF NUMBER
                   </label>
-                  <input
+                  <Input
                     type="text"
                     value={payrollSettings.pfNumber}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, pfNumber: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1547,11 +851,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     ESIC NUMBER
                   </label>
-                  <input
+                  <Input
                     type="text"
                     value={payrollSettings.esicNumber}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, esicNumber: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1559,11 +863,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     PAN NUMBER
                   </label>
-                  <input
+                  <Input
                     type="text"
                     value={payrollSettings.panNumber}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, panNumber: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none font-mono"
+                    className="w-full font-mono"
                   />
                 </div>
               </div>
@@ -1585,11 +889,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     PF %
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={payrollSettings.pfPercent}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, pfPercent: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1597,12 +901,12 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     ESIC %
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     step="0.01"
                     value={payrollSettings.esicPercent}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, esicPercent: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1610,11 +914,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     ESIC CAP (₹)
                   </label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={payrollSettings.esicCap}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, esicCap: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1622,11 +926,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     PT (₹)
                   </label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={payrollSettings.ptAmount}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, ptAmount: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1634,11 +938,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     DEFAULT TDS (₹)
                   </label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={payrollSettings.defaultTds}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, defaultTds: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -1660,11 +964,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     PAY DAYS IN A MONTH
                   </label>
-                  <input
-                    type="number"
+                  <StepperInput
+                   
                     value={payrollSettings.payDaysInMonth}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, payDaysInMonth: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                   
                   />
                 </div>
 
@@ -1672,11 +976,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     BASIC % OF RATE
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={payrollSettings.basicPercent}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, basicPercent: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1684,11 +988,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     HRA % OF BASIC
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={payrollSettings.hraPercent}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, hraPercent: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1696,11 +1000,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     CONVEYANCE % OF BASIC
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={payrollSettings.conveyancePercent}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, conveyancePercent: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1708,12 +1012,12 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     PF EMPLOYER %
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     step="0.01"
                     value={payrollSettings.pfEmployerPercent}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, pfEmployerPercent: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1721,12 +1025,12 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     ESIC EMPLOYER %
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     step="0.01"
                     value={payrollSettings.esicEmployerPercent}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, esicEmployerPercent: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1734,11 +1038,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     PF WAGE CAP (₹)
                   </label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={payrollSettings.pfWageCap}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, pfWageCap: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
 
@@ -1746,11 +1050,11 @@ export function PayslipsPage() {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     ESIC WAGES
                   </label>
-                  <input
+                  <Input
                     type="text"
                     value={payrollSettings.esicWages}
                     onChange={(e) => setPayrollSettings({ ...payrollSettings, esicWages: e.target.value })}
-                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -1908,7 +1212,7 @@ export function PayslipsPage() {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Creates a draft run for 7 active employee(s). Click Calculate to pull attendance days, late penalties, and overtime.
+                Creates a draft run listing every staff member who has a salary. Open it and click Calculate to work out pay from attendance, leave and salary advances.
               </p>
             )}
 
@@ -1956,13 +1260,13 @@ export function PayslipsPage() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Name
                 </label>
-                <input
+                <Input
                   type="text"
                   required
                   
                   value={templateForm.name}
                   onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full"
                 />
               </div>
 
@@ -1970,12 +1274,12 @@ export function PayslipsPage() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Note (Optional)
                 </label>
-                <input
+                <Input
                   type="text"
                   
                   value={templateForm.note}
                   onChange={(e) => setTemplateForm({ ...templateForm, note: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full"
                 />
               </div>
             </div>
@@ -2011,8 +1315,8 @@ export function PayslipsPage() {
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">₹</span>
-                <input
-                  type="number"
+                <MoneyInput
+                 
                   required
                   min="1000"
                   
@@ -2028,7 +1332,7 @@ export function PayslipsPage() {
                       specialAllowance: ctcVal === '' ? '' : Math.round(ctcVal * 0.2),
                     });
                   }}
-                  className="w-full pl-7 pr-3 py-2 border border-border rounded-lg bg-background text-foreground font-mono font-bold text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full"
                 />
               </div>
             </div>
@@ -2047,38 +1351,38 @@ export function PayslipsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground block">Basic</label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={templateForm.basic}
                     onChange={(e) => setTemplateForm({ ...templateForm, basic: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
+                    className="w-full"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground block">HRA</label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={templateForm.hra}
                     onChange={(e) => setTemplateForm({ ...templateForm, hra: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
+                    className="w-full"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground block">Conveyance</label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={templateForm.conveyance}
                     onChange={(e) => setTemplateForm({ ...templateForm, conveyance: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
+                    className="w-full"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground block">Special Allowance</label>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={templateForm.specialAllowance}
                     onChange={(e) => setTemplateForm({ ...templateForm, specialAllowance: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary"
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -2089,12 +1393,12 @@ export function PayslipsPage() {
               <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                 Overtime Rate / HR
               </label>
-              <input
-                type="number"
+              <MoneyInput
+               
                 min="0"
                 value={templateForm.overtimeRate}
                 onChange={(e) => setTemplateForm({ ...templateForm, overtimeRate: numericOnChange(e.target.value, parseFloat) })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                className="w-full"
               />
             </div>
 
@@ -2121,11 +1425,11 @@ export function PayslipsPage() {
                 </button>
                 <div className="flex items-center gap-1 text-xs">
                   <span className="text-muted-foreground">%</span>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={templateForm.pfRate}
                     onChange={(e) => setTemplateForm({ ...templateForm, pfRate: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-24 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
+                    className="w-24"
                   />
                 </div>
               </div>
@@ -2147,18 +1451,18 @@ export function PayslipsPage() {
                 </button>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">%</span>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={templateForm.esicRate}
                     onChange={(e) => setTemplateForm({ ...templateForm, esicRate: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-24 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
+                    className="w-24"
                   />
                   <span className="text-muted-foreground">₹</span>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={templateForm.esicThreshold}
                     onChange={(e) => setTemplateForm({ ...templateForm, esicThreshold: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-28 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
+                    className="w-28"
                   />
                 </div>
               </div>
@@ -2180,11 +1484,11 @@ export function PayslipsPage() {
                 </button>
                 <div className="flex items-center gap-1 text-xs">
                   <span className="text-muted-foreground">₹</span>
-                  <input
-                    type="number"
+                  <MoneyInput
+                   
                     value={templateForm.ptAmount}
                     onChange={(e) => setTemplateForm({ ...templateForm, ptAmount: numericOnChange(e.target.value, parseFloat) })}
-                    className="w-24 px-2.5 py-2 border border-border rounded-lg bg-background font-mono text-xs text-right"
+                    className="w-24"
                   />
                 </div>
               </div>

@@ -32,6 +32,7 @@ import { Kanban } from '../components/ui/kanban';
 import StatusBadge from '../components/ui/StatusBadge';
 import { calculateProgress } from '../utils/progress';
 import { cn } from '../lib/utils';
+import MoneyInput from '../components/ui/MoneyInput';
 
 const CLIENT_PROJECT_KANBAN_COLUMNS = [
   {
@@ -370,7 +371,6 @@ export function ClientDetailPage() {
       <div
         onClick={() => navigate(`/projects/${project.id}`)}
         className="flex w-full flex-col gap-2 select-none group cursor-pointer"
-        title={`Open project: ${project.name}`}
       >
         {/* 1. Project Name, Status Badge & Delete Button */}
         <div className="flex items-start justify-between gap-2">
@@ -771,9 +771,9 @@ export function ClientDetailPage() {
             placeholder="e.g. Plot 42, Indiranagar, Bengaluru"
           />
 
-          <Input
+          <MoneyInput
             label="Total Quotation Cost (₹)"
-            type="number"
+           
             value={newProjectData.totalCost}
             onChange={(e) => setNewProjectData({ ...newProjectData, totalCost: e.target.value })}
             placeholder="3500000"

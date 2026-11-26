@@ -23,6 +23,7 @@ import {
   CheckCircleIcon,
   ChevronRightIcon,
 } from '../components/ui/icons';
+import SearchInput from '../components/ui/SearchInput';
 
 /**
  * Filter tabs matching user's reference screenshot (Image 1)
@@ -275,7 +276,7 @@ export function NotificationsPage() {
       {/* Main Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Notifications & Updates
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -307,14 +308,11 @@ export function NotificationsPage() {
       {/* Search / Delete All */}
       <div className="pt-3">
         <div className="flex items-center gap-2.5">
-          <div className="relative min-w-[220px] flex-1 sm:flex-initial">
-            <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search..."
+          <div className="min-w-[220px] flex-1 sm:flex-initial">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-8 pl-8 pr-3 text-xs bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+              placeholder="Search..."
             />
           </div>
 

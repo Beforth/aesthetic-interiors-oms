@@ -188,6 +188,7 @@ function ProjectCard({ project, clientName, onOpen }) {
         }
       }}
       aria-label={`Open project ${project.name}`}
+      data-no-tooltip
       className="block h-full cursor-pointer text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Card
@@ -228,9 +229,11 @@ function ProjectCard({ project, clientName, onOpen }) {
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const toast = useToast();
   const canCreateProject = usePermission('projects.create');
+  // A client sees only their own projects.
+  const isClientOnly = hasPermission('projects.viewOwn') && !hasPermission('projects.viewAll');
 
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
@@ -249,13 +252,17 @@ export function ProjectsPage() {
       ]);
       setProjects(projectRows || []);
       setClients(clientRows || []);
+      // A client with a single project goes straight to its progress and updates.
+      if (isClientOnly && projectRows?.length === 1) {
+        navigate(`/projects/${projectRows[0].id}`, { replace: true });
+      }
     } catch (error) {
       console.error('Failed to load projects:', error);
       toast.error('Failed to load projects');
     } finally {
       setLoading(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, toast, isClientOnly, navigate]);
 
   useEffect(() => {
     fetchAll();

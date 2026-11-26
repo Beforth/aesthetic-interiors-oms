@@ -13,6 +13,9 @@ import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Pagination from '../components/ui/Pagination';
 import { EyeIcon, MailIcon, TrashIcon, UndoIcon } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import SelectField from '../components/ui/SelectField';
+import Textarea from '../components/ui/Textarea';
 
 const BASE = '/leave';
 const FALLBACK_TYPES = ['Privileged Leave', 'Casual Leave', 'Medical Leave'];
@@ -40,6 +43,61 @@ function StatusChip({ status }) {
 }
 
 const rangeText = (r) => (r.startDate === r.endDate ? formatDate(r.startDate) : `${formatDate(r.startDate)} – ${formatDate(r.endDate)}`);
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const thisMonth = () => isoDay(0).slice(0, 7);
+
+/** Every YYYY-MM from the first date's month to the last date's month (at most three). */
+function monthsBetween(startIso, endIso) {
+  const out = [];
+  let [year, month] = startIso.slice(0, 7).split('-').map(Number);
+  const [endYear, endMonth] = (endIso || startIso).slice(0, 7).split('-').map(Number);
+  while ((year < endYear || (year === endYear && month <= endMonth)) && out.length < 3) {
+    out.push(`${year}-${String(month).padStart(2, '0')}`);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return out;
+}
+
+/** One month of a person's own leave: the days taken and waiting, and which dates they were. */
+function MonthRecord({ summary, title }) {
+  if (!summary) return <p className="text-xs text-muted-foreground">Loading…</p>;
+  const nothing = summary.items.length === 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground">{title || `Leave in ${summary.label}`}</p>
+        <p className="text-xs text-muted-foreground">
+          {nothing ? 'No leave taken' : (
+            <>
+              <span className="font-semibold text-foreground">{plural(summary.approvedDays, 'day')} taken</span>
+              {summary.pendingDays > 0 ? ` · ${plural(summary.pendingDays, 'day')} waiting for approval` : ''}
+            </>
+          )}
+        </p>
+      </div>
+      {!nothing && (
+        <ul className="divide-y divide-border rounded-lg border border-border bg-muted/20 text-xs">
+          {summary.items.map((item) => (
+            <li key={`${item.id}-${item.startDate}`} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="min-w-0 text-foreground">
+                {rangeText(item)} <span className="text-muted-foreground">· {item.leaveType}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="font-mono text-foreground">{plural(item.days, 'day')}</span>
+                <StatusChip status={item.status} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /** What a request the person deleted from their own list is remembered as (the server keeps the history). */
 const hiddenKey = (userId) => `osm_hidden_leave_requests_${userId}`;
@@ -73,8 +131,13 @@ export function WorkerLeavePage() {
   const [viewing, setViewing] = useState(null);
   const [withdrawTarget, setWithdrawTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [preview, setPreview] = useState(null); // what the chosen dates would count
+  const [summaries, setSummaries] = useState({}); // my leave per month, keyed YYYY-MM
+  const asked = React.useRef(new Set());
 
   const load = useCallback(async () => {
+    asked.current = new Set();
+    setSummaries({}); // a decision, withdrawal or new request changes the month totals
     try {
       const [rows, typeList] = await Promise.all([
         apiClient.getAll(`${BASE}/requests/`), // the server only returns the signed-in person's own requests
@@ -92,6 +155,44 @@ export function WorkerLeavePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // the months to show: this one, and any the chosen dates touch
+  const neededMonths = useMemo(() => {
+    const months = new Set([thisMonth()]);
+    if (isOpen && form.startDate) monthsBetween(form.startDate, form.endDate && form.endDate >= form.startDate ? form.endDate : form.startDate).forEach((m) => months.add(m));
+    return [...months];
+  }, [isOpen, form.startDate, form.endDate]);
+
+  useEffect(() => {
+    neededMonths.forEach((key) => {
+      if (summaries[key] !== undefined || asked.current.has(key)) return;
+      asked.current.add(key);
+      apiClient
+        .get(`${BASE}/summary/?month=${key}`)
+        .then((data) => setSummaries((current) => ({ ...current, [key]: data })))
+        .catch(() => asked.current.delete(key));
+    });
+  }, [neededMonths, summaries]);
+
+  // count the days of the chosen dates (the server applies the weekly-off rule), once the person stops picking
+  useEffect(() => {
+    if (!isOpen || !form.startDate) {
+      setPreview(null);
+      return undefined;
+    }
+    if (form.endDate && form.endDate < form.startDate) {
+      setPreview({ error: 'The last day cannot be before the first day' });
+      return undefined;
+    }
+    const id = window.setTimeout(() => {
+      const end = form.endDate ? `&endDate=${form.endDate}` : '';
+      apiClient
+        .get(`${BASE}/preview/?startDate=${form.startDate}${end}`)
+        .then(setPreview)
+        .catch((err) => setPreview({ error: err?.message || 'Could not count the days' }));
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [isOpen, form.startDate, form.endDate]);
 
   // pick up a manager's decision when the person comes back to this tab
   useEffect(() => {
@@ -196,13 +297,17 @@ export function WorkerLeavePage() {
         }
       />
 
+      <Card bodyClassName="p-5">
+        <MonthRecord summary={summaries[thisMonth()]} title="Leave this month" />
+      </Card>
+
       <Card bodyClassName="p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">My leave requests</h2>
-          <select
+          <SelectField
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium shadow-2xs"
+            className="w-auto min-w-[7rem]"
             aria-label="Filter by status"
           >
             <option value="ALL">All Status</option>
@@ -210,7 +315,7 @@ export function WorkerLeavePage() {
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
             <option value="withdrawn">Withdrawn</option>
-          </select>
+          </SelectField>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
@@ -308,21 +413,21 @@ export function WorkerLeavePage() {
         <form id="worker-leave-form" onSubmit={submit} noValidate className="space-y-4 text-xs">
           <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Leave type</label>
-            <select
+            <SelectField
               value={form.leaveType}
               onChange={(e) => setForm({ ...form, leaveType: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-medium text-xs cursor-pointer focus:ring-1 focus:ring-primary"
+              className="w-full"
             >
               {types.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            </SelectField>
             {errors.leaveType && <p className="text-[11px] font-medium text-destructive">{errors.leaveType}</p>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">From <span className="text-destructive">*</span></label>
-              <input
-                type="date"
+              <DateInput
+               
                 value={form.startDate}
                 onChange={(e) => setForm({ ...form, startDate: e.target.value })}
                 className={cn('w-full px-3 py-2 border rounded-lg bg-card text-foreground text-xs cursor-pointer', errors.startDate ? 'border-destructive' : 'border-border')}
@@ -331,8 +436,8 @@ export function WorkerLeavePage() {
             </div>
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">To <span className="text-destructive">*</span></label>
-              <input
-                type="date"
+              <DateInput
+               
                 value={form.endDate}
                 min={form.startDate || undefined}
                 onChange={(e) => setForm({ ...form, endDate: e.target.value })}
@@ -343,14 +448,47 @@ export function WorkerLeavePage() {
           </div>
           <p className="text-[11px] text-muted-foreground">For a single day, choose the same date in both. Weekly off days are not counted.</p>
 
+          {/* What the chosen dates add up to */}
+          {preview && (
+            <div
+              className={cn(
+                'rounded-lg border px-3 py-2.5',
+                preview.error || preview.overlaps || preview.days === 0 ? 'border-destructive/30 bg-destructive/5' : 'border-primary/20 bg-primary/5'
+              )}
+            >
+              {preview.error ? (
+                <p className="text-xs font-medium text-destructive">{preview.error}</p>
+              ) : preview.days === 0 ? (
+                <p className="text-xs font-medium text-destructive">These dates are all weekly off days, so there is no leave to ask for.</p>
+              ) : (
+                <>
+                  <p className="text-sm font-bold text-foreground">{plural(preview.days, 'day')} leave</p>
+                  {preview.weeklyOffDays > 0 && (
+                    <p className="text-[11px] text-muted-foreground">{plural(preview.weeklyOffDays, 'weekly off day')} in these dates {preview.weeklyOffDays === 1 ? 'is' : 'are'} not counted</p>
+                  )}
+                  {preview.overlaps && <p className="mt-1 text-[11px] font-medium text-destructive">You already have leave on some of these dates.</p>}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Leave already taken in the month(s) of the chosen dates */}
+          {form.startDate && !preview?.error && (
+            <div className="space-y-3 border-t border-border pt-3">
+              {monthsBetween(form.startDate, form.endDate && form.endDate >= form.startDate ? form.endDate : form.startDate).map((key) => (
+                <MonthRecord key={key} summary={summaries[key]} />
+              ))}
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Reason</label>
-            <textarea
+            <Textarea
               rows={3}
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
               placeholder="Tell your manager why you need leave..."
-              className={cn('w-full rounded-lg border bg-card px-3 py-2 text-xs text-foreground resize-none', errors.reason ? 'border-destructive' : 'border-border')}
+              className="w-full resize-none" aria-invalid={Boolean(errors.reason)}
             />
             {errors.reason && <p className="text-[11px] font-medium text-destructive">{errors.reason}</p>}
           </div>

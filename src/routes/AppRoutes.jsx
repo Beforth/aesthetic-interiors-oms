@@ -19,6 +19,7 @@ import AgenciesPage from '../pages/AgenciesPage';
 import AttendancePage from '../pages/RoleAttendance';
 import TasksPage from '../pages/TasksPage';
 import DailyReportsPage from '../pages/DailyReportsPage';
+import ClientUpdatesPage from '../pages/ClientUpdatesPage';
 import PaymentsPage from '../pages/PaymentsPage';
 import LeavePayslipsPage from '../pages/LeavePayslipsPage';
 import LeaveRequestsPage from '../pages/RoleLeaveRequests';
@@ -27,6 +28,8 @@ import HolidayListsPage from '../pages/HolidayListsPage';
 import PayslipsPage from '../pages/PayslipsPage';
 import IncentivesPage from '../pages/IncentivesPage';
 import ExpensesPage from '../pages/ExpensesPage';
+import MyExpensesPage from '../pages/MyExpensesPage';
+import MyPayslipsPage from '../pages/MyPayslipsPage';
 import ReportsPage from '../pages/ReportsPage';
 import ApprovalsPage from '../pages/ApprovalsPage';
 import EstimatesPage from '../pages/EstimatesPage';
@@ -34,6 +37,39 @@ import NotificationsPage from '../pages/NotificationsPage';
 import ComponentsShowcasePage from '../pages/ComponentsShowcasePage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 import WebsiteLeadsPage from '../pages/WebsiteLeadsPage';
+import ClientProjectPage from '../pages/ClientProjectPage';
+import SharedProjectPage from '../pages/SharedProjectPage';
+
+/**
+ * A project's page. Someone who sees only their own project (a client) gets the progress-and-updates screen;
+ * everyone else keeps the full project workspace.
+ */
+function ProjectRoute() {
+  const { hasPermission } = useAuth();
+  const isClientOnly = hasPermission('projects.viewOwn') && !hasPermission('projects.viewAll');
+  return isClientOnly ? <ClientProjectPage /> : <ProjectDetailPage />;
+}
+
+/**
+ * Expenses. Someone who can approve and see everyone's money (`payments.labour.manage`) gets the full page; everyone
+ * else on staff gets their own requests only: ask for a claim or a salary advance, follow the status, withdraw.
+ */
+function ExpensesRoute({ mode }) {
+  const { hasPermission } = useAuth();
+  return hasPermission('payments.labour.manage') ? <ExpensesPage mode={mode} /> : <MyExpensesPage mode={mode} />;
+}
+
+/** The DSR tab. People who write or review reports get the DSR page; a client gets their site updates (read-only). */
+function DailyReportsRoute() {
+  const { hasPermission } = useAuth();
+  return hasPermission('dsr.submit') || hasPermission('dsr.viewAll') ? <DailyReportsPage /> : <ClientUpdatesPage />;
+}
+
+/** Payroll. Whoever runs payroll (`leave.approve`) gets the full page; everyone else sees only their own payslips. */
+function PayrollRoute() {
+  const { hasPermission } = useAuth();
+  return hasPermission('leave.approve') ? <PayslipsPage /> : <MyPayslipsPage />;
+}
 
 export function AppRoutes() {
   const { hasPermission } = useAuth();
@@ -48,6 +84,8 @@ export function AppRoutes() {
       {/* Public Routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/login" element={<LoginPage />} />
+      {/* A project update a client opens from the private link staff send them: no login */}
+      <Route path="/share/:token" element={<SharedProjectPage />} />
 
       {/* Protected AppShell Routes */}
       <Route
@@ -109,7 +147,7 @@ export function AppRoutes() {
           path="projects/:id"
           element={
             <RoleRoute permissions={['projects.viewAll', 'projects.viewAssigned', 'projects.viewOwn']}>
-              <ProjectDetailPage />
+              <ProjectRoute />
             </RoleRoute>
           }
         />
@@ -149,7 +187,7 @@ export function AppRoutes() {
           path="daily-reports"
           element={
             <RoleRoute permissions={['dsr.submit', 'dsr.viewAll', 'feedback.submit']}>
-              <DailyReportsPage />
+              <DailyReportsRoute />
             </RoleRoute>
           }
         />
@@ -159,7 +197,7 @@ export function AppRoutes() {
         <Route
           path="payments/received"
           element={
-            <RoleRoute permissions={['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage']}>
+            <RoleRoute permissions={['payments.client.manage', 'payments.labour.manage']}>
               <PaymentsPage mode="received" />
             </RoleRoute>
           }
@@ -167,7 +205,7 @@ export function AppRoutes() {
         <Route
           path="payments/pay"
           element={
-            <RoleRoute permissions={['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage']}>
+            <RoleRoute permissions={['payments.client.manage', 'payments.labour.manage']}>
               <PaymentsPage mode="pay" />
             </RoleRoute>
           }
@@ -175,7 +213,7 @@ export function AppRoutes() {
         <Route
           path="payments/settings"
           element={
-            <RoleRoute permissions={['payments.client.manage', 'payments.client.viewOwn', 'payments.labour.manage']}>
+            <RoleRoute permissions={['payments.client.manage', 'payments.labour.manage']}>
               <PaymentsPage mode="settings" />
             </RoleRoute>
           }
@@ -197,7 +235,7 @@ export function AppRoutes() {
         <Route
           path="leave/types"
           element={
-            <RoleRoute permissions={['attendance.markOwn', 'attendance.viewBoard', 'leave.apply', 'leave.approve']}>
+            <RoleRoute permissions={['attendance.viewBoard', 'leave.approve']}>
               <LeaveTypesPage />
             </RoleRoute>
           }
@@ -205,7 +243,7 @@ export function AppRoutes() {
         <Route
           path="leave/holidays"
           element={
-            <RoleRoute permissions={['attendance.markOwn', 'attendance.viewBoard', 'leave.apply', 'leave.approve']}>
+            <RoleRoute permissions={['attendance.viewBoard', 'leave.approve']}>
               <HolidayListsPage />
             </RoleRoute>
           }
@@ -232,16 +270,16 @@ export function AppRoutes() {
         <Route
           path="expenses/claims"
           element={
-            <RoleRoute permissions={['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn']}>
-              <ExpensesPage mode="claims" />
+            <RoleRoute permissions={['payments.labour.manage', 'expenses.requestOwn']}>
+              <ExpensesRoute mode="claims" />
             </RoleRoute>
           }
         />
         <Route
           path="expenses/advances"
           element={
-            <RoleRoute permissions={['payments.labour.manage', 'tasks.viewAll', 'attendance.markOwn']}>
-              <ExpensesPage mode="advances" />
+            <RoleRoute permissions={['payments.labour.manage', 'expenses.requestOwn']}>
+              <ExpensesRoute mode="advances" />
             </RoleRoute>
           }
         />
@@ -262,7 +300,7 @@ export function AppRoutes() {
           path="payroll"
           element={
             <RoleRoute permissions={['payslips.viewOwn', 'leave.approve']}>
-              <PayslipsPage />
+              <PayrollRoute />
             </RoleRoute>
           }
         />

@@ -9,7 +9,7 @@ export function formatDobToPassword(dob) {
   return clean;
 }
 
-import { apiClient, USER_KEY } from './apiClient';
+import { apiClient, ApiError, USER_KEY } from './apiClient';
 import { isDebug } from '../config/env';
 import { getPermissionsForRole } from '../config/permissions';
 import { mockUsers } from '../data/users';
@@ -84,7 +84,7 @@ function saveLocalUsers(users, notify = true) {
   }
 }
 
-const WRITABLE_FIELDS = ['name', 'email', 'username', 'password', 'phone', 'role', 'title', 'notes', 'birthday', 'status'];
+const WRITABLE_FIELDS = ['name', 'email', 'username', 'password', 'phone', 'role', 'title', 'notes', 'birthday', 'status', 'shiftId'];
 
 /** Only the fields the API accepts. Empty text is kept (it clears a field) except an empty password. */
 function toPayload(data) {
@@ -92,11 +92,24 @@ function toPayload(data) {
   if (!data.birthday && data.birthdate) data.birthday = data.birthdate;
   WRITABLE_FIELDS.forEach((field) => {
     const value = data[field];
+    if (field === 'shiftId') {
+      // an empty choice means no shift, which must be sent to clear an earlier one
+      if (value !== undefined) payload.shiftId = value === '' || value === null ? null : Number(value);
+      return;
+    }
     if (value === undefined || value === null) return;
     if (field === 'password' && value === '') return;
     payload[field] = value;
   });
   return payload;
+}
+
+function readSignedInUser() {
+  try {
+    return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+  } catch {
+    return null;
+  }
 }
 
 /** Keeps the cached signed-in profile in step when the user edits their own record. */
@@ -183,6 +196,8 @@ const baseUserService = {
         status: userData.status || 'active',
         joinedOn: new Date().toISOString().split('T')[0],
         assignedProjects: [],
+        shiftId: userData.shiftId ? String(userData.shiftId) : null,
+        shiftName: userData.shiftName || null,
       };
       saveLocalUsers([newUser, ...local]);
       if (typeof window !== 'undefined') {
@@ -224,6 +239,43 @@ const baseUserService = {
       return this.updateUser(id, { status });
     }
     return apiClient.post(`/accounts/users/${id}/status/`, { status });
+  },
+
+  /** The signed-in person picks a new password. They must give the current one. */
+  async changeMyPassword(currentPassword, newPassword) {
+    if (isDebug()) {
+      const me = readSignedInUser();
+      const local = getLocalUsers();
+      const stored = local.find((u) => String(u.id) === String(me?.id));
+      const expected = stored?.password || 'demo123';
+      if (currentPassword !== expected && currentPassword !== 'demo123' && currentPassword !== 'admin123') {
+        throw new ApiError('Please check the highlighted fields.', 400, { currentPassword: ['The current password is not correct.'] });
+      }
+      if (stored) saveLocalUsers(local.map((u) => (u === stored ? { ...u, password: newPassword } : u)));
+      return true;
+    }
+    await apiClient.post('/accounts/me/password/', { currentPassword, newPassword });
+    return true;
+  },
+
+  /**
+   * An administrator sets someone's password. They confirm with their own password; the person whose password
+   * changes does not need to know the old one.
+   */
+  async resetUserPassword(id, adminPassword, newPassword) {
+    if (isDebug()) {
+      const me = readSignedInUser();
+      const local = getLocalUsers();
+      const admin = local.find((u) => String(u.id) === String(me?.id));
+      const expected = admin?.password || (me?.role === 'owner' || me?.role === 'admin' ? 'admin123' : 'demo123');
+      if (adminPassword !== expected && adminPassword !== 'demo123' && adminPassword !== 'admin123') {
+        throw new ApiError('Please check the highlighted fields.', 400, { adminPassword: ['Your password is not correct.'] });
+      }
+      saveLocalUsers(local.map((u) => (String(u.id) === String(id) ? { ...u, password: newPassword } : u)));
+      return true;
+    }
+    await apiClient.post(`/accounts/users/${id}/reset-password/`, { adminPassword, newPassword });
+    return true;
   },
 
   /** Soft-deletes a user. */

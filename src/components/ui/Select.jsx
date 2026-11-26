@@ -3,12 +3,12 @@ import Icon from './Icon';
 import FormField from './FormField';
 import { cn } from '../../lib/utils';
 import {
-  SelectRoot,
+  Select as SelectRoot,
   SelectTrigger,
   SelectValue,
   SelectContent,
   SelectItem,
-} from './SelectPrimitives';
+} from './befui-select';
 
 // Radix reserves the empty string for "no value"; keep empty options working
 // for existing forms that use '' as a real choice.
@@ -66,8 +66,7 @@ export const Select = forwardRef(function Select(
         aria-invalid={!!error}
         aria-describedby={error ? `${selectId}-error` : undefined}
         className={cn(
-          error && 'border-destructive bg-destructive/5 ring-2 ring-destructive/20',
-          className
+                    className
         )}
         {...rest}
       >
@@ -78,13 +77,13 @@ export const Select = forwardRef(function Select(
           <SelectValue placeholder={placeholder || 'Select an option'} />
         </span>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="z-[10000]">
         {options.map((option, index) => {
           const rawValue = typeof option === 'object' ? option.value : option;
           const optionLabel = typeof option === 'object' ? option.label : option;
           const optionValue = rawValue === '' ? EMPTY_OPTION : String(rawValue);
           return (
-            <SelectItem key={`${optionValue}-${index}`} value={optionValue}>
+            <SelectItem key={`${optionValue}-${index}`} value={optionValue} disabled={option?.disabled}>
               {optionLabel}
             </SelectItem>
           );

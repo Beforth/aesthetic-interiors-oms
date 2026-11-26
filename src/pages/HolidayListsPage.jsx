@@ -25,6 +25,10 @@ import {
   EyeIcon,
   XIcon,
 } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import SelectField from '../components/ui/SelectField';
+import SearchInput from '../components/ui/SearchInput';
+import Input from '../components/ui/Input';
 
 function formatDateDisplay(isoStr) {
   if (!isoStr) return '—';
@@ -425,7 +429,7 @@ export function HolidayListsPage() {
                 <ArrowLeftIcon className="size-4" />
               </button>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                   {editingId ? 'Edit Holiday Schedule' : 'New Holiday Schedule'}
                 </h1>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -467,7 +471,7 @@ export function HolidayListsPage() {
                 <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
                   Holiday List Name <span className="text-destructive">*</span>
                 </label>
-                <input
+                <Input
                   ref={nameInputRef}
                   type="text"
                   value={formName}
@@ -476,12 +480,7 @@ export function HolidayListsPage() {
                     if (nameError) setNameError(false);
                   }}
                   placeholder="e.g. FY 2026–2027 Holidays"
-                  className={cn(
-                    'w-full h-10 px-3 text-sm rounded-lg bg-background border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all',
-                    nameError
-                      ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
-                      : 'border-border focus:border-primary'
-                  )}
+                  className="w-full"
                 />
               </div>
 
@@ -489,11 +488,11 @@ export function HolidayListsPage() {
                 <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
                   From Date <span className="text-destructive">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full"
                 />
               </div>
 
@@ -501,11 +500,11 @@ export function HolidayListsPage() {
                 <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
                   To Date <span className="text-destructive">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-full h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full"
                 />
               </div>
 
@@ -513,17 +512,17 @@ export function HolidayListsPage() {
                 <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
                   Weekly Off Day
                 </label>
-                <select
+                <SelectField
                   value={weeklyOffDay}
                   onChange={(e) => setWeeklyOffDay(e.target.value)}
-                  className="w-full h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all cursor-pointer"
+                  className="w-full"
                 >
                   {WEEKDAYS.map((day) => (
                     <option key={day} value={day}>
                       {day}
                     </option>
                   ))}
-                </select>
+                </SelectField>
               </div>
             </div>
 
@@ -559,20 +558,20 @@ export function HolidayListsPage() {
                 onSubmit={handleAddCustomRow}
                 className="flex items-center gap-2 flex-1 max-w-xl"
               >
-                <input
-                  type="date"
+                <DateInput
+                 
                   value={customDate}
                   onChange={(e) => setCustomDate(e.target.value)}
-                  className="h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+                  className="w-auto min-w-[9.5rem]"
                   title="Pick custom holiday date"
                   data-tooltip="Pick holiday date"
                 />
-                <input
+                <Input
                   type="text"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   placeholder="e.g. Regional Festival, Annual Day"
-                  className="flex-1 h-10 px-3 text-sm rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="flex-1"
                 />
                 <Button
                   type="submit"
@@ -614,14 +613,11 @@ export function HolidayListsPage() {
               </div>
 
               {builderHolidays.length > 0 && (
-                <div className="relative sm:w-60">
-                  <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                  <input
-                    type="text"
+                <div className="sm:w-60">
+                  <SearchInput
                     value={tableSearch}
                     onChange={(e) => setTableSearch(e.target.value)}
                     placeholder="Filter holidays in table..."
-                    className="w-full h-10 pl-9 pr-3 text-sm rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
               )}
@@ -712,7 +708,7 @@ export function HolidayListsPage() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                 Holiday Lists
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -737,37 +733,25 @@ export function HolidayListsPage() {
             <div className="flex items-center justify-between gap-2.5 overflow-x-auto">
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
                 {/* Search Bar */}
-                <div className="relative flex-1 min-w-[260px] max-w-md">
-                  <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                  <input
-                    type="text"
+                <div className="flex-1 min-w-[260px] max-w-md">
+                  <SearchInput
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search holiday lists by name, dates..."
-                    className="w-full h-10 pl-9 pr-3 text-sm rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  )}
                 </div>
 
                 {/* Status Filter Dropdown */}
                 <div className="relative">
-                  <select
+                  <SelectField
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-10 px-3 text-sm font-semibold rounded-lg border border-border bg-background text-foreground hover:bg-muted/50 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-auto min-w-[7rem]"
                   >
                     <option value="ALL">All Schedules ({holidayLists.length})</option>
                     <option value="ACTIVE">Active Only</option>
                     <option value="INACTIVE">Inactive Only</option>
-                  </select>
+                  </SelectField>
                 </div>
 
                 {/* Clear Filter button */}

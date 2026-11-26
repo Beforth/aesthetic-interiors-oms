@@ -23,6 +23,7 @@ import {
   TrashIcon,
   UsersIcon,
 } from '../components/ui/icons';
+import MoneyInput from '../components/ui/MoneyInput';
 
 const LEAD_STATUSES = [
   'New',
@@ -285,7 +286,7 @@ export function WebsiteLeadsPage() {
             <Input label="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
             <Input label="Project type" value={form.projectType} onChange={(event) => setForm({ ...form, projectType: event.target.value })} />
             <Input label="Location" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} />
-            <Input label="Estimated budget" type="number" value={form.estimatedBudget} onChange={(event) => setForm({ ...form, estimatedBudget: event.target.value })} />
+            <MoneyInput label="Estimated budget" value={form.estimatedBudget} onChange={(event) => setForm({ ...form, estimatedBudget: event.target.value })} />
             <Select label="Status" value={form.status} options={LEAD_STATUSES.map((status) => ({ value: status, label: status }))} onChange={(event) => setForm({ ...form, status: event.target.value })} />
             <Select label="Source" value={form.source} options={LEAD_SOURCES.map((source) => ({ value: source, label: source }))} onChange={(event) => setForm({ ...form, source: event.target.value })} />
           </div>

@@ -25,6 +25,7 @@ import { dsrService } from '../services/dsrService';
 import { projectService } from '../services/projectService';
 
 import PageHeader from '../components/ui/PageHeader';
+import Pagination from '../components/ui/Pagination';
 import Button from '../components/ui/Button';
 import IconButton from '../components/ui/IconButton';
 import Icon from '../components/ui/Icon';
@@ -60,14 +61,8 @@ import {
   MoreIcon,
 } from '../components/ui/icons';
 
-const PAGE_SIZES = [10, 25, 30];
 const STORAGE_KEY = 'osm_dsr_entries_v2';
 
-function pageNumbers(current, total) {
-  const pages = new Set([1, total, current - 1, current, current + 1]);
-  const list = [...pages].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
-  return list.flatMap((n, i) => (i > 0 && n - list[i - 1] > 1 ? ['gap-' + n, n] : [n]));
-}
 
 const PERIODS = [
   { value: 'today', label: 'Today' },
@@ -515,6 +510,10 @@ export function DailyReportsPage() {
         refresh();
       } catch (err) {
         toast.error(err.message || 'Could not save the entry');
+        if (err.entrySaved) {
+          setFormOpen(false);
+          refresh();
+        }
       }
       return;
     }
@@ -751,68 +750,7 @@ export function DailyReportsPage() {
         }
       />
 
-      {/* Sleek KPI Summary Cards */}
-      {!canViewAll ? (
-        <WorkerDsrCards
-          completed={completedCount}
-          inProgress={inProgressCount}
-          sites={activeSitesCount}
-          total={filtered.length}
-        />
-      ) : (
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Tasks Completed Card */}
-        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
-              Tasks Completed
-            </span>
-            <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <CheckIcon className="size-4 stroke-[2.5]" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
-              {completedCount}
-            </span>
-          </div>
-        </div>
-
-        {/* In Progress Card */}
-        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
-              In Progress
-            </span>
-            <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <ClockIcon className="size-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
-              {inProgressCount}
-            </span>
-          </div>
-        </div>
-
-        {/* Active Sites Card */}
-        <div className="w-64 sm:w-72 rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md transition-all">
-          <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">
-              Active Sites
-            </span>
-            <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <BuildingIcon className="size-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground tabular-nums">
-              {activeSitesCount}
-            </span>
-          </div>
-        </div>
-      </div>
-      )}
+      <WorkerDsrCards completed={completedCount} inProgress={inProgressCount} sites={activeSitesCount} />
 
       {/* Modern Filter Toolbar Container - Sticky on scroll */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md py-2 space-y-3">
@@ -1160,79 +1098,19 @@ export function DailyReportsPage() {
           </div>
 
 
-          {/* Clean Pagination Footer */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border border-border rounded-xl px-4 py-3 text-xs text-muted-foreground bg-card shadow-2xs">
-            <span>
-              Showing{' '}
-              <strong className="text-foreground">
-                {(currentPage - 1) * pageSize + 1}-
-                {Math.min(currentPage * pageSize, filtered.length)}
-              </strong>{' '}
-              of <strong className="text-foreground">{filtered.length}</strong> items
-            </span>
-
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2">
-                Rows per page
-                <select
-                  aria-label="Rows per page"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className="rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shadow-xs"
-                >
-                  {PAGE_SIZES.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <nav aria-label="Pagination" className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === 1}
-                  onClick={() => setPage(currentPage - 1)}
-                >
-                  Prev
-                </Button>
-                {pageNumbers(currentPage, pageCount).map((n, i) =>
-                  typeof n === 'string' ? (
-                    <span key={n + i} className="px-1 text-xs text-muted-foreground">
-                      …
-                    </span>
-                  ) : (
-                    <button
-                      key={n}
-                      type="button"
-                      aria-label={`Page ${n}`}
-                      aria-current={n === currentPage ? 'page' : undefined}
-                      onClick={() => setPage(n)}
-                      className={`size-8 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                        n === currentPage
-                          ? 'bg-primary text-primary-foreground shadow-xs'
-                          : 'text-foreground hover:bg-muted border border-border/60'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  )
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === pageCount}
-                  onClick={() => setPage(currentPage + 1)}
-                >
-                  Next
-                </Button>
-              </nav>
-            </div>
-          </div>
+          {/* The shared pagination footer */}
+          <Pagination
+            className="rounded-xl border border-border bg-card px-4 py-3"
+            currentPage={currentPage}
+            totalPages={pageCount}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
         </div>
       )}
 
@@ -1299,6 +1177,7 @@ export function DailyReportsPage() {
                 }
               }}
               options={projects}
+              helperText="Choose the project so its client sees this report and its photos."
             />
             <Select
               label="Category"

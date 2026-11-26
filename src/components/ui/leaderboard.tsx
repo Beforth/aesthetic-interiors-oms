@@ -52,7 +52,7 @@ export function Leaderboard({
           onClick={it.onClick}
           className={cn(
             'relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-3 shadow-2xs transition-all',
-            it.onClick && 'cursor-pointer hover:border-indigo-400 hover:shadow-xs'
+            it.onClick && 'cursor-pointer hover:border-blue-400 hover:shadow-xs'
           )}
           onMouseEnter={it.onMouseEnter}
           onMouseLeave={it.onMouseLeave}
@@ -109,7 +109,7 @@ export function Leaderboard({
           )}
 
           {/* Metric Value */}
-          <span onMouseEnter={it.onMouseEnter} onMouseLeave={it.onMouseLeave} className="relative text-sm font-bold text-indigo-700 tabular-nums shrink-0 px-1.5 py-0.5 rounded-md hover:bg-indigo-50 transition-colors" title="Hover to view in overall progress bar">
+          <span onMouseEnter={it.onMouseEnter} onMouseLeave={it.onMouseLeave} className="relative text-sm font-bold text-blue-700 tabular-nums shrink-0 px-1.5 py-0.5 rounded-md hover:bg-blue-50 transition-colors" title="Hover to view in overall progress bar">
             {format(it.value)}
           </span>
         </li>

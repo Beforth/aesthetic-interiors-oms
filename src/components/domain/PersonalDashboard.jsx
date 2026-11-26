@@ -15,6 +15,10 @@ import { clientService } from '../../services/clientService';
 import { dashboardService } from '../../services/dashboardService';
 import { userService } from '../../services/userService';
 import HRWorkforceOverview from './HRWorkforceOverview';
+import HolidaySpotlight from './HolidaySpotlight';
+import Card from '../ui/Card';
+import StatCard from '../ui/StatCard';
+import Button from '../ui/Button';
 import WorkerTaskModal from './WorkerTaskModal';
 import TaskAllocationModal from '../common/TaskAllocationModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -79,38 +83,20 @@ function currentStage(project) {
 
 const rangeText = (r) => (r.startDate === r.endDate ? formatDate(r.startDate) : `${formatDate(r.startDate)} – ${formatDate(r.endDate)}`);
 
-/** A plain white card that opens its tab: the number in the app's primary colour. */
-function StatCard({ label, value, note, Icon, to }) {
-  return (
-    <Link
-      to={to}
-      className="group block rounded-2xl border border-border bg-card p-4 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-2xl font-extrabold leading-tight tracking-tight text-primary">{value}</div>
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:size-3.5">
-          <Icon />
-        </div>
-      </div>
-      <div className="mt-2 text-xs font-semibold text-text-main">{label}</div>
-      <p className="mt-0.5 truncate text-[11px] text-text-muted">{note}</p>
-    </Link>
-  );
-}
-
-/** A titled white block with a link to the full tab. */
+/** A titled card with a link to the full tab. */
 function Section({ title, to, linkText, children }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-text-main">{title}</h3>
+    <Card
+      title={title}
+      headerAction={
         <Link to={to} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
           {linkText}
           <ArrowRightIcon className="size-3" />
         </Link>
-      </div>
+      }
+    >
       {children}
-    </div>
+    </Card>
   );
 }
 
@@ -291,132 +277,123 @@ export function PersonalDashboard() {
     : 'You have not punched in yet today.';
 
   return (
-    <div className="space-y-6">
+    <div className="rise space-y-4">
       {/* Greeting and the two things a worker does first */}
-      <div className="flex flex-col gap-5 rounded-2xl bg-primary p-6 text-primary-foreground shadow-xs md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-medium text-primary-foreground/70">{dateText}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-            {greeting()}, {firstName}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground">
+            {greeting()}, <span className="text-primary">{firstName}</span>
           </h1>
-          <p className="mt-1.5 text-sm text-primary-foreground/80">{dayLine}</p>
+          <div className="flex flex-wrap items-center gap-x-2">
+            <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              <CalendarIcon className="size-3.5 text-primary" />
+              {dateText}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">{dayLine}</p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {canCreateTask && (
-            <button
-              type="button"
-              onClick={() => setIsTaskModalOpen(true)}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-white/25"
-            >
-              <PlusIcon className="size-3.5" />
-              <span>Create Task</span>
-            </button>
+            <Button variant="outline" size="sm" leadingIcon="plus" onClick={() => setIsTaskModalOpen(true)}>
+              Create Task
+            </Button>
           )}
 
           {/* One button: Punch In until the worker has punched in, then Punch Out. Once out, the day is done. */}
           {!hasPermission('attendance.markOwn') ? null : checkedOut ? (
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-xs font-semibold text-primary-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-muted-foreground">
               <CalendarCheckIcon className="size-3.5" />
               <span>Day complete</span>
             </span>
           ) : (
-            <button
-              type="button"
-              onClick={() => (working ? setConfirmOut(true) : handlePunch())}
-              disabled={punching || loading}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold shadow-2xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                working
-                  ? 'border border-white/30 bg-white/15 text-primary-foreground hover:bg-white/25'
-                  : 'border border-white bg-white text-primary hover:bg-white/90'
-              }`}
-            >
+            <Button variant="primary" size="sm" onClick={() => (working ? setConfirmOut(true) : handlePunch())} disabled={punching || loading}>
               {working ? <LogOutIcon className="size-3.5" /> : <LogInIcon className="size-3.5" />}
               <span>{punching ? 'Please wait…' : working ? 'Punch Out' : 'Punch In'}</span>
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {/* One card per tab the person may use. Add a permission to the role and its card appears. */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
         {can('attendance.markOwn') && (
           <StatCard
             label="Attendance"
             value={checkedOut ? 'Out' : working ? 'In' : '—'}
-            note={checkedOut ? `Out at ${record.checkOutTime}` : working ? `In at ${record.checkInTime}` : 'Not punched in'}
-            Icon={CalendarCheckIcon}
-            to="/attendance"
+            subtext={checkedOut ? `Out at ${record.checkOutTime}` : working ? `In at ${record.checkInTime}` : 'Not punched in'}
+            icon={<CalendarCheckIcon />}
+            onClick={() => navigate('/attendance')}
           />
         )}
         {can('attendance.viewBoard') && teamIn && (
           <StatCard
             label="Team Attendance"
             value={`${teamIn.checkedIn ?? 0}/${teamIn.totalEmployees ?? 0}`}
-            note="Punched in today"
-            Icon={UsersIcon}
-            to="/attendance"
+            subtext="Punched in today"
+            icon={<UsersIcon />}
+            onClick={() => navigate('/attendance')}
           />
         )}
         {can('projects.viewAssigned', 'projects.viewAll', 'projects.viewOwn') && (
-          <StatCard label="Projects" value={projects.length} note={`${activeProjects.length} active`} Icon={Building2Icon} to="/projects" />
+          <StatCard label="Projects" value={projects.length} subtext={`${activeProjects.length} active`} icon={<Building2Icon />} onClick={() => navigate('/projects')} />
         )}
         {can('tasks.updateOwn', 'tasks.viewAll', 'tasks.create') && (
           <StatCard
             label="Tasks"
             value={openTasks.length}
-            note={overdueCount ? `${overdueCount} overdue` : dueTodayCount ? `${dueTodayCount} due today` : 'Open tasks'}
-            Icon={ListChecksIcon}
-            to="/tasks"
+            subtext={overdueCount ? `${overdueCount} overdue` : dueTodayCount ? `${dueTodayCount} due today` : 'Open tasks'}
+            icon={<ListChecksIcon />}
+            onClick={() => navigate('/tasks')}
           />
         )}
         {can('dsr.submit') && (
           <StatCard
             label="Daily Report"
             value={dsrToday.length ? formatDuration(dsrMinutes) : '—'}
-            note={dsrToday.length ? `${dsrToday.length} ${dsrToday.length === 1 ? 'entry' : 'entries'} today` : 'Nothing logged today'}
-            Icon={FileTextIcon}
-            to="/daily-reports"
+            subtext={dsrToday.length ? `${dsrToday.length} ${dsrToday.length === 1 ? 'entry' : 'entries'} today` : 'Nothing logged today'}
+            icon={<FileTextIcon />}
+            onClick={() => navigate('/daily-reports')}
           />
         )}
         {can('leave.apply') && (
           <StatCard
             label="Leave"
             value={pendingLeaves.length ? pendingLeaves.length : nextLeave ? '1' : '—'}
-            note={pendingLeaves.length ? 'Pending approval' : nextLeave ? `Next: ${rangeText(nextLeave)}` : 'No upcoming leave'}
-            Icon={CalendarIcon}
-            to="/leave/requests"
+            subtext={pendingLeaves.length ? 'Pending approval' : nextLeave ? `Next: ${rangeText(nextLeave)}` : 'No upcoming leave'}
+            icon={<CalendarIcon />}
+            onClick={() => navigate('/leave/requests')}
           />
         )}
         {can('leave.approve') && pendingApprovals !== null && (
           <StatCard
             label="Leave Approvals"
             value={pendingApprovals}
-            note={pendingApprovals ? 'Waiting for you' : 'Nothing waiting'}
-            Icon={CalendarIcon}
-            to="/leave/requests"
+            subtext={pendingApprovals ? 'Waiting for you' : 'Nothing waiting'}
+            icon={<CalendarIcon />}
+            onClick={() => navigate('/leave/requests')}
           />
         )}
         {can('dashboard.birthdays') && birthdays !== null && (
           <StatCard
             label="Birthdays"
             value={birthdays.length}
-            note={
+            subtext={
               birthdays.length
                 ? `${birthdays.find((b) => b.isUpcoming)?.name || birthdays[birthdays.length - 1].name} (${new Date().toLocaleString('en-US', { month: 'short' })} ${(birthdays.find((b) => b.isUpcoming) || birthdays[birthdays.length - 1]).day})`
                 : 'None this month'
             }
-            Icon={CalendarIcon}
-            to="/dashboard"
+            icon={<CalendarIcon />}
+            onClick={() => navigate('/dashboard')}
           />
         )}
         {can('clients.view') && clientCount !== null && (
-          <StatCard label="Clients" value={clientCount} note="On your projects" Icon={UsersIcon} to="/clients" />
+          <StatCard label="Clients" value={clientCount} subtext="On your projects" icon={<UsersIcon />} onClick={() => navigate('/clients')} />
         )}
       </div>
 
       {/* Short lists, again only for the tabs the person may use */}
-      <div className={`grid grid-cols-1 gap-6 ${showTasks && showProjects ? 'lg:grid-cols-2' : ''}`}>
+      <div className={`grid grid-cols-1 gap-4 ${showTasks && showProjects ? 'lg:grid-cols-2' : ''}`}>
         {showTasks && (
           <Section title="My Tasks" to="/tasks" linkText="All tasks">
             {loading ? (
@@ -473,7 +450,7 @@ export function PersonalDashboard() {
                           type="button"
                           disabled={busyStage === stage.id}
                           onClick={() => completeStage(project, stage)}
-                          className="shrink-0 cursor-pointer rounded-lg border border-primary/40 px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+                          className="shrink-0 cursor-pointer rounded-lg border border-brand-300 px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-brand-50 disabled:opacity-60"
                           title={`Mark ${stage.name} as completed`}
                         >
                           {busyStage === stage.id ? 'Saving…' : 'Stage done'}
@@ -491,9 +468,10 @@ export function PersonalDashboard() {
       </div>
 
       {can('dashboard.hrOverview') && staff && (
-        <div className="space-y-4 border-t border-border/80 pt-6">
-          <h2 className="text-base font-bold text-text-main">Workforce & HR Operations</h2>
-          <HRWorkforceOverview users={staff} totalEmployees={staff.filter((u) => u.role !== 'client' && u.status !== 'inactive').length} onDataRefresh={load} />
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold text-foreground">Workforce &amp; HR</h2>
+          <HolidaySpotlight />
+          <HRWorkforceOverview users={staff} onDataRefresh={load} />
         </div>
       )}
 

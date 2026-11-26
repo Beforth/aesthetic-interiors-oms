@@ -37,6 +37,8 @@ import {
   validateRequired,
   validatePincode,
 } from '../utils/validators';
+import MoneyInput from '../components/ui/MoneyInput';
+import StepperInput from '../components/ui/StepperInput';
 
 const TRADE_OPTIONS = [
   { value: 'Ceiling', label: 'Ceiling (Gypsum / False Ceiling)' },
@@ -740,7 +742,7 @@ export function AgenciesPage() {
               <ArrowLeftIcon className="size-3.5" />
               <span>Back to Agencies Directory</span>
             </button>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {editingAgency ? `Edit Agency: ${editingAgency.name}` : 'Register New Agency'}
             </h1>
           </div>
@@ -981,7 +983,7 @@ export function AgenciesPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="text"
                     placeholder="Type artisan skill (e.g. Gypsum Board, CNC Cutting, PU Polishing) and press Enter..."
                     value={skillInput}
@@ -992,7 +994,7 @@ export function AgenciesPage() {
                         handleAddSkill();
                       }
                     }}
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="flex-1"
                   />
                   <Button type="button" variant="outline" size="sm" onClick={() => handleAddSkill()}>
                     <PlusIcon className="size-3.5 mr-1" />
@@ -1029,12 +1031,12 @@ export function AgenciesPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <Input
+                  <StepperInput
                     label="Number of Workers"
-                    type="number"
+                   
                     min={1}
                     max={200}
-                    placeholder="e.g. 12"
+                   
                     value={formData.teamSize}
                     onChange={(e) => setFormData({ ...formData, teamSize: e.target.value })}
                   />
@@ -1046,9 +1048,9 @@ export function AgenciesPage() {
                     options={RATE_UNIT_OPTIONS}
                   />
 
-                  <Input
+                  <MoneyInput
                     label="Standard Rate (₹)"
-                    type="number"
+                   
                     min={0}
                     placeholder="e.g. 45"
                     value={formData.baseRate}
@@ -1114,12 +1116,12 @@ export function AgenciesPage() {
                   <label className="block text-xs font-semibold text-foreground mb-1.5 select-none">
                     Internal Remarks & Notes
                   </label>
-                  <textarea
+                  <Textarea
                     rows={2}
                     placeholder="Enter internal supervisor remarks, reliability notes, or equipment specifications..."
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    className="w-full rounded-lg border border-border bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full"
                   />
                 </div>
               </div>

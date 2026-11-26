@@ -1126,7 +1126,9 @@ const liveAttendanceService = {
       const live = (await apiClient.getAll(`${BASE}/requests/`)).map(fromApiRequest);
       const stored = getStoredRequests();
       const liveIds = new Set(live.map((r) => String(r.id)));
-      const extra = stored.filter((r) => !liveIds.has(String(r.id)));
+      // only what this browser saved while the server could not be reached; never the demo sample rows
+      const sampleIds = new Set(mockAttendanceRequests.map((r) => String(r.id)));
+      const extra = stored.filter((r) => !liveIds.has(String(r.id)) && !sampleIds.has(String(r.id)));
       return [...extra, ...live];
     } catch (err) {
       console.warn('Backend getRequests failed, falling back to local storage:', err);
@@ -1202,17 +1204,14 @@ const liveAttendanceService = {
   },
 
   async decideRequest(id, decision) {
-    try {
-      const res = await apiClient.post(`${BASE}/requests/${id}/${decision === 'approve' ? 'approve' : 'reject'}/`);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: { id, decision } }));
-        window.dispatchEvent(new CustomEvent('osm_attendance_updated'));
-      }
-      return res;
-    } catch (liveErr) {
-      console.warn('Backend decideRequest failed, falling back to local state:', liveErr);
-      return mockAttendanceService.decideRequest(id, decision);
+    // a request saved only in this browser (`req-…`) is decided here; a server request must succeed on the server
+    if (String(id).startsWith('req-')) return mockAttendanceService.decideRequest(id, decision);
+    const res = await apiClient.post(`${BASE}/requests/${id}/${decision === 'approve' ? 'approve' : 'reject'}/`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('osm_attendance_requests_updated', { detail: { id, decision } }));
+      window.dispatchEvent(new CustomEvent('osm_attendance_updated'));
     }
+    return res;
   },
 
   async withdrawRequest(id) {

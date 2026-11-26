@@ -1,14 +1,15 @@
 import React from 'react';
-import Icon from './Icon';
+import { Pagination as PageButtons } from './befui-pagination';
 import Select from './Select';
 
 /** Standard page sizes shared by every data list in the app. */
 export const PAGE_SIZE_OPTIONS = [10, 25, 30];
 
 /**
- * befui Pagination component conforming to https://befui.vercel.app/
+ * The footer of every paged list: how many rows are shown and the rows-per-page control, beside BefUI's page buttons
+ * (https://befui.vercel.app/#/components/pagination).
  *
- * Pass `onPageSizeChange` to show the shared 10 / 25 / 30 rows-per-page control.
+ * Pass `onPageSizeChange` to show the 10 / 25 / 30 rows-per-page control.
  */
 export function Pagination({
   currentPage = 1,
@@ -64,31 +65,7 @@ export function Pagination({
         )}
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage <= 1}
-          aria-label="Previous page"
-          className="size-8 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed text-text-main transition-colors flex items-center justify-center shadow-xs cursor-pointer"
-        >
-          <Icon name="chevronLeft" size={14} />
-        </button>
-
-        <span className="px-2 py-1 font-mono font-medium text-text-main select-none">
-          {currentPage} / {totalPages}
-        </span>
-
-        <button
-          type="button"
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage >= totalPages}
-          aria-label="Next page"
-          className="size-8 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed text-text-main transition-colors flex items-center justify-center shadow-xs cursor-pointer"
-        >
-          <Icon name="chevronRight" size={14} />
-        </button>
-      </div>
+      <PageButtons page={currentPage} pageCount={Math.max(1, totalPages)} onPageChange={onPageChange} />
     </div>
   );
 }

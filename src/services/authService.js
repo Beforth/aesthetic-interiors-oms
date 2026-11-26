@@ -10,7 +10,7 @@ import {
 import { isDebug } from '../config/env';
 import { mockUsers } from '../data/users';
 import { getPermissionsForRole } from '../config/permissions';
-import { ROLES, ROLE_LABELS } from '../config/roles';
+import { ROLES } from '../config/roles';
 
 function readJson(key, fallback) {
   try {
@@ -26,23 +26,10 @@ function matchesMockUser(user, identifier) {
   const idf = identifier.trim().toLowerCase().replace(/[\s_-]+/g, '');
   const username = String(user.username || '').toLowerCase();
   const email = String(user.email || '').toLowerCase();
-  const role = String(user.role || '').toLowerCase();
 
-  if (username === idf || email === identifier.trim().toLowerCase() || email.split('@')[0] === idf) {
-    return true;
-  }
-  if ((idf === 'admin' || idf === 'owner') && (role === 'owner' || role === 'admin')) {
-    return true;
-  }
-  if (idf === 'manager' && role === 'manager') return true;
-  if (idf === 'supervisor' && role === 'supervisor') return true;
-  if (idf === 'worker' && role === 'worker') return true;
-  if (idf === 'client' && role === 'client') return true;
-
-  const label = ROLE_LABELS[user.role];
-  if (label && label.toLowerCase().replace(/[\s_-]+/g, '') === idf) return true;
-
-  return false;
+  // Sign in with the person's own name ("Vikram Jadhav"), username or email
+  const fullName = String(user.name || '').toLowerCase().replace(/[\s_-]+/g, '');
+  return username === idf || fullName === idf || email === identifier.trim().toLowerCase() || email.split('@')[0] === idf;
 }
 
 export const authService = {
@@ -77,7 +64,7 @@ export const authService = {
 
       if (!matched) {
         throw new ApiError(
-          `Account "${identifier}" not found. Available demo logins: admin, manager, supervisor, worker, client.`,
+          `Account "${identifier}" not found. Sign in with your full name or your email.`,
           400
         );
       }

@@ -9,12 +9,17 @@ import { usePagination } from '../hooks/usePagination';
 
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
+import StatCard from '../components/ui/StatCard';
 import Button from '../components/ui/Button';
 import Tabs from '../components/ui/Tabs';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Pagination from '../components/ui/Pagination';
 import { ClockIcon, EyeIcon, MailIcon, MapPinIcon, TrashIcon, UndoIcon, XIcon } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import SelectField from '../components/ui/SelectField';
+import Input from '../components/ui/Input';
+import Textarea from '../components/ui/Textarea';
 
 const BASE = '/attendance';
 const REQUEST_TYPES = [
@@ -379,32 +384,11 @@ export function WorkerAttendancePage() {
       )}
 
       {/* Today at a glance: the first thing the worker sees on this page */}
-      <div className="p-5 rounded-xl bg-card border border-border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
-        <div className="flex items-center gap-5 sm:gap-8 flex-wrap">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Check-in</p>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight text-primary">
-              {checkedIn ? formatIndianTime(todayRecord.checkInTime) : '—'}
-            </p>
-          </div>
-          <div className="hidden sm:block w-px h-10 bg-border" />
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Check-out</p>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight text-primary">
-              {checkedOut ? formatIndianTime(todayRecord.checkOutTime) : '—'}
-            </p>
-          </div>
-          <div className="hidden sm:block w-px h-10 bg-border" />
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Working today</p>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums leading-tight text-primary">{hoursText(workedToday)}</p>
-          </div>
-        </div>
-
-        <span className="self-start sm:self-center inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/30">
-          {working && <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />}
-          {checkedOut ? 'Checked Out' : working ? 'Checked In' : 'Not Checked In'}
-        </span>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Check-in" icon={<ClockIcon />} value={checkedIn ? formatIndianTime(todayRecord.checkInTime) : '—'} />
+        <StatCard label="Check-out" icon={<ClockIcon />} value={checkedOut ? formatIndianTime(todayRecord.checkOutTime) : '—'} />
+        <StatCard label="Working today" icon={<ClockIcon />} value={hoursText(workedToday)} />
+        <StatCard label="Status" icon={<MapPinIcon />} value={checkedOut ? 'Checked out' : working ? 'Checked in' : 'Not checked in'} valueClassName="text-lg" />
       </div>
 
       <Tabs
@@ -421,11 +405,11 @@ export function WorkerAttendancePage() {
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
               <span className="text-[11px] font-medium text-muted-foreground">From:</span>
-              <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer" />
+              <DateInput bare value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="w-auto min-w-[9.5rem]" />
             </div>
             <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg shadow-2xs">
               <span className="text-[11px] font-medium text-muted-foreground">To:</span>
-              <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="text-xs bg-transparent text-foreground focus:outline-none cursor-pointer" />
+              <DateInput bare value={to} min={from} onChange={(e) => setTo(e.target.value)} className="w-auto min-w-[9.5rem]" />
             </div>
           </div>
 
@@ -486,10 +470,10 @@ export function WorkerAttendancePage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Attendance request</h2>
             <div className="flex items-center gap-2">
-              <select
+              <SelectField
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium shadow-2xs"
+                className="w-auto min-w-[7rem]"
                 title="Filter by status"
               >
                 <option value="ALL">All Status</option>
@@ -497,7 +481,7 @@ export function WorkerAttendancePage() {
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
                 <option value="withdrawn">Withdrawn</option>
-              </select>
+              </SelectField>
               <Button variant="primary" size="sm" leadingIcon="plus" onClick={openRequest}>
                 Request
               </Button>
@@ -651,13 +635,13 @@ export function WorkerAttendancePage() {
         <form id="worker-request-form" onSubmit={submitRequest} noValidate className="space-y-4 text-xs">
           <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Request Type</label>
-            <select
+            <SelectField
               value={form.type}
               onChange={(e) => { setForm({ ...form, type: e.target.value }); setFormErrors({}); }}
-              className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-medium text-xs cursor-pointer focus:ring-1 focus:ring-primary"
+              className="w-full"
             >
               {REQUEST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            </SelectField>
             {form.type === 'Undo Check-Out' && (
               <p className="text-[11px] text-muted-foreground">Checked out by mistake? Your manager can remove today's check-out so you can check out again later.</p>
             )}
@@ -671,8 +655,8 @@ export function WorkerAttendancePage() {
                 <button type="button" onClick={() => setForm((p) => ({ ...p, date: isoDay(-1) }))} className="px-2 py-0.5 text-[10px] font-semibold rounded bg-muted hover:bg-muted/80 text-foreground border border-border cursor-pointer">Yesterday</button>
               </div>
             </div>
-            <input
-              type="date"
+            <DateInput
+             
               value={form.date}
               max={isoDay(0)}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
@@ -685,28 +669,28 @@ export function WorkerAttendancePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Check-in Time</label>
-                <input type="text" placeholder="e.g. 09:30 AM" value={form.requestedCheckIn}
+                <Input type="text" placeholder="e.g. 09:30 AM" value={form.requestedCheckIn}
                   onChange={(e) => setForm({ ...form, requestedCheckIn: e.target.value })}
-                  className={cn('w-full px-3 py-2 border rounded-lg bg-card text-foreground font-mono text-xs', formErrors.requestedCheckIn ? 'border-destructive' : 'border-border')} />
+                  className="w-full font-mono" aria-invalid={Boolean(formErrors.requestedCheckIn)} />
                 {formErrors.requestedCheckIn && <p className="text-[11px] font-medium text-destructive">{formErrors.requestedCheckIn}</p>}
               </div>
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Check-out Time</label>
-                <input type="text" placeholder="e.g. 06:30 PM" value={form.requestedCheckOut}
+                <Input type="text" placeholder="e.g. 06:30 PM" value={form.requestedCheckOut}
                   onChange={(e) => setForm({ ...form, requestedCheckOut: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-mono text-xs" />
+                  className="w-full font-mono" />
               </div>
             </div>
           )}
 
           <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Reason</label>
-            <textarea
+            <Textarea
               rows={3}
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
               placeholder="Tell your manager what happened..."
-              className={cn('w-full rounded-lg border bg-card px-3 py-2 text-xs text-foreground resize-none', formErrors.reason ? 'border-destructive' : 'border-border')}
+              className="w-full resize-none" aria-invalid={Boolean(formErrors.reason)}
             />
             {formErrors.reason && <p className="text-[11px] font-medium text-destructive">{formErrors.reason}</p>}
           </div>

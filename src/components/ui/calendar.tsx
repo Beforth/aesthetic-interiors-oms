@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from './icons';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './befui-select';
 import { cn } from '@/lib/utils';
 
 export interface DateRange {
@@ -105,7 +106,35 @@ export function Calendar(props: CalendarProps) {
         <button type="button" className={nav} onClick={() => setMonth(addMonths(month, -1))} aria-label="Previous month">
           <ChevronLeftIcon className="size-4 rtl:rotate-180" />
         </button>
-        <span className="text-[13px] font-semibold" aria-live="polite">{monthFmt.format(month)}</span>
+        <div className="flex items-center gap-1" aria-label={monthFmt.format(month)}>
+          {[
+            {
+              label: 'Month',
+              value: month.getMonth(),
+              items: Array.from({ length: 12 }, (_, i) => [i, new Intl.DateTimeFormat(locale, { month: 'short' }).format(new Date(2000, i, 1))] as const),
+              pick: (v: number) => setMonth(new Date(month.getFullYear(), v, 1)),
+            },
+            {
+              label: 'Year',
+              value: month.getFullYear(),
+              items: Array.from({ length: today.getFullYear() + 11 - 1940 }, (_, i) => [1940 + i, String(1940 + i)] as const),
+              pick: (v: number) => setMonth(new Date(v, month.getMonth(), 1)),
+            },
+          ].map((part) => (
+            <Select key={part.label} value={String(part.value)} onValueChange={(v) => part.pick(Number(v))}>
+              <SelectTrigger aria-label={part.label} className="h-7 w-auto gap-1 border-0 bg-transparent px-1.5 text-[13px] font-semibold hover:bg-secondary">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="z-[10001] max-h-56 min-w-[5rem]">
+                {part.items.map(([v, text]) => (
+                  <SelectItem key={v} value={String(v)}>
+                    {text}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+        </div>
         <button type="button" className={nav} onClick={() => setMonth(addMonths(month, 1))} aria-label="Next month">
           <ChevronRightIcon className="size-4 rtl:rotate-180" />
         </button>

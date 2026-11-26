@@ -21,6 +21,8 @@ import {
   PlusIcon,
   RefreshIcon,
 } from '../components/ui/icons';
+import MoneyInput from '../components/ui/MoneyInput';
+import NumberInput from '../components/ui/NumberInput';
 
 const OTHER = '__other__';
 
@@ -661,11 +663,11 @@ export function EstimatesPage() {
                           />
                         </td>
                         <td className="px-2.5 py-2 align-top">
-                          <Input
+                          <NumberInput
                             aria-label={`Area for row ${index + 1}`}
-                            type="number"
-                            min="0"
+                                                        min="0"
                             step="0.01"
+                            max="1000000"
                             value={row.areaSqft}
                             onChange={(event) => setRow(index, { areaSqft: event.target.value })}
                             placeholder="0"
@@ -673,15 +675,16 @@ export function EstimatesPage() {
                           />
                         </td>
                         <td className="px-2.5 py-2 align-top">
-                          <Input
+                          <MoneyInput
+                            maxDigits={7}
                             aria-label={`Rate for row ${index + 1}`}
-                            type="number"
+                           
                             min="0"
-                            step="0.01"
+                           
                             value={row.baseRate}
                             onChange={(event) => setRow(index, { baseRate: event.target.value })}
                             placeholder="0"
-                            className="h-8 text-right text-xs"
+                            className="min-w-[9.5rem] h-8 text-right text-xs"
                           />
                         </td>
                         <td className="px-2.5 py-2 text-right align-middle font-mono font-semibold text-foreground">

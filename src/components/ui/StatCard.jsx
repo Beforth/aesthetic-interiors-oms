@@ -5,11 +5,10 @@ import { cn } from '../../lib/utils';
 /**
  * BefUI StatCard component conforming to https://befui.vercel.app/
  *
- * Every card uses the same compact icon treatment: a small icon in the
- * top-right corner, so all metric cards stay visually consistent.
- *
- * variant="default" — vertical KPI card.
- * variant="inline"  — compact horizontal KPI tile used on clean list screens.
+ * One compact figure, the same on every screen: a small icon beside its label, the number, then one quiet line.
+ * In a group of figures the first card is filled blue (see `[data-stat-card]` in index.css).
+ * `progress` (0-100) draws a thin bar under the number. With `onClick` the card is a button.
+ * `variant` is accepted for older callers; both variants look alike.
  */
 export function StatCard({
   title,
@@ -19,116 +18,63 @@ export function StatCard({
   icon,
   trend,
   trendDirection = 'neutral',
-  tone = 'neutral',
-  variant = 'default',
+  progress,
+  variant,
+  tone,
   className = '',
   valueClassName = '',
+  subtextClassName = '',
   onClick,
 }) {
-  const displayTitle = title || label;
-  const isUp = trendDirection === 'up';
-  const isDown = trendDirection === 'down';
-  const isInline = variant === 'inline';
-
-  const toneBgMap = {
-    neutral: 'bg-accent text-accent-foreground border-border/60',
-    primary: 'bg-primary/10 text-primary border-primary/20',
-    warning: 'bg-warning/10 text-warning border-warning/20',
-    success: 'bg-success/10 text-success border-success/20',
-    danger: 'bg-destructive/10 text-destructive border-destructive/20',
-    destructive: 'bg-destructive/10 text-destructive border-destructive/20',
-  };
-
-  const iconBoxClasses =
-    'size-7 rounded-lg border flex items-center justify-center shrink-0 [&>svg]:size-3.5';
-
-  const iconNode = icon ? (
-    React.isValidElement(icon) ? (
-      icon
-    ) : typeof icon === 'string' ? (
-      <Icon name={icon} size={14} />
-    ) : null
-  ) : null;
-
-  const iconBox = iconNode ? (
-    <div className={cn(iconBoxClasses, toneBgMap[tone] || toneBgMap.neutral)}>{iconNode}</div>
-  ) : null;
-
-  if (isInline) {
-    return (
-      <div
-        onClick={onClick}
-        className={cn(
-          'relative flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-card-foreground transition-colors',
-          onClick ? 'cursor-pointer hover:bg-muted/50' : '',
-          className
-        )}
-      >
-        <div className={cn('min-w-0 flex-1', iconBox && 'pr-10')}>
-          <div className={cn('text-xl font-bold font-mono leading-none tracking-tight tabular-nums text-foreground', valueClassName)}>
-            {value}
-          </div>
-          <span className="text-[11px] font-medium text-muted-foreground mt-1 block truncate">
-            {displayTitle}
-          </span>
-          {subtext && (
-            <p className="text-[11px] text-muted-foreground font-medium truncate">{subtext}</p>
-          )}
-          {trend && (
-            <span
-              className={cn(
-                'text-xs',
-                isUp ? 'text-success' : isDown ? 'text-destructive' : 'text-muted-foreground'
-              )}
-            >
-              {isUp ? '↗ ' : isDown ? '↘ ' : ''}
-              {trend}
-            </span>
-          )}
-        </div>
-        {iconBox && <div className="absolute right-2.5 top-2.5">{iconBox}</div>}
-      </div>
-    );
-  }
+  const iconNode = React.isValidElement(icon) ? icon : typeof icon === 'string' ? <Icon name={icon} size={14} /> : null;
+  const Root = onClick ? 'button' : 'div';
 
   return (
-    <div
-      onClick={onClick}
+    <Root
+      {...(onClick ? { type: 'button', onClick, 'data-no-tooltip': true } : {})}
+      data-stat-card
       className={cn(
-        'rounded-xl border border-border bg-card text-card-foreground p-5 shadow-[0_1px_2px_rgb(0_0_0/0.03)] flex flex-col justify-between gap-3 transition-all duration-200',
-        onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-primary/50' : '',
+        'flex min-w-0 flex-col rounded-xl border border-border bg-card px-4 py-3 text-left text-card-foreground transition-colors',
+        onClick && 'cursor-pointer hover:border-brand-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-[13px] font-semibold text-muted-foreground">{displayTitle}</span>
-        {iconBox}
-      </div>
-
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <span className={cn('whitespace-nowrap text-2xl font-bold leading-none tracking-tight tabular-nums text-foreground', valueClassName)}>
-            {value}
+      {iconNode && (
+        <span data-stat-icon className="absolute right-2.5 top-2 grid size-6 place-items-center rounded-full text-primary [&>svg]:size-3.5">
+          {iconNode}
+        </span>
+      )}
+      <span data-stat-text className={cn('block w-full truncate text-[11px] font-semibold text-muted-foreground', iconNode && 'pr-10')}>
+        {title || label}
+      </span>
+      <span data-stat-text className={cn('mt-1.5 block break-words text-2xl font-semibold leading-none tabular-nums text-foreground', valueClassName)}>
+        {value}
+      </span>
+      {progress !== undefined && (
+        <span className="mt-auto block w-full pb-1 pt-3">
+          <span data-stat-track className="block h-1 w-full overflow-hidden rounded-full bg-muted">
+            <span data-stat-fill className="block h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
           </span>
-          {trend && (
-            <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
-              <span
-                className={cn(
-                  'inline-flex items-center font-medium',
-                  isUp ? 'text-success' : isDown ? 'text-destructive' : 'text-muted-foreground'
-                )}
-              >
-                {isUp ? '↗ ' : isDown ? '↘ ' : ''}
-                {trend}
-              </span>
-            </span>
+        </span>
+      )}
+      {subtext && (
+        <span data-stat-text className={cn('mt-2 block w-full truncate text-[11px] text-muted-foreground', subtextClassName)}>
+          {subtext}
+        </span>
+      )}
+      {trend && (
+        <span
+          data-stat-text
+          className={cn(
+            'mt-1 block text-[11px] font-medium',
+            trendDirection === 'up' ? 'text-success' : trendDirection === 'down' ? 'text-destructive' : 'text-muted-foreground'
           )}
-        </div>
-        {subtext && (
-          <p className="text-[11px] text-muted-foreground font-medium line-clamp-1">{subtext}</p>
-        )}
-      </div>
-    </div>
+        >
+          {trendDirection === 'up' ? '↗ ' : trendDirection === 'down' ? '↘ ' : ''}
+          {trend}
+        </span>
+      )}
+    </Root>
   );
 }
 

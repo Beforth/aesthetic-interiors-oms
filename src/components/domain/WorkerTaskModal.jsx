@@ -8,6 +8,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Input from '../ui/Input';
+import Textarea from '../ui/Textarea';
 
 const today = () => new Date().toISOString().split('T')[0];
 const emptyForm = (projects) => ({
@@ -105,7 +106,7 @@ export function WorkerTaskModal({ isOpen, onClose, projects, onCreated }) {
           <label className="block text-xs font-medium text-foreground mb-1.5">
             Task Title <span className="text-destructive">*</span>
           </label>
-          <input
+          <Input
             type="text"
             value={form.title}
             onChange={(e) => {
@@ -113,10 +114,7 @@ export function WorkerTaskModal({ isOpen, onClose, projects, onCreated }) {
               if (errors.title) setErrors((prev) => ({ ...prev, title: '' }));
             }}
             placeholder="e.g. Check the wardrobe hinges before polish"
-            className={cn(
-              'w-full h-9 rounded-lg border bg-background px-3 text-xs text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs',
-              errors.title ? 'border-destructive ring-1 ring-destructive' : 'border-border'
-            )}
+            className="w-full" aria-invalid={Boolean(errors.title)}
             autoFocus
           />
           {errors.title && <p className="mt-1 text-[11px] text-destructive">{errors.title}</p>}
@@ -124,12 +122,12 @@ export function WorkerTaskModal({ isOpen, onClose, projects, onCreated }) {
 
         <div>
           <label className="block text-xs font-medium text-foreground mb-1.5">Description</label>
-          <textarea
+          <Textarea
             rows={2}
             value={form.description}
             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
             placeholder="Anything to remember about this task..."
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground resize-none transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs"
+            className="w-full resize-none"
           />
         </div>
 

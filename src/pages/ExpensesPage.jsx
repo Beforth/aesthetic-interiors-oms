@@ -9,7 +9,6 @@ import { projectService } from '../services/projectService';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from '../data/expenses';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { cn } from '../lib/utils';
-import { compressImage } from '../utils/dsr';
 import { usePagination } from '../hooks/usePagination';
 
 import PageHeader from '../components/ui/PageHeader';
@@ -23,6 +22,8 @@ import StatCard from '../components/ui/StatCard';
 import Table from '../components/ui/Table';
 import Select from '../components/ui/Select';
 import { Badge } from '../components/ui/Badge';
+import AddExpenseView, { PAYMENT_OPTIONS } from '../components/domain/AddExpenseView';
+import AdvanceRequestModal from '../components/domain/AdvanceRequestModal';
 
 import {
   PlusIcon,
@@ -41,19 +42,18 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   Building2Icon,
-  SaveIcon,
-  ArrowLeftIcon,
   CalendarIcon,
   CreditCardIcon,
   PhoneIcon,
   LandmarkIcon,
   BanknoteIcon,
 } from '../components/ui/icons';
+import MoneyInput from '../components/ui/MoneyInput';
+import Textarea from '../components/ui/Textarea';
 
 // ---------------------------------------------------------------------------
 // Payment chip renderer — 5 options, pill style, icon + label
 // ---------------------------------------------------------------------------
-const PAYMENT_OPTIONS = ['Cash', 'Card', 'UPI', 'Net Banking', 'Cheque'];
 
 const renderPaymentChip = (method = '') => {
   const m = (method || '').toLowerCase().trim();
@@ -157,28 +157,8 @@ export function ExpensesPage({ mode }) {
   const [claimCategoryFilter, setClaimCategoryFilter] = useState('ALL');
   const [claimPaymentFilter, setClaimPaymentFilter] = useState('ALL');
 
-  // Dedicated Add Expense Full Form View (Screenshots 3 & 4)
+  // The full-screen Add Expense form (shared component)
   const [isAddExpenseView, setIsAddExpenseView] = useState(false);
-  const [expenseForm, setExpenseForm] = useState({
-    employee: 'Myself',
-    date: new Date().toISOString().split('T')[0],
-    description: '',
-    status: 'draft',
-    projectId: '',
-  });
-
-  const [paymentsList, setPaymentsList] = useState([
-    {
-      title: '',
-      paymentMethod: 'Cash',
-      category: 'Software',
-      amount: '',
-      tax: '',
-      time: new Date().toTimeString().slice(0, 5),
-      receiptName: '',
-      receiptUrl: '',
-    },
-  ]);
 
   // View Voucher Modal
   const [viewingClaim, setViewingClaim] = useState(null);
@@ -234,107 +214,37 @@ export function ExpensesPage({ mode }) {
 
   // Business Claims Statistics (4 Stat Cards from Screenshot 5)
   const claimStats = useMemo(() => {
-    const totalCount = expenses.length;
-    const pendingCount = expenses.filter((e) => e.status === 'pending').length;
-    const approvedCount = expenses.filter((e) => e.status === 'approved' || e.status === 'reimbursed').length;
-    const totalAmount = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const live = expenses.filter((e) => e.status !== 'withdrawn'); // a withdrawn claim is not counted
+    const totalCount = live.length;
+    const pendingCount = live.filter((e) => e.status === 'pending').length;
+    const approvedCount = live.filter((e) => e.status === 'approved' || e.status === 'reimbursed').length;
+    const totalAmount = live.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     return { totalCount, pendingCount, approvedCount, totalAmount };
   }, [expenses]);
 
-  // Handle Multi-payment Item changes in Add Expense
-  const handleUpdatePaymentItem = (index, field, value) => {
-    setPaymentsList((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
-      return next;
-    });
-  };
-
-  const handleAddAnotherPaymentItem = () => {
-    setPaymentsList((prev) => [
-      ...prev,
-      {
-        title: '',
-        paymentMethod: 'Cash',
-        category: 'Software',
-        amount: '',
-        tax: '',
-        time: new Date().toTimeString().slice(0, 5),
-        receiptName: '',
-        receiptUrl: '',
-      },
-    ]);
-  };
-
-  const handleRemovePaymentItem = (index) => {
-    setPaymentsList((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const handlePaymentReceiptFile = async (index, files) => {
-    if (!files || files.length === 0) return;
-    try {
-      const processed = await compressImage(files[0], 1200, 0.85);
-      setPaymentsList((prev) => {
-        const next = [...prev];
-        next[index] = {
-          ...next[index],
-          receiptName: processed.name,
-          receiptUrl: processed.url,
-        };
-        return next;
+  /** Saves what the shared Add Expense form collected: one claim per payment row. */
+  const handleCreateClaims = async ({ employee, date, description, status, payments }) => {
+    const staffName = employee === 'Myself' ? currentUser?.name || 'Staff Member' : employee;
+    for (const p of payments) {
+      if (!Number(p.amount) > 0) continue;
+      await expenseService.createExpense({
+        title: p.title || description || 'General Business Claim',
+        category: p.category || 'Office',
+        amount: Number(p.amount) || 0,
+        date,
+        spentBy: staffName,
+        paymentMethod: p.paymentMethod || 'Cash',
+        status: status === 'draft' ? 'pending' : status,
+        notes: description || '',
+        receiptName: p.receiptName || '',
+        receiptUrl: p.receiptUrl || '',
+        projectId: projects[0]?.id || '',
+        projectName: 'General Overhead',
       });
-      toast.success(`Attached receipt: ${processed.name}`);
-    } catch {
-      toast.error('Could not process receipt file');
     }
-  };
-
-  const totalFormAmount = useMemo(() => {
-    return paymentsList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  }, [paymentsList]);
-
-  const handleSaveExpenseForm = async (e) => {
-    e.preventDefault();
-    if (paymentsList.length === 0 || !paymentsList.some((p) => Number(p.amount) > 0)) {
-      toast.error('Please enter at least one valid payment amount');
-      return;
-    }
-
-    try {
-      const staffName =
-        expenseForm.employee === 'Myself' ? currentUser?.name || 'Staff Member' : expenseForm.employee;
-
-      for (const p of paymentsList) {
-        if (!p.title.trim() && !expenseForm.description.trim()) {
-          toast.error('Please provide a title for each payment');
-          return;
-        }
-
-        const payload = {
-          title: p.title || expenseForm.description || 'General Business Claim',
-          category: p.category || 'Office',
-          amount: Number(p.amount) || 0,
-          date: expenseForm.date,
-          spentBy: staffName,
-          paymentMethod: p.paymentMethod || 'Cash',
-          status: expenseForm.status === 'draft' ? 'pending' : expenseForm.status,
-          notes: expenseForm.description || '',
-          receiptName: p.receiptName || '',
-          receiptUrl: p.receiptUrl || '',
-          projectId: expenseForm.projectId || projects[0]?.id || '',
-          projectName: projects.find((pr) => pr.id === expenseForm.projectId)?.name || 'General Overhead',
-        };
-
-        await expenseService.createExpense(payload);
-      }
-
-      toast.success('Expense claim saved successfully!');
-      setIsAddExpenseView(false);
-      fetchExpenses();
-    } catch (err) {
-      console.error('Failed to save expense', err);
-      toast.error('Failed to save expense claim');
-    }
+    toast.success('Expense claim saved successfully!');
+    setIsAddExpenseView(false);
+    fetchExpenses();
   };
 
   const handleQuickStatusUpdate = async (id, newStatus) => {
@@ -395,14 +305,8 @@ export function ExpensesPage({ mode }) {
   const [advanceSearch, setAdvanceSearch] = useState('');
   const [advanceStatusFilter, setAdvanceStatusFilter] = useState('All');
 
-  // Request Salary Advance Modal (Screenshot 1)
+  // Request Salary Advance window (shared component)
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
-  const [advanceForm, setAdvanceForm] = useState({
-    title: '',
-    amount: '',
-    dateRequired: new Date().toISOString().split('T')[0],
-    reason: '',
-  });
 
   // Filtered Advances List
   const filteredAdvances = useMemo(() => {
@@ -435,40 +339,21 @@ export function ExpensesPage({ mode }) {
     return { totalApproved, pendingCount, totalSubmitted };
   }, [advances]);
 
-  const handleSaveAdvanceRequest = async (e) => {
-    e.preventDefault();
-    if (!advanceForm.title.trim()) {
-      toast.error('Please enter a title or purpose');
-      return;
-    }
-    const amt = Number(advanceForm.amount);
-    if (!advanceForm.amount || Number.isNaN(amt) || amt <= 0) {
-      toast.error('Please enter a valid advance amount');
-      return;
-    }
-
-    try {
-      await expenseService.createSalaryAdvance({
+  const handleRequestAdvance = async ({ title, amount, dateRequired, reason }) => {
+    await expenseService.createSalaryAdvance(
+      {
         employee: currentUser?.name || 'Amit Deshmukh',
         employeeId: currentUser?.id || '',
-        title: advanceForm.title.trim(),
-        amount: amt,
-        dateRequired: advanceForm.dateRequired,
-        reason: advanceForm.reason.trim(),
-      }, initialSalaryAdvances);
-      await fetchAdvances();
-      toast.success('Salary advance request submitted successfully!');
-    } catch {
-      toast.error('Failed to submit salary advance');
-      return;
-    }
+        title,
+        amount,
+        dateRequired,
+        reason,
+      },
+      initialSalaryAdvances
+    );
+    await fetchAdvances();
+    toast.success('Salary advance request submitted successfully!');
     setIsAdvanceModalOpen(false);
-    setAdvanceForm({
-      title: '',
-      amount: '',
-      dateRequired: new Date().toISOString().split('T')[0],
-      reason: '',
-    });
   };
 
   const handleAdvanceStatusUpdate = async (id, newStatus) => {
@@ -536,230 +421,21 @@ export function ExpensesPage({ mode }) {
   // (payment chip and category helpers defined at module level above)
 
   // ---------------------------------------------------------------------------
-  // FULL PAGE VIEW: ADD EXPENSE (Screenshots 3 & 4)
+  // FULL PAGE VIEW: ADD EXPENSE (shared with the worker's Expenses tab)
   // ---------------------------------------------------------------------------
   if (isAddExpenseView) {
     return (
-      <div className="space-y-4 pb-16 animate-in fade-in duration-200">
-        {/* Back navigation header */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsAddExpenseView(false)}
-            className="p-2 rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            <ArrowLeftIcon className="size-4" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Add Expense</h1>
-            <p className="text-xs text-muted-foreground">Log a new team expense</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSaveExpenseForm} className="space-y-4">
-          {/* Card 1: EXPENSE DETAILS (Screenshot 4) */}
-          <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-2xs space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              Expense Details
-            </span>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Employee</label>
-                <select
-                  value={expenseForm.employee}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, employee: e.target.value })}
-                  className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                >
-                  <option value="Myself">Myself ({currentUser?.name || 'Admin'})</option>
-                  <option value="Amit Deshmukh">Amit Deshmukh</option>
-                  <option value="nilesh">nilesh</option>
-                  <option value="Super Admin">Super Admin</option>
-                  <option value="Vikas Jadhav">Vikas Jadhav</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Date *</label>
-                <input
-                  type="date"
-                  required
-                  value={expenseForm.date}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
-                  className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Description</label>
-                <textarea
-                  rows={3}
-                  value={expenseForm.description}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                  placeholder="What was this expense for?"
-                  className="w-full p-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Status *</label>
-                <select
-                  value={expenseForm.status}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, status: e.target.value })}
-                  className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                >
-                  <option value="draft">Draft</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: AMOUNT & PAYMENT (Screenshot 3) */}
-          <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Amount & Payment
-              </span>
-              <span className="text-base font-mono font-bold text-foreground">
-                {formatCurrency(totalFormAmount)}
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              {paymentsList.map((p, idx) => (
-                <div key={idx} className="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-foreground">Payment {idx + 1}</span>
-                    {paymentsList.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePaymentItem(idx)}
-                        className="text-xs text-destructive hover:underline cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">Title *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Client dinner"
-                        value={p.title}
-                        onChange={(e) => handleUpdatePaymentItem(idx, 'title', e.target.value)}
-                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                        Payment Method *
-                      </label>
-                      <select
-                        value={p.paymentMethod}
-                        onChange={(e) => handleUpdatePaymentItem(idx, 'paymentMethod', e.target.value)}
-                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                      >
-                        {PAYMENT_OPTIONS.map((opt) => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">Category *</label>
-                      <select
-                        value={p.category}
-                        onChange={(e) => handleUpdatePaymentItem(idx, 'category', e.target.value)}
-                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                      >
-                        <option value="Software">Software</option>
-                        <option value="Office">Office</option>
-                        <option value="Travel">Travel</option>
-                        <option value="Subscriptions">Subscriptions</option>
-                        <option value="Site Materials">Site Materials</option>
-                        <option value="Food & Welfare">Food & Welfare</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">Amount (₹) *</label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        value={p.amount}
-                        onChange={(e) => handleUpdatePaymentItem(idx, 'amount', e.target.value)}
-                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono font-semibold"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">Tax (₹)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        value={p.tax}
-                        onChange={(e) => handleUpdatePaymentItem(idx, 'tax', e.target.value)}
-                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1">Time *</label>
-                      <input
-                        type="time"
-                        value={p.time}
-                        onChange={(e) => handleUpdatePaymentItem(idx, 'time', e.target.value)}
-                        className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">Receipt / Proof</label>
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      onChange={(e) => handlePaymentReceiptFile(idx, e.target.files)}
-                      className="text-xs text-muted-foreground file:mr-2 file:py-1 file:px-3 file:rounded-md file:border file:border-border file:text-xs file:font-medium file:bg-background file:text-foreground hover:file:bg-muted cursor-pointer"
-                    />
-                  </div>
-                </div>
-              ))}
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleAddAnotherPaymentItem}
-                className="w-full border-dashed flex items-center justify-center gap-1.5 text-xs py-2"
-              >
-                <PlusIcon className="size-3.5" />
-                <span>Add Another Payment</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* Full-width brand theme Save Expense button (NOT black!) */}
-          <Button
-            type="submit"
-            variant="primary"
-            className="w-full py-2.5 font-semibold text-xs flex items-center justify-center gap-2 shadow-2xs"
-          >
-            <SaveIcon className="size-4" />
-            <span>Save Expense</span>
-          </Button>
-        </form>
-      </div>
+      <AddExpenseView
+        employeeOptions={[
+          { value: 'Myself', label: `Myself (${currentUser?.name || 'Admin'})` },
+          { value: 'Amit Deshmukh', label: 'Amit Deshmukh' },
+          { value: 'nilesh', label: 'nilesh' },
+          { value: 'Super Admin', label: 'Super Admin' },
+          { value: 'Vikas Jadhav', label: 'Vikas Jadhav' },
+        ]}
+        onBack={() => setIsAddExpenseView(false)}
+        onSubmit={handleCreateClaims}
+      />
     );
   }
 
@@ -825,6 +501,7 @@ export function ExpensesPage({ mode }) {
                   { value: 'pending', label: 'Pending' },
                   { value: 'approved', label: 'Approved' },
                   { value: 'rejected', label: 'Rejected' },
+                  { value: 'withdrawn', label: 'Withdrawn' },
                 ]}
               />,
               <Select
@@ -863,7 +540,9 @@ export function ExpensesPage({ mode }) {
               {
                 key: 'spentBy',
                 header: 'Employee',
-                render: (item) => <span className="font-semibold text-foreground">{item.spentBy}</span>,
+                render: (item) => (
+                  <span className={cn('font-semibold text-foreground', item.status === 'withdrawn' && 'opacity-50')}>{item.spentBy}</span>
+                ),
               },
               {
                 key: 'category',
@@ -879,7 +558,7 @@ export function ExpensesPage({ mode }) {
                 key: 'amount',
                 header: 'Amount',
                 render: (item) => (
-                  <span className="font-mono font-semibold text-foreground">{formatCurrency(item.amount)}</span>
+                  <span className={cn('font-mono font-semibold text-foreground', item.status === 'withdrawn' && 'opacity-50')}>{formatCurrency(item.amount)}</span>
                 ),
               },
               {
@@ -897,6 +576,8 @@ export function ExpensesPage({ mode }) {
                         ? 'success'
                         : item.status === 'rejected'
                         ? 'danger'
+                        : item.status === 'withdrawn'
+                        ? 'neutral'
                         : 'warning'
                     }
                     dot
@@ -905,6 +586,8 @@ export function ExpensesPage({ mode }) {
                       ? 'Approved'
                       : item.status === 'rejected'
                       ? 'Rejected'
+                      : item.status === 'withdrawn'
+                      ? 'Withdrawn'
                       : 'Pending'}
                   </Badge>
                 ),
@@ -1012,6 +695,7 @@ export function ExpensesPage({ mode }) {
                   { value: 'Pending', label: 'Pending' },
                   { value: 'Approved', label: 'Approved' },
                   { value: 'Rejected', label: 'Rejected' },
+                  { value: 'Withdrawn', label: 'Withdrawn' },
                 ]}
               />
             }
@@ -1023,12 +707,16 @@ export function ExpensesPage({ mode }) {
               {
                 key: 'employee',
                 header: 'Employee',
-                render: (item) => <span className="font-semibold text-foreground">{item.employee}</span>,
+                render: (item) => (
+                  <span className={cn('font-semibold text-foreground', item.status === 'withdrawn' && 'opacity-50')}>{item.employee}</span>
+                ),
               },
               {
                 key: 'title',
                 header: 'Title / Purpose',
-                render: (item) => <span className="font-medium text-foreground">{item.title}</span>,
+                render: (item) => (
+                  <span className={cn('font-medium text-foreground', item.status === 'withdrawn' && 'opacity-50')}>{item.title}</span>
+                ),
               },
               {
                 key: 'amount',
@@ -1069,6 +757,8 @@ export function ExpensesPage({ mode }) {
                         ? 'success'
                         : item.status === 'rejected'
                         ? 'danger'
+                        : item.status === 'withdrawn'
+                        ? 'neutral'
                         : 'warning'
                     }
                     dot
@@ -1077,6 +767,8 @@ export function ExpensesPage({ mode }) {
                       ? 'Approved'
                       : item.status === 'rejected'
                       ? 'Rejected'
+                      : item.status === 'withdrawn'
+                      ? 'Withdrawn'
                       : 'Pending'}
                   </Badge>
                 ),
@@ -1138,94 +830,7 @@ export function ExpensesPage({ mode }) {
         </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* MODAL: REQUEST SALARY ADVANCE (Screenshot 1)                          */}
-      {/* ===================================================================== */}
-      {isAdvanceModalOpen && (
-        <Modal
-          isOpen={isAdvanceModalOpen}
-          onClose={() => setIsAdvanceModalOpen(false)}
-          title="Request Salary Advance"
-        >
-          <form onSubmit={handleSaveAdvanceRequest} className="space-y-4 pt-1">
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Title / Purpose *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Medical Emergency Loan, Festival Advance"
-                value={advanceForm.title}
-                onChange={(e) => setAdvanceForm({ ...advanceForm, title: e.target.value })}
-                className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Advance Amount (₹) *
-              </label>
-              <input
-                type="number"
-                required
-                min="100"
-                placeholder="e.g. 10000"
-                value={advanceForm.amount}
-                onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
-                className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono font-semibold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Date Required *
-              </label>
-              <input
-                type="date"
-                required
-                value={advanceForm.dateRequired}
-                onChange={(e) => setAdvanceForm({ ...advanceForm, dateRequired: e.target.value })}
-                className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Reason / Explanation
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Explain why you need this advance..."
-                value={advanceForm.reason}
-                onChange={(e) => setAdvanceForm({ ...advanceForm, reason: e.target.value })}
-                className="w-full p-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-              />
-            </div>
-
-            {/* Action buttons (Screenshot 1: Cancel and Submit Request - Theme Color, NOT black!) */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAdvanceModalOpen(false)}
-                className="px-4"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                className="px-4 shadow-2xs font-semibold"
-              >
-                Submit Request
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      <AdvanceRequestModal isOpen={isAdvanceModalOpen} onClose={() => setIsAdvanceModalOpen(false)} onSubmit={handleRequestAdvance} />
 
       {/* ===================================================================== */}
       {/* MODAL: VIEW ADVANCE DETAILS (reason + approval info)                 */}
@@ -1380,15 +985,15 @@ export function ExpensesPage({ mode }) {
               <label className="block text-xs font-medium text-foreground mb-1.5">
                 Approved Amount (₹) *
               </label>
-              <input
-                type="number"
+              <MoneyInput
+               
                 required
                 min="1"
                 value={approvalForm.approvedAmount}
                 onChange={(e) =>
                   setApprovalForm({ ...approvalForm, approvedAmount: e.target.value })
                 }
-                className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono font-semibold"
+                className="w-full"
               />
               <p className="text-[11px] text-muted-foreground mt-1">
                 You can approve less or more than the requested amount.
@@ -1399,14 +1004,14 @@ export function ExpensesPage({ mode }) {
               <label className="block text-xs font-medium text-foreground mb-1.5">
                 Reason / Note for Staff
               </label>
-              <textarea
+              <Textarea
                 rows={3}
                 placeholder="e.g. Approved partial amount due to policy limit…"
                 value={approvalForm.approvalNote}
                 onChange={(e) =>
                   setApprovalForm({ ...approvalForm, approvalNote: e.target.value })
                 }
-                className="w-full p-3 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                className="w-full resize-none"
               />
             </div>
 

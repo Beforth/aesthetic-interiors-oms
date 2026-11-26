@@ -11,7 +11,7 @@ export function Tabs({
   className = '',
 }) {
   return (
-    <div className={`border-b border-border flex items-center gap-1 overflow-x-auto ${className}`}>
+    <div className={`flex items-center gap-2 overflow-x-auto py-0.5 ${className}`}>
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
 
@@ -23,11 +23,11 @@ export function Tabs({
             aria-selected={isActive}
             disabled={tab.disabled}
             onClick={() => onChange(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors select-none cursor-pointer
+            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs sm:text-[13px] font-semibold whitespace-nowrap transition-colors select-none cursor-pointer
               ${
                 isActive
-                  ? 'border-primary text-primary font-semibold'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                  ? 'surface-brand border-transparent text-primary-foreground shadow-sm'
+                  : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/30'
               }
               ${tab.disabled ? 'opacity-40 cursor-not-allowed' : ''}
             `}
@@ -46,8 +46,8 @@ export function Tabs({
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
                   isActive
-                    ? 'bg-accent text-accent-foreground'
-                    : 'bg-muted text-muted-foreground'
+                    ? 'bg-white/20 text-primary-foreground'
+                    : 'bg-panel text-muted-foreground'
                 }`}
               >
                 {tab.count}

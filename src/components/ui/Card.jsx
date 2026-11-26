@@ -24,7 +24,7 @@ export const Card = React.forwardRef(function Card(
     <div
       ref={ref}
       className={cn(
-        'rounded-xl border border-border bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] overflow-hidden',
+        'rounded-xl border border-border bg-card text-card-foreground soft-card overflow-hidden',
         hoverable && 'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
         className
       )}

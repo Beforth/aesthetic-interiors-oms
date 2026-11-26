@@ -8,11 +8,10 @@ import Textarea from '../components/ui/Textarea';
 import { Badge } from '../components/ui/Badge';
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
-import EmptyState from '../components/ui/EmptyState';
 import Tabs from '../components/ui/Tabs';
-import DataToolbar from '../components/ui/DataToolbar';
+import Table from '../components/ui/Table';
+import SearchInput from '../components/ui/SearchInput';
 import Select from '../components/ui/Select';
-import Pagination from '../components/ui/Pagination';
 import {
   ClipboardCheckIcon,
   ClockIcon,
@@ -101,21 +100,25 @@ function StatusBadge({ status }) {
   );
 }
 
-/** Who took action — manager name + role pill. Clear and simple. */
+/** Who took the decision, with their role and the date under it. */
 function DeciderCell({ item }) {
-  if (item.status === 'pending') {
-    return <span className="text-xs text-muted-foreground italic">Awaiting decision</span>;
-  }
-  const name = item.decidedBy;
+  if (item.status === 'pending') return <span className="text-xs text-muted-foreground">Awaiting decision</span>;
   const role = roleOf(item);
-  if (!name) {
-    return <span className="text-xs text-warning">Not recorded</span>;
-  }
   return (
-    <span className="text-xs text-foreground font-medium">
-      {name}
-      {role && <span className="ml-1 text-muted-foreground font-normal">({role})</span>}
-    </span>
+    <div className="min-w-0">
+      <span className="block truncate text-xs font-medium text-foreground">{item.decidedBy || 'Not recorded'}</span>
+      <span className="block truncate text-[11px] text-muted-foreground">{[role, item.decidedAt && fmt(item.decidedAt)].filter(Boolean).join(' · ')}</span>
+    </div>
+  );
+}
+
+/** A square icon button for the row actions; an empty slot keeps the columns lined up. */
+function RowAction({ label, Icon, tone = 'hover:bg-muted hover:text-foreground', onClick }) {
+  if (!onClick) return <span className="size-7" aria-hidden="true" />;
+  return (
+    <button type="button" title={label} aria-label={label} onClick={onClick} className={`grid size-7 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors ${tone}`}>
+      <Icon className="size-4" />
+    </button>
   );
 }
 
@@ -246,8 +249,8 @@ export function ApprovalsPage() {
         </div>
       )}
 
-      {/* ── Filters: status tabs carry the counts (single source of truth) ── */}
-      <div className="space-y-3">
+      {/* Status tabs on the left, search and type on the right */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Tabs
           activeTab={statusTab}
           onChange={setStatusTab}
@@ -257,190 +260,94 @@ export function ApprovalsPage() {
             count: tab.value !== 'all' && summary ? summary[tab.value] : undefined,
           }))}
         />
-
-        <DataToolbar
-          variant="clean"
-          layout="inline"
-          searchValue={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search by name, request type…"
-          filters={
-            <>
-              <Select
-                value={kindFilter}
-                onChange={(e) => setKindFilter(e.target.value)}
-                placeholder=""
-                className="h-9 w-40 text-xs"
-                options={[
-                  { value: 'all', label: 'All types' },
-                  { value: 'leave_request', label: 'Leave' },
-                  { value: 'attendance_request', label: 'Attendance' },
-                  { value: 'labour_payout', label: 'Labour payout' },
-                  { value: 'agency_payout', label: 'Agency bill' },
-                  { value: 'installment', label: 'Client payment' },
-                  { value: 'project_stage', label: 'Project stage' },
-                ]}
-              />
-              {hasFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => { setStatusTab('all'); setKindFilter('all'); setSearch(''); }}
-                  className="h-9 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </Button>
-              )}
-            </>
-          }
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full sm:w-64">
+            <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or request" />
+          </div>
+          <Select
+            aria-label="Request type"
+            value={kindFilter}
+            onChange={(e) => setKindFilter(e.target.value)}
+            placeholder=""
+            className="w-40"
+            options={[{ value: 'all', label: 'All types' }, ...Object.entries(KIND_LABELS).map(([value, label]) => ({ value, label }))]}
+          />
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={() => { setStatusTab('all'); setKindFilter('all'); setSearch(''); }}>
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* ── List ── */}
       {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-xs text-destructive flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-xs text-destructive">
           <span>{error}</span>
-          <button type="button" onClick={reload} className="text-xs font-semibold underline cursor-pointer">Retry</button>
+          <button type="button" onClick={reload} className="cursor-pointer text-xs font-semibold underline">Retry</button>
         </div>
-      ) : loading ? (
-        /* skeleton */
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl border border-border bg-card animate-pulse" />
-          ))}
-        </div>
-      ) : feed.results.length === 0 ? (
-        <EmptyState
-          icon="clipboard"
-          title={hasFilters ? 'No matching approvals' : 'No approvals yet'}
-          description={
-            hasFilters
-              ? 'Try clearing the filters above.'
-              : 'Leave requests, payouts, and project stages will appear here.'
-          }
-          action={
-            hasFilters ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setStatusTab('all'); setKindFilter('all'); setSearch(''); }}
-              >
-                Clear filters
-              </Button>
-            ) : undefined
-          }
-        />
       ) : (
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs divide-y divide-border">
-          {feed.results.map((item) => {
-            const Icon = KIND_ICONS[item.kind] || ClipboardCheckIcon;
-            const amt  = money(item.amount);
-            const isPending = item.status === 'pending';
-
-            return (
-              <div key={item.id} className="flex items-center gap-4 px-4 py-3.5 hover:bg-muted/30 transition-colors">
-
-                {/* Type icon */}
-                <span className="size-7 rounded-lg border border-border bg-muted/40 flex items-center justify-center shrink-0 text-muted-foreground [&>svg]:size-3.5">
-                  <Icon />
-                </span>
-
-                {/* Main info — takes remaining space */}
-                <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-y-0.5 gap-x-4">
-
-                  {/* Row 1: title + status badge */}
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-semibold text-foreground truncate">{item.title}</span>
-                    <StatusBadge status={item.status} />
-                  </div>
-
-                  {/* Row 2: type · requested by · amount */}
-                  <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground row-start-2">
-                    <span className="font-medium text-foreground/70">{KIND_LABELS[item.kind] || item.kindLabel}</span>
-                    {item.requester && (
-                      <>
-                        <span>·</span>
-                        <span>by <span className="text-foreground font-medium">{item.requester}</span></span>
-                      </>
-                    )}
-                    {amt && (
-                      <>
-                        <span>·</span>
-                        <span className="font-mono font-semibold text-foreground">{amt}</span>
-                      </>
-                    )}
-                    <span>·</span>
-                    <span>{fmt(item.submittedAt)}</span>
-                  </div>
-
-                  {/* Row 3: decided by (right column on sm+) */}
-                  <div className="sm:row-span-2 sm:col-start-2 sm:text-right flex sm:flex-col sm:items-end justify-start items-center gap-1.5 mt-1 sm:mt-0">
-                    {!isPending && (
-                      <DeciderCell item={item} />
-                    )}
-                    {item.decidedAt && (
-                      <span className="text-[10px] text-muted-foreground">{fmt(item.decidedAt)}</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Action buttons — right edge */}
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <button
-                    type="button"
-                    title="View details"
-                    onClick={() => setDetails(item)}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                  >
-                    <EyeIcon className="size-4" />
+        <Table
+          keyField="id"
+          loading={loading}
+          data={feed.results}
+          emptyTitle={hasFilters ? 'No matching approvals' : 'No approvals yet'}
+          emptyDescription={hasFilters ? 'Try clearing the filters above.' : 'Leave requests, payouts and project stages will appear here.'}
+          columns={[
+            {
+              key: 'title',
+              header: 'Request',
+              width: '34%',
+              render: (item) => {
+                const Icon = KIND_ICONS[item.kind] || ClipboardCheckIcon;
+                return (
+                  <button type="button" onClick={() => setDetails(item)} className="flex w-full min-w-0 cursor-pointer items-center gap-3 text-left">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-primary [&>svg]:size-4"><Icon /></span>
+                    <span className="min-w-0">
+                      <span className="block max-w-[22rem] truncate text-[13px] font-semibold text-foreground">{item.title}</span>
+                      <span className="block text-[11px] text-muted-foreground">{KIND_LABELS[item.kind] || item.kindLabel}</span>
+                    </span>
                   </button>
-                  {item.canDecide && (
-                    <>
-                      <button
-                        type="button"
-                        title="Approve"
-                        onClick={() => openDecision(item, 'approve')}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-success/10 hover:text-success transition-colors cursor-pointer"
-                      >
-                        <CheckIcon className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Reject"
-                        onClick={() => openDecision(item, 'reject')}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
-                      >
-                        <XIcon className="size-4" />
-                      </button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    title="Remove from list"
-                    onClick={() => setDeleteTarget(item)}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
-                  >
-                    <TrashIcon className="size-4" />
-                  </button>
+                );
+              },
+            },
+            {
+              key: 'requester',
+              header: 'Requested by',
+              render: (item) => (
+                <div className="min-w-0">
+                  <span className="block truncate text-xs font-medium text-foreground">{item.requester || '—'}</span>
+                  <span className="block whitespace-nowrap text-[11px] text-muted-foreground">{fmt(item.submittedAt)}</span>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Pagination ── */}
-      {!loading && !error && feed.count > 0 && (
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalItems={feed.count}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
+              ),
+            },
+            {
+              key: 'amount',
+              header: 'Amount',
+              align: 'right',
+              render: (item) => <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-foreground">{money(item.amount) || '—'}</span>,
+            },
+            { key: 'status', header: 'Status', align: 'center', render: (item) => <StatusBadge status={item.status} /> },
+            { key: 'decidedBy', header: 'Decision', render: (item) => <DeciderCell item={item} /> },
+            {
+              key: 'actions',
+              header: 'Actions',
+              align: 'right',
+              width: '11rem',
+              render: (item) => (
+                <div className="flex items-center justify-end gap-1">
+                  <RowAction label="Approve" Icon={CheckIcon} tone="hover:bg-emerald-50 hover:text-success" onClick={item.canDecide ? () => openDecision(item, 'approve') : null} />
+                  <RowAction label="Reject" Icon={XIcon} tone="hover:bg-red-50 hover:text-destructive" onClick={item.canDecide ? () => openDecision(item, 'reject') : null} />
+                  <RowAction label="View details" Icon={EyeIcon} onClick={() => setDetails(item)} />
+                  <RowAction label="Remove from list" Icon={TrashIcon} tone="hover:bg-red-50 hover:text-destructive" onClick={() => setDeleteTarget(item)} />
+                </div>
+              ),
+            },
+          ]}
+          pagination={
+            feed.count > 0
+              ? { currentPage: page, totalPages, totalItems: feed.count, pageSize, onPageChange: setPage, onPageSizeChange: (size) => { setPageSize(size); setPage(1); } }
+              : undefined
+          }
         />
       )}
 

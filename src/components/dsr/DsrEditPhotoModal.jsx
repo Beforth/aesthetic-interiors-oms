@@ -151,13 +151,13 @@ export function DsrEditPhotoModal({
           <label htmlFor="photo-caption" className="block text-xs font-semibold text-foreground mb-1.5">
             Photo Caption & Site Notes
           </label>
-          <input
+          <Input
             id="photo-caption"
             type="text"
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             placeholder="e.g. Master bedroom false ceiling framing verified"
-            className="w-full text-xs px-3 py-2 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary shadow-xs"
+            className="w-full"
             autoFocus
           />
           <p className="text-[11px] text-muted-foreground mt-1">

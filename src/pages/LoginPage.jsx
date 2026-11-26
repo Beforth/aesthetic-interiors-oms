@@ -5,7 +5,10 @@ import { useToast } from '../context/ToastContext';
 import { authService } from '../services/authService';
 import Icon from '../components/ui/Icon';
 import Alert from '../components/ui/Alert';
+import Checkbox from '../components/ui/Checkbox';
+import Spinner from '../components/ui/Spinner';
 import { validateEmail } from '../utils/validators';
+import Input from '../components/ui/Input';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -15,7 +18,6 @@ export function LoginPage() {
 
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -41,7 +43,7 @@ export function LoginPage() {
     const errors = {};
     const identifier = usernameOrEmail.trim();
     if (!identifier) {
-      errors.usernameOrEmail = 'Please enter your email or username';
+      errors.usernameOrEmail = 'Please enter your full name or email';
     } else if (identifier.includes('@')) {
       const emailErr = validateEmail(identifier);
       if (emailErr) {
@@ -119,104 +121,52 @@ export function LoginPage() {
           {/* Sign In Form */}
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {/* Email / Username Input */}
-            <div>
-              <label className="block text-xs font-semibold text-foreground mb-1.5">
-                Email or Username <span className="text-destructive">*</span>
-              </label>
-              <div className="relative flex items-center">
-                <div className="absolute left-3.5 text-muted-foreground pointer-events-none flex items-center">
-                  <Icon name="user" size={16} />
-                </div>
-                <input
-                  type="text"
-                  required
-                  autoComplete="username"
-                  value={usernameOrEmail}
-                  onChange={(e) => {
-                    setUsernameOrEmail(e.target.value);
-                    if (validationErrors.usernameOrEmail) {
-                      setValidationErrors((prev) => ({ ...prev, usernameOrEmail: '' }));
-                    }
-                  }}
-                  placeholder="Enter email or username"
-                  disabled={loading}
-                  className={`w-full bg-background border rounded-xl text-sm text-foreground placeholder:text-muted-foreground transition-colors
-                    h-10 pl-10 pr-3.5
-                    ${
-                      validationErrors.usernameOrEmail
-                        ? 'border-destructive focus:border-destructive focus:ring-1 focus:ring-destructive'
-                        : 'border-border focus:border-ring focus:ring-2 focus:ring-ring/20'
-                    }
-                    focus:outline-none disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed`}
-                />
-              </div>
-              {validationErrors.usernameOrEmail && (
-                <p className="text-[11px] text-destructive font-medium mt-1">
-                  {validationErrors.usernameOrEmail}
-                </p>
-              )}
-            </div>
+            <Input
+              label="Full Name or Email"
+              required
+              leadingIcon="user"
+              autoComplete="username"
+              value={usernameOrEmail}
+              onChange={(e) => {
+                setUsernameOrEmail(e.target.value);
+                if (validationErrors.usernameOrEmail) {
+                  setValidationErrors((prev) => ({ ...prev, usernameOrEmail: '' }));
+                }
+              }}
+              placeholder="Enter your full name or email"
+              disabled={loading}
+              error={validationErrors.usernameOrEmail}
+              className="h-10"
+            />
 
-            {/* Password Input */}
-            <div>
-              <label className="block text-xs font-semibold text-foreground mb-1.5">
-                Password <span className="text-destructive">*</span>
-              </label>
-              <div className="relative flex items-center">
-                <div className="absolute left-3.5 text-muted-foreground pointer-events-none flex items-center">
-                  <Icon name="lock" size={16} />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (validationErrors.password) {
-                      setValidationErrors((prev) => ({ ...prev, password: '' }));
-                    }
-                  }}
-                  placeholder="Enter password"
-                  disabled={loading}
-                  className={`w-full bg-background border rounded-xl text-sm text-foreground placeholder:text-muted-foreground transition-colors
-                    h-10 pl-10 pr-10
-                    ${
-                      validationErrors.password
-                        ? 'border-destructive focus:border-destructive focus:ring-1 focus:ring-destructive'
-                        : 'border-border focus:border-ring focus:ring-2 focus:ring-ring/20'
-                    }
-                    focus:outline-none disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed`}
-                />
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-2.5 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg focus:outline-none cursor-pointer"
-                >
-                  <Icon name={showPassword ? 'eye-off' : 'eye'} size={15} />
-                </button>
-              </div>
-              {validationErrors.password && (
-                <p className="text-[11px] text-destructive font-medium mt-1">
-                  {validationErrors.password}
-                </p>
-              )}
-            </div>
+            {/* Password Input (the show / hide button is part of the field) */}
+            <Input
+              label="Password"
+              required
+              leadingIcon="lock"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (validationErrors.password) {
+                  setValidationErrors((prev) => ({ ...prev, password: '' }));
+                }
+              }}
+              placeholder="Enter password"
+              disabled={loading}
+              error={validationErrors.password}
+              className="h-10"
+            />
 
             {/* Remember Me Option */}
             <div className="flex items-center justify-between pt-0.5">
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  disabled={loading}
-                  className="w-3.5 h-3.5 rounded text-primary border-input focus:ring-ring focus:ring-offset-0 transition-colors cursor-pointer"
-                />
-                <span>Remember me on this device</span>
-              </label>
+              <Checkbox
+                label={<span className="text-xs font-normal text-muted-foreground">Remember me on this device</span>}
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                disabled={loading}
+              />
             </div>
 
             {/* Solid Sign-In Button (No Gradient) */}
@@ -227,25 +177,7 @@ export function LoginPage() {
             >
               {loading ? (
                 <>
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
+                  <Spinner className="mr-2" />
                   <span>Signing In...</span>
                 </>
               ) : (
