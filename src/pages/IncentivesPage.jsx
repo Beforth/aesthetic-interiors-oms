@@ -43,6 +43,13 @@ import {
   BanknoteIcon,
   ReceiptIcon,
 } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import MoneyInput from '../components/ui/MoneyInput';
+import SelectField from '../components/ui/SelectField';
+import FileDrop from '../components/ui/FileDrop';
+import Input from '../components/ui/Input';
+import Textarea from '../components/ui/Textarea';
+import TimeInput from '../components/ui/TimeInput';
 
 // ---------------------------------------------------------------------------
 // CONSTANTS
@@ -365,7 +372,7 @@ export function IncentivesPage() {
       paymentMethod: 'Cash',
       category: INCENTIVE_CATEGORIES[0] || 'On-Time Completion',
       amount: '',
-      tax: '0',
+      tax: '',
       time: new Date().toTimeString().slice(0, 5),
       proof: null,
       proofName: '',
@@ -469,7 +476,7 @@ export function IncentivesPage() {
         paymentMethod: 'Cash',
         category: INCENTIVE_CATEGORIES[1] || 'Quality Excellence',
         amount: '',
-        tax: '0',
+        tax: '',
         time: new Date().toTimeString().slice(0, 5),
         proof: null,
         proofName: '',
@@ -519,7 +526,7 @@ export function IncentivesPage() {
       setFormDescription('');
       setPaymentsList([{
         id: 'p-1', title: '', paymentMethod: 'Cash',
-        category: INCENTIVE_CATEGORIES[0], amount: '', tax: '0',
+        category: INCENTIVE_CATEGORIES[0], amount: '', tax: '',
         time: new Date().toTimeString().slice(0, 5), proof: null, proofName: '',
       }]);
     } catch { toast.error('Failed to save incentive'); }
@@ -541,7 +548,7 @@ export function IncentivesPage() {
             <ArrowLeftIcon className="size-4" />
           </button>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Add Incentive</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Add Incentive</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Log a new team incentive award or bonus</p>
           </div>
         </div>
@@ -557,38 +564,38 @@ export function IncentivesPage() {
             <div className="px-5 py-4 space-y-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-foreground">Employee</label>
-                <select
+                <SelectField
                   value={formEmployee}
                   onChange={(e) => setFormEmployee(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  className="w-full"
                 >
                   {mockUsers.map((u) => (
                     <option key={u.id} value={u.name}>{u.name} ({u.role})</option>
                   ))}
-                </select>
+                </SelectField>
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-foreground">
                   Date <span className="text-destructive">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   required
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-foreground">Description</label>
-                <textarea
+                <Textarea
                   rows={3}
                   placeholder="What was this incentive award for?"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                  className="w-full resize-none"
                 />
               </div>
 
@@ -596,15 +603,15 @@ export function IncentivesPage() {
                 <label className="block text-xs font-medium text-foreground">
                   Status <span className="text-destructive">*</span>
                 </label>
-                <select
+                <SelectField
                   value={formStatus}
                   onChange={(e) => setFormStatus(e.target.value)}
-                  className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  className="w-full"
                 >
                   <option value="Approved">Approved</option>
                   <option value="Pending">Pending</option>
                   <option value="Draft">Draft</option>
-                </select>
+                </SelectField>
               </div>
             </div>
           </div>
@@ -642,7 +649,7 @@ export function IncentivesPage() {
                         <label className="block text-[11px] font-medium text-muted-foreground">
                           Title <span className="text-destructive">*</span>
                         </label>
-                        <input
+                        <Input
                           type="text"
                           required
                           placeholder="e.g. Early delivery bonus"
@@ -650,7 +657,7 @@ export function IncentivesPage() {
                           onChange={(e) => {
                             const u = [...paymentsList]; u[idx] = { ...u[idx], title: e.target.value }; setPaymentsList(u);
                           }}
-                          className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          className="w-full"
                         />
                       </div>
 
@@ -658,34 +665,34 @@ export function IncentivesPage() {
                         <label className="block text-[11px] font-medium text-muted-foreground">
                           Payment Method <span className="text-destructive">*</span>
                         </label>
-                        <select
+                        <SelectField
                           value={pay.paymentMethod}
                           onChange={(e) => {
                             const u = [...paymentsList]; u[idx] = { ...u[idx], paymentMethod: e.target.value }; setPaymentsList(u);
                           }}
-                          className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                          className="w-full"
                         >
                           {PAYMENT_OPTIONS.map((opt) => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
-                        </select>
+                        </SelectField>
                       </div>
 
                       <div className="space-y-1.5">
                         <label className="block text-[11px] font-medium text-muted-foreground">
                           Category <span className="text-destructive">*</span>
                         </label>
-                        <select
+                        <SelectField
                           value={pay.category}
                           onChange={(e) => {
                             const u = [...paymentsList]; u[idx] = { ...u[idx], category: e.target.value }; setPaymentsList(u);
                           }}
-                          className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                          className="w-full"
                         >
                           {INCENTIVE_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat}>{cat}</option>
                           ))}
-                        </select>
+                        </SelectField>
                       </div>
                     </div>
 
@@ -694,8 +701,8 @@ export function IncentivesPage() {
                         <label className="block text-[11px] font-medium text-muted-foreground">
                           Amount (₹) <span className="text-destructive">*</span>
                         </label>
-                        <input
-                          type="number"
+                        <MoneyInput
+                         
                           min="1"
                           required
                           placeholder="0"
@@ -703,21 +710,21 @@ export function IncentivesPage() {
                           onChange={(e) => {
                             const u = [...paymentsList]; u[idx] = { ...u[idx], amount: e.target.value }; setPaymentsList(u);
                           }}
-                          className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground font-mono font-bold focus:outline-none focus:ring-1 focus:ring-primary"
+                          className="w-full"
                         />
                       </div>
 
                       <div className="space-y-1.5">
                         <label className="block text-[11px] font-medium text-muted-foreground">Tax (₹)</label>
-                        <input
-                          type="number"
+                        <MoneyInput
+                         
                           min="0"
                           placeholder="0"
                           value={pay.tax}
                           onChange={(e) => {
                             const u = [...paymentsList]; u[idx] = { ...u[idx], tax: e.target.value }; setPaymentsList(u);
                           }}
-                          className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                          className="w-full"
                         />
                       </div>
 
@@ -725,13 +732,13 @@ export function IncentivesPage() {
                         <label className="block text-[11px] font-medium text-muted-foreground">
                           Time <span className="text-destructive">*</span>
                         </label>
-                        <input
-                          type="time"
+                        <TimeInput
+                         
                           value={pay.time}
                           onChange={(e) => {
                             const u = [...paymentsList]; u[idx] = { ...u[idx], time: e.target.value }; setPaymentsList(u);
                           }}
-                          className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          className="w-full"
                         />
                       </div>
                     </div>
@@ -739,27 +746,20 @@ export function IncentivesPage() {
                     <div className="space-y-1.5">
                       <label className="block text-[11px] font-medium text-muted-foreground">Receipt / Proof</label>
                       <div className="flex items-center gap-3">
-                        <label className="h-9 px-3 rounded-lg border border-border bg-background hover:bg-muted text-xs font-semibold text-foreground cursor-pointer transition-colors inline-flex items-center gap-1.5">
-                          <CameraIcon className="size-3.5 text-primary" />
-                          <span>Choose file</span>
-                          <input
-                            type="file"
-                            accept="image/*,application/pdf"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (ev) => {
-                                  const u = [...paymentsList];
-                                  u[idx] = { ...u[idx], proof: ev.target.result, proofName: file.name };
-                                  setPaymentsList(u);
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
+                        <FileDrop
+                          accept="image/*,application/pdf"
+                          hint="Drop the receipt here or click to choose"
+                          className="flex-1"
+                          onFile={([file]) => {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const u = [...paymentsList];
+                              u[idx] = { ...u[idx], proof: ev.target.result, proofName: file.name };
+                              setPaymentsList(u);
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                        />
                         <span className="text-xs text-muted-foreground truncate">
                           {pay.proofName || 'No file chosen'}
                         </span>

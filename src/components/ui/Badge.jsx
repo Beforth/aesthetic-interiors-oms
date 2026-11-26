@@ -54,7 +54,7 @@ export function StatusBadge({ status, label, size = 'md', dot = true, className 
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium rounded-full border uppercase tracking-wider ${sizeClasses[size] || sizeClasses.md} ${classes} ${className}`}
+      className={`inline-flex items-center gap-1.5 font-semibold rounded-full border capitalize ${sizeClasses[size] || sizeClasses.md} ${classes} ${className}`}
     >
       {dot && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
       {label || defaultLabel}

@@ -49,6 +49,13 @@ import {
   ShieldIcon,
   XIcon,
 } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import NumberInput from '../components/ui/NumberInput';
+import SelectField from '../components/ui/SelectField';
+import StepperInput from '../components/ui/StepperInput';
+import { Slider } from '../components/ui/befui-slider';
+import Textarea from '../components/ui/Textarea';
+import TimeInput from '../components/ui/TimeInput';
 
 /** Today as DD-MM-YYYY, the format of the Daily attendance date box. */
 function todayDdMmYyyy() {
@@ -177,6 +184,8 @@ export function AttendancePage({ defaultTab }) {
   });
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [requestsList, setRequestsList] = useState([]);
+  const [requestPendingDelete, setRequestPendingDelete] = useState(null);
+  const [leaveTypePendingDelete, setLeaveTypePendingDelete] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1065,15 +1074,19 @@ export function AttendancePage({ defaultTab }) {
     }
   };
 
-  const handleDeleteLeaveType = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete leave type "${name}"?`)) return;
+  const handleDeleteLeaveType = (id, name) =>
+    setLeaveTypePendingDelete({ id, name });
+
+  const confirmDeleteLeaveType = async () => {
+    if (!leaveTypePendingDelete) return;
     try {
-      await attendanceService.deleteLeaveType(id);
-      toast.success(`Leave type deleted`);
+      await attendanceService.deleteLeaveType(leaveTypePendingDelete.id);
+      toast.success('Leave type deleted');
       loadData();
     } catch (err) {
       toast.error('Failed to delete leave type');
     }
+    setLeaveTypePendingDelete(null);
   };
 
   // Submit Regularization Request
@@ -1184,12 +1197,16 @@ export function AttendancePage({ defaultTab }) {
         setSelectedViewRequest((prev) => (prev ? { ...prev, status: decision === 'approve' ? 'approved' : 'rejected' } : null));
       }
     } catch (err) {
-      toast.error(`Failed to ${decision} request`);
+      toast.error(err?.message || `Failed to ${decision} request`);
     }
   };
 
-  const handleDeleteRequest = (id) => {
-    setRequestsList((prev) => prev.filter((r) => r.id !== id));
+  const handleDeleteRequest = (id) => setRequestPendingDelete(id);
+
+  const confirmDeleteRequest = () => {
+    if (!requestPendingDelete) return;
+    setRequestsList((prev) => prev.filter((r) => r.id !== requestPendingDelete));
+    setRequestPendingDelete(null);
     toast.success('Attendance request deleted');
   };
 
@@ -1504,21 +1521,21 @@ export function AttendancePage({ defaultTab }) {
                 <div className="flex items-center gap-2">
                   <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
                     From
-                    <input
-                      type="date"
+                    <DateInput bare
+                     
                       value={recordFromDate}
                       onChange={(e) => setRecordFromDate(e.target.value)}
-                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      className="w-auto min-w-[9.5rem]"
                       title="From Date"
                     />
                   </label>
                   <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
                     To
-                    <input
-                      type="date"
+                    <DateInput bare
+                     
                       value={recordToDate}
                       onChange={(e) => setRecordToDate(e.target.value)}
-                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      className="w-auto min-w-[9.5rem]"
                       title="To Date"
                     />
                   </label>
@@ -1769,21 +1786,21 @@ export function AttendancePage({ defaultTab }) {
                 <div className="flex items-center gap-2">
                   <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
                     From
-                    <input
-                      type="date"
+                    <DateInput bare
+                     
                       value={requestFromDate}
                       onChange={(e) => setRequestFromDate(e.target.value)}
-                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      className="w-auto min-w-[9.5rem]"
                       title="From Date"
                     />
                   </label>
                   <label className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[11px] font-medium text-muted-foreground">
                     To
-                    <input
-                      type="date"
+                    <DateInput bare
+                     
                       value={requestToDate}
                       onChange={(e) => setRequestToDate(e.target.value)}
-                      className="bg-transparent text-xs text-foreground cursor-pointer focus:outline-none"
+                      className="w-auto min-w-[9.5rem]"
                       title="To Date"
                     />
                   </label>
@@ -1901,27 +1918,37 @@ export function AttendancePage({ defaultTab }) {
                         <button
                           type="button"
                           onClick={() => handleDecideRequest(req.id, 'approve')}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-success/10 text-success border border-success/30 hover:bg-success/20 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-success/10 text-success border border-success/30 hover:bg-success/20 transition-colors cursor-pointer"
                           title="Approve Request"
                         >
+                          <CheckIcon className="size-3.5" />
                           Approve
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDecideRequest(req.id, 'reject')}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer"
                           title="Reject Request"
                         >
+                          <XIcon className="size-3.5" />
                           Reject
                         </button>
                       </div>
                     );
                   }
                   if (status === 'approved') {
-                    return <Badge variant="success" dot>Approved</Badge>;
+                    return (
+                      <Badge variant="success">
+                        <CheckIcon className="size-3.5" /> Approved
+                      </Badge>
+                    );
                   }
                   if (status === 'rejected') {
-                    return <Badge variant="danger" dot>Rejected</Badge>;
+                    return (
+                      <Badge variant="danger">
+                        <XIcon className="size-3.5" /> Rejected
+                      </Badge>
+                    );
                   }
                   return <Badge variant="neutral">{req.status || 'Unknown'}</Badge>;
                 },
@@ -1999,10 +2026,10 @@ export function AttendancePage({ defaultTab }) {
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
               Office / Project Site Name
             </label>
-            <select
+            <SelectField
               value={officeForm.name}
               onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })}
-              className="w-full h-9 px-3 border border-border rounded-lg text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary bg-background cursor-pointer text-xs"
+              className="w-full"
             >
               <option value="Main Office (BeForth Nashik)">Main Office (BeForth Nashik)</option>
               <option value="Head Office">Head Office</option>
@@ -2019,7 +2046,7 @@ export function AttendancePage({ defaultTab }) {
                 !projectsList.some((p) => p.name === officeForm.name) && (
                   <option value={officeForm.name}>{officeForm.name}</option>
                 )}
-            </select>
+            </SelectField>
           </div>
 
           {/* Latitude & Longitude */}
@@ -2028,24 +2055,24 @@ export function AttendancePage({ defaultTab }) {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Latitude
               </label>
-              <input
-                type="number"
+              <NumberInput
+               
                 step="any"
                 value={officeForm.lat}
                 onChange={(e) => setOfficeForm({ ...officeForm, lat: e.target.value })}
-                className="w-full h-9 px-3 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-background text-xs"
+                className="w-full"
               />
             </div>
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Longitude
               </label>
-              <input
-                type="number"
+              <NumberInput
+               
                 step="any"
                 value={officeForm.lng}
                 onChange={(e) => setOfficeForm({ ...officeForm, lng: e.target.value })}
-                className="w-full h-9 px-3 border border-border rounded-lg text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-background text-xs"
+                className="w-full"
               />
             </div>
           </div>
@@ -2062,8 +2089,8 @@ export function AttendancePage({ defaultTab }) {
                 </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <input
-                  type="number"
+                <NumberInput
+                 
                   min="0"
                   max="5000"
                   value={officeForm.radiusMeters}
@@ -2074,27 +2101,21 @@ export function AttendancePage({ defaultTab }) {
                       radiusMeters: val === '' ? '' : parseInt(val, 10) || 0,
                     });
                   }}
-                  className="w-20 h-8 px-2 text-center font-bold text-xs border border-border rounded-lg text-foreground bg-background"
+                  className="w-24"
                   placeholder="0"
                 />
                 <span className="text-xs text-muted-foreground font-medium">m</span>
               </div>
             </div>
 
-            <input
-              type="range"
-              min="0"
-              max="5000"
-              step="25"
+            <Slider
+              aria-label="Fence radius in metres"
+              min={0}
+              max={5000}
+              step={25}
               value={officeForm.radiusMeters === '' ? 0 : officeForm.radiusMeters}
-              onChange={(e) => {
-                const val = e.target.value;
-                setOfficeForm({
-                  ...officeForm,
-                  radiusMeters: val === '' ? '' : parseInt(val, 10) || 0,
-                });
-              }}
-              className="w-full accent-primary cursor-pointer"
+              onValueChange={(radiusMeters) => setOfficeForm({ ...officeForm, radiusMeters })}
+              format={(v) => `${v} m`}
             />
             <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
               <span>0m</span>
@@ -2117,20 +2138,20 @@ export function AttendancePage({ defaultTab }) {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-[10px] text-muted-foreground font-medium block mb-1">Start Time</span>
-                    <input
-                      type="time"
+                    <TimeInput
+                     
                       value={officeForm.officeStartTime}
                       onChange={(e) => setOfficeForm({ ...officeForm, officeStartTime: e.target.value })}
-                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full font-mono h-8 text-xs"
                     />
                   </div>
                   <div>
                     <span className="text-[10px] text-muted-foreground font-medium block mb-1">End Time</span>
-                    <input
-                      type="time"
+                    <TimeInput
+                     
                       value={officeForm.officeEndTime}
                       onChange={(e) => setOfficeForm({ ...officeForm, officeEndTime: e.target.value })}
-                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full font-mono h-8 text-xs"
                     />
                   </div>
                 </div>
@@ -2144,20 +2165,20 @@ export function AttendancePage({ defaultTab }) {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-[10px] text-muted-foreground font-medium block mb-1">Lunch Start</span>
-                    <input
-                      type="time"
+                    <TimeInput
+                     
                       value={officeForm.lunchStartTime}
                       onChange={(e) => setOfficeForm({ ...officeForm, lunchStartTime: e.target.value })}
-                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full font-mono h-8 text-xs"
                     />
                   </div>
                   <div>
                     <span className="text-[10px] text-muted-foreground font-medium block mb-1">Lunch End</span>
-                    <input
-                      type="time"
+                    <TimeInput
+                     
                       value={officeForm.lunchEndTime}
                       onChange={(e) => setOfficeForm({ ...officeForm, lunchEndTime: e.target.value })}
-                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full font-mono h-8 text-xs"
                     />
                   </div>
                 </div>
@@ -2172,8 +2193,8 @@ export function AttendancePage({ defaultTab }) {
                   <span className="text-[10px] text-muted-foreground">Late punch buffer</span>
                 </div>
                 <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="number"
+                  <StepperInput
+                   
                     min="0"
                     max="120"
                     value={officeForm.gracePeriodMinutes}
@@ -2183,7 +2204,7 @@ export function AttendancePage({ defaultTab }) {
                         gracePeriodMinutes: e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0,
                       })
                     }
-                    className="w-20 h-8 px-2 text-center text-xs font-bold rounded-md bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                   
                   />
                   <span className="text-xs text-muted-foreground font-medium">minutes</span>
                 </div>
@@ -2197,21 +2218,21 @@ export function AttendancePage({ defaultTab }) {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-[10px] text-muted-foreground font-medium block mb-1">Start</span>
-                    <input
-                      type="time"
+                    <TimeInput
+                     
                       value={officeForm.halfDayStart || officeForm.firstHalfEnd || '10:30'}
                       onChange={(e) => setOfficeForm({ ...officeForm, halfDayStart: e.target.value, firstHalfEnd: e.target.value })}
-                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full font-mono h-8 text-xs"
                       data-tooltip="Half day start time"
                     />
                   </div>
                   <div>
                     <span className="text-[10px] text-muted-foreground font-medium block mb-1">End</span>
-                    <input
-                      type="time"
+                    <TimeInput
+                     
                       value={officeForm.halfDayEnd || officeForm.secondHalfStart || '14:00'}
                       onChange={(e) => setOfficeForm({ ...officeForm, halfDayEnd: e.target.value, secondHalfStart: e.target.value })}
-                      className="w-full h-8 px-2 text-xs rounded-md bg-background border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full font-mono h-8 text-xs"
                       data-tooltip="Half day end time"
                     />
                   </div>
@@ -2379,21 +2400,21 @@ export function AttendancePage({ defaultTab }) {
         <form onSubmit={handleAddLeaveType} className="space-y-4 text-xs">
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase">Leave Type Title</label>
-            <input
+            <Input
               type="text"
               required
               value={leaveTypeForm.name}
               onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, name: e.target.value })}
               placeholder="e.g. Casual Leave, Maternity Leave"
-              className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase">Days / Year</label>
-              <input
-                type="number"
+              <StepperInput
+               
                 min="1"
                 max="365"
                 value={leaveTypeForm.daysPerYear}
@@ -2401,30 +2422,30 @@ export function AttendancePage({ defaultTab }) {
                   const val = e.target.value;
                   setLeaveTypeForm({ ...leaveTypeForm, daysPerYear: val === '' ? '' : parseInt(val, 10) || 0 });
                 }}
-                className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+               
               />
             </div>
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase">Carry Forward</label>
-              <select
+              <SelectField
                 value={leaveTypeForm.carryForward}
                 onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, carryForward: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                className="w-full"
               >
                 <option value="No">No</option>
                 <option value="Yes">Yes</option>
-              </select>
+              </SelectField>
             </div>
           </div>
 
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-muted-foreground uppercase">Description</label>
-            <input
+            <Input
               type="text"
               value={leaveTypeForm.description}
               onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, description: e.target.value })}
               placeholder="Optional notes"
-              className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full"
             />
           </div>
 
@@ -2458,47 +2479,47 @@ export function AttendancePage({ defaultTab }) {
           <div className="space-y-4 text-xs">
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase">Status</label>
-              <select
+              <SelectField
                 value={correctionData.status}
                 onChange={(e) => setCorrectionData({ ...correctionData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                className="w-full"
               >
                 <option value="present">Present</option>
                 <option value="absent">Absent</option>
                 <option value="half-day">Half Day</option>
-              </select>
+              </SelectField>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase">Check-In Time</label>
-                <input
+                <Input
                   type="text"
                   value={correctionData.checkInTime}
                   onChange={(e) => setCorrectionData({ ...correctionData, checkInTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full font-mono"
                 />
               </div>
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase">Check-Out Time</label>
-                <input
+                <Input
                   type="text"
                   value={correctionData.checkOutTime}
                   onChange={(e) => setCorrectionData({ ...correctionData, checkOutTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-foreground font-mono bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full font-mono"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-muted-foreground uppercase">Correction Reason</label>
-              <input
+              <Input
                 type="text"
                 required
                 value={correctionData.reason}
                 onChange={(e) => setCorrectionData({ ...correctionData, reason: e.target.value })}
                 placeholder="Manager note or regularization reason"
-                className="w-full px-3 py-2 border border-border rounded-lg text-foreground bg-card focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full"
               />
             </div>
 
@@ -2631,7 +2652,7 @@ export function AttendancePage({ defaultTab }) {
                 Staff Member <span className="text-destructive">*</span>
               </label>
               {canCorrectAttendance ? (
-                <select
+                <SelectField
                   value={requestForm.userId}
                   onChange={(e) => {
                     setRequestForm({ ...requestForm, userId: e.target.value });
@@ -2652,13 +2673,13 @@ export function AttendancePage({ defaultTab }) {
                       {staff.isAdmin ? `${staff.name} (Admin)` : staff.name}
                     </option>
                   ))}
-                </select>
+                </SelectField>
               ) : (
-                <input
+                <Input
                   type="text"
                   disabled
                   value={currentUser?.name || 'Staff Member'}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-muted text-muted-foreground font-medium text-xs cursor-not-allowed"
+                  className="w-full"
                 />
               )}
               {requestFormErrors.userId && (
@@ -2671,7 +2692,7 @@ export function AttendancePage({ defaultTab }) {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Request Type <span className="text-destructive">*</span>
               </label>
-              <select
+              <SelectField
                 value={requestForm.type}
                 onChange={(e) => {
                   setRequestForm({ ...requestForm, type: e.target.value });
@@ -2691,7 +2712,7 @@ export function AttendancePage({ defaultTab }) {
                 <option value="On-Duty (Site Visit)">On-Duty (Site Visit)</option>
                 <option value="Work From Home">Work From Home</option>
                 <option value="Other">Other</option>
-              </select>
+              </SelectField>
               {requestFormErrors.type && (
                 <p className="text-[11px] font-medium text-destructive">{requestFormErrors.type}</p>
               )}
@@ -2730,8 +2751,8 @@ export function AttendancePage({ defaultTab }) {
                   </button>
                 </div>
               </div>
-              <input
-                type="date"
+              <DateInput
+               
                 required
                 value={requestForm.date}
                 onChange={(e) => {
@@ -2792,7 +2813,7 @@ export function AttendancePage({ defaultTab }) {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Reason <span className="text-destructive">*</span>
               </label>
-              <textarea
+              <Textarea
                 rows={2}
                 required
                 placeholder="Enter reason for request (required)..."
@@ -2804,12 +2825,7 @@ export function AttendancePage({ defaultTab }) {
                   }
                   if (requestSubmitError) setRequestSubmitError(null);
                 }}
-                className={cn(
-                  'w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none text-xs resize-none transition-colors',
-                  requestFormErrors.reason
-                    ? 'border-destructive ring-1 ring-destructive/40 bg-destructive/5'
-                    : 'border-border focus:ring-1 focus:ring-primary'
-                )}
+                className="w-full resize-none" aria-invalid={Boolean(requestFormErrors.reason)}
               />
               {requestFormErrors.reason && (
                 <p className="text-[11px] font-medium text-destructive">{requestFormErrors.reason}</p>
@@ -2866,6 +2882,28 @@ export function AttendancePage({ defaultTab }) {
           }
         }}
         onCancel={() => setRecordPendingDelete(null)}
+      />
+
+      {/* ConfirmDialog for Deleting Attendance Request */}
+      <ConfirmDialog
+        isOpen={!!requestPendingDelete}
+        title="Delete attendance request?"
+        message="Are you sure you want to delete this attendance request? This action cannot be undone."
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={confirmDeleteRequest}
+        onCancel={() => setRequestPendingDelete(null)}
+      />
+
+      {/* ConfirmDialog for Deleting Leave Type */}
+      <ConfirmDialog
+        isOpen={!!leaveTypePendingDelete}
+        title="Delete leave type?"
+        message={`Are you sure you want to delete the leave type "${leaveTypePendingDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={confirmDeleteLeaveType}
+        onCancel={() => setLeaveTypePendingDelete(null)}
       />
 
       {/* Confirm Check-Out Dialog */}

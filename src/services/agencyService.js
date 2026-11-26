@@ -24,6 +24,7 @@ function getStoredAgencies() {
             pincode: a.pincode || mock?.pincode || '560001',
             trade: a.trade || mock?.trade || 'Ceiling',
             skills: a.skills && a.skills.length > 0 ? a.skills : (mock?.skills || [a.trade || 'General Trade']),
+            additionalTrades: Array.isArray(a.additionalTrades) ? a.additionalTrades : [],
             status: a.status || mock?.status || 'active',
             teamSize: a.teamSize || mock?.teamSize || 8,
             rateUnit: a.rateUnit || mock?.rateUnit || 'sqft',
@@ -154,8 +155,8 @@ const mockAgencyService = {
 const AGENCY_URL = '/agencies/agencies/';
 const AGENCY_FIELDS = [
   'name', 'trade', 'ownerName', 'contactPerson', 'phone', 'alternatePhone', 'email', 'address', 'city', 'pincode',
-  'skills', 'stages', 'teamSize', 'rateUnit', 'baseRate', 'paymentTerms', 'gstin', 'pan', 'bankDetails', 'status',
-  'establishedYear', 'notes', 'rating',
+  'skills', 'stages', 'additionalTrades', 'teamSize', 'rateUnit', 'baseRate', 'paymentTerms', 'gstin', 'pan',
+  'bankDetails', 'status', 'establishedYear', 'notes', 'rating',
 ];
 
 function toApiAgency(data) {

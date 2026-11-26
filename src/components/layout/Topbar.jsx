@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { projectService } from '../../services/projectService';
@@ -11,10 +11,9 @@ import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
 import { SidebarTrigger } from '../ui/sidebar';
 import TaskAllocationModal from '../common/TaskAllocationModal';
-import Modal from '../ui/Modal';
-import Button from '../ui/Button';
-import { useToast } from '../../context/ToastContext';
+import { ChangePasswordModal } from '../domain/PasswordModals';
 import { useNotifications } from '../../hooks/useNotifications';
+import notificationService from '../../services/notificationService';
 
 /**
  * Top navigation bar with live global search, Task Allocation shortcut,
@@ -24,10 +23,10 @@ import { useNotifications } from '../../hooks/useNotifications';
  * @param {function(): void} props.onToggleMobileMenu
  */
 export function Topbar({ onToggleMobileMenu }) {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [notifications] = useNotifications([
+  const [notifications, setNotifications] = useNotifications([
     {
       id: 'n1',
       title: 'Rohit Kumar punched in',
@@ -46,7 +45,7 @@ export function Topbar({ onToggleMobileMenu }) {
       unread: true,
       path: '/projects',
       icon: 'briefcase',
-      iconColor: 'text-indigo-600 bg-indigo-50',
+      iconColor: 'text-blue-600 bg-blue-50',
     },
     {
       id: 'n3',
@@ -71,51 +70,67 @@ export function Topbar({ onToggleMobileMenu }) {
   ]);
 
   const unreadCount = notifications.filter((n) => n.unread).length;
+  const recentNotifications = notifications.slice(0, 5);
+
+  // Notifications bell popover
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef(null);
+
+  const markNotificationsRead = useCallback(() => {
+    setNotifications((prev) =>
+      prev.some((n) => n.unread) ? prev.map((n) => ({ ...n, unread: false })) : prev
+    );
+    notificationService.markAllNotificationsAsRead().catch(() => {
+      // The badge is cleared locally even if the server is unavailable.
+    });
+  }, [setNotifications]);
+
+  const handleBellClick = () => {
+    const opening = !isNotificationsOpen;
+    setIsNotificationsOpen(opening);
+    if (opening) markNotificationsRead();
+  };
+
+  const handleSeeMore = () => {
+    setIsNotificationsOpen(false);
+    markNotificationsRead();
+    navigate('/notifications');
+  };
+
+  // Close the bell popover on outside click / Escape
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') setIsNotificationsOpen(false);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Keep the badge in sync when notifications are read from the notifications page
+  useEffect(() => {
+    const handleNotificationsUpdated = () => {
+      setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    };
+    window.addEventListener(notificationService.EVENT_NAME, handleNotificationsUpdated);
+    return () =>
+      window.removeEventListener(notificationService.EVENT_NAME, handleNotificationsUpdated);
+  }, [setNotifications]);
 
   // Task Allocation modal state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
 
-  // Change Password Modal States
-  const toast = useToast();
+  // "Change password" in the account menu
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  const [passwordErrors, setPasswordErrors] = useState({});
-
-  const handleChangePasswordSubmit = async (e) => {
-    e.preventDefault();
-    const errs = {};
-    if (!passwordForm.newPassword || passwordForm.newPassword.length < 8) {
-      errs.newPassword = 'Password must be at least 8 characters long';
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      errs.confirmPassword = 'Passwords do not match';
-    }
-    if (Object.keys(errs).length > 0) {
-      setPasswordErrors(errs);
-      return;
-    }
-
-    try {
-      setPasswordLoading(true);
-      await userService.updateUser(currentUser.id, { password: passwordForm.newPassword });
-      toast.success('Your password has been changed successfully!');
-      setIsChangePasswordOpen(false);
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      setPasswordErrors({});
-    } catch (err) {
-      toast.error(err.message || 'Failed to update password');
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
 
   // Global search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -271,6 +286,12 @@ export function Topbar({ onToggleMobileMenu }) {
     },
     { id: 'divider-2', divider: true },
     {
+      id: 'change-password',
+      label: 'Change password',
+      icon: 'lock',
+      onClick: () => setIsChangePasswordOpen(true),
+    },
+    {
       id: 'signout',
       label: 'Sign Out',
       icon: 'logout',
@@ -281,19 +302,19 @@ export function Topbar({ onToggleMobileMenu }) {
 
   return (
     <>
-      <header className="h-12 bg-surface border-b border-border px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 shadow-2xs">
+      <header className="h-14 bg-background lg:bg-transparent border-b border-border lg:border-b-0 px-3 sm:px-4 lg:px-1 flex items-center justify-between shrink-0 z-30">
         {/* Left Section: Mobile Sidebar Drawer Trigger (Desktop trigger is beside Aesthetic Interiors heading) */}
         <div className="flex items-center lg:hidden">
           <SidebarTrigger />
         </div>
 
         {/* Center Section: Global Quick Search with Autocomplete */}
-        <div ref={searchContainerRef} className="relative flex-1 max-w-xs sm:max-w-sm lg:max-w-md mx-2 sm:mx-3">
+        <div ref={searchContainerRef} className="relative flex-1 max-w-xs sm:max-w-sm lg:max-w-md mx-2 sm:mx-3 lg:ml-0">
           <div className="relative flex items-center">
             <Icon
               name="search"
               size={14}
-              className="absolute left-2.5 text-text-muted pointer-events-none"
+              className="absolute left-4 text-text-muted pointer-events-none"
             />
             <input
               ref={searchInputRef}
@@ -306,7 +327,7 @@ export function Topbar({ onToggleMobileMenu }) {
               onFocus={() => setIsSearchOpen(true)}
               onClick={() => setIsSearchOpen(true)}
               placeholder="Search projects, clients, tasks, muster..."
-              className="w-full h-8 pl-8 pr-14 py-1 text-xs bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:bg-card transition-all shadow-inner cursor-pointer focus:cursor-text"
+              className="w-full h-11 pl-11 pr-20 py-1 text-[13px] bg-card border border-border rounded-full text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:bg-card focus:border-border transition-all cursor-pointer focus:cursor-text"
             />
             <div className="absolute right-3 flex items-center gap-1.5">
               {searchQuery ? (
@@ -325,7 +346,7 @@ export function Topbar({ onToggleMobileMenu }) {
                   searchInputRef.current?.focus();
                   setIsSearchOpen(true);
                 }}
-                className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-mono font-medium text-muted-foreground bg-muted hover:bg-muted/80 rounded border border-border/80 cursor-pointer shadow-2xs select-none transition-colors"
+                className="hidden sm:inline-flex items-center gap-0.5 px-2.5 py-1 text-[11px] font-medium text-muted-foreground bg-muted hover:bg-secondary rounded-full border border-border cursor-pointer select-none transition-colors"
                 title="Click or press Ctrl+K to search"
               >
                 <span>Ctrl</span>
@@ -466,7 +487,10 @@ export function Topbar({ onToggleMobileMenu }) {
                       { label: 'Attendance', path: '/attendance', icon: 'attendance', color: 'text-success' },
                       { label: 'Clients', path: '/clients', icon: 'users', color: 'text-info' },
                       { label: 'Billing', path: '/payments', icon: 'currency-inr', color: 'text-destructive' },
-                    ].map((nav) => (
+                    ]
+                      // Billing is for staff who handle payments; a client has no payments screen
+                      .filter((nav) => nav.path !== '/payments' || hasPermission('payments.client.manage') || hasPermission('payments.labour.manage'))
+                      .map((nav) => (
                       <button
                         key={nav.path}
                         type="button"
@@ -512,19 +536,81 @@ export function Topbar({ onToggleMobileMenu }) {
 
         {/* Right Section: Notifications, Avatar & Logout Icon */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Notifications — the bell opens the full notifications page */}
-          <div className="relative">
+          {/* Notifications — the bell opens a small popover with recent items */}
+          <div className="relative" ref={notificationRef}>
             <IconButton
               icon="bell"
-              size="sm"
+              size="md"
+              variant="outline"
               ariaLabel="View notifications"
-              onClick={() => navigate('/notifications')}
+              aria-expanded={isNotificationsOpen}
+              onClick={handleBellClick}
               className="cursor-pointer"
             />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center pointer-events-none shadow-xs border-2 border-surface">
                 {unreadCount}
               </span>
+            )}
+
+            {isNotificationsOpen && (
+              <div
+                role="dialog"
+                aria-label="Recent notifications"
+                className="absolute right-0 top-full mt-2 z-50 w-[19rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-in fade-in zoom-in-95 duration-150"
+              >
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                  <span className="text-xs font-bold text-foreground">Notifications</span>
+                  {unreadCount > 0 && (
+                    <span className="text-[10px] font-semibold text-primary">
+                      {unreadCount} new
+                    </span>
+                  )}
+                </div>
+
+                {recentNotifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                    No recent notifications
+                  </div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                    {recentNotifications.map((notification) => (
+                      <button
+                        key={notification.id}
+                        type="button"
+                        onClick={() => {
+                          setIsNotificationsOpen(false);
+                          navigate(notification.path || '/notifications');
+                        }}
+                        className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-muted/60 transition-colors cursor-pointer"
+                      >
+                        <span className="size-7 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                          <Icon name={notification.icon || 'bell'} size={14} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-semibold text-foreground truncate">
+                            {notification.title}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground truncate">
+                            {notification.description}
+                          </span>
+                          <span className="block text-[10px] text-muted-foreground mt-0.5">
+                            {notification.time}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSeeMore}
+                  className="w-full px-3 py-2.5 border-t border-border text-xs font-semibold text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                >
+                  See more
+                </button>
+              </div>
             )}
           </div>
 
@@ -533,10 +619,15 @@ export function Topbar({ onToggleMobileMenu }) {
             trigger={
               <button
                 type="button"
-                className="flex items-center gap-1 p-0.5 rounded-lg hover:bg-muted transition-colors select-none focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer"
+                className="flex items-center gap-2 py-1 pl-1 pr-2 md:pr-3 rounded-full hover:bg-card transition-colors select-none focus:outline-none focus:ring-2 focus:ring-ring/20 cursor-pointer"
                 aria-label="User account menu"
+                data-no-tooltip
               >
                 <Avatar name={currentUser?.name || 'User'} size="md" status="online" />
+                <span className="hidden min-w-0 max-w-[11rem] text-left md:block">
+                  <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">{currentUser?.name || 'User'}</span>
+                  <span className="block truncate text-[11px] leading-tight text-muted-foreground">{currentUser?.email || ''}</span>
+                </span>
                 <Icon name="chevron-down" size={13} className="text-muted-foreground hidden sm:block" />
               </button>
             }
@@ -549,7 +640,7 @@ export function Topbar({ onToggleMobileMenu }) {
             onClick={handleSignOut}
             title="Sign Out"
             aria-label="Sign Out"
-            className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors focus:outline-none focus:ring-1.5 focus:ring-danger/20 shrink-0 cursor-pointer"
+            className="grid size-10 place-items-center border border-border bg-card text-text-muted hover:text-danger hover:bg-danger/10 rounded-full transition-colors focus:outline-none focus:ring-1.5 focus:ring-danger/20 shrink-0 cursor-pointer"
           >
             <Icon name="logout" size={16} />
           </button>
@@ -561,6 +652,8 @@ export function Topbar({ onToggleMobileMenu }) {
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
       />
+
+      <ChangePasswordModal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} />
     </>
   );
 }

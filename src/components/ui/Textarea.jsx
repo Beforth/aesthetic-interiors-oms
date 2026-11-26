@@ -1,5 +1,6 @@
 import React, { forwardRef, useId } from 'react';
 import FormField from './FormField';
+import { Textarea as BefTextarea } from './befui-input';
 
 /**
  * Multi-line textarea component with label and error support.
@@ -22,7 +23,7 @@ export const Textarea = forwardRef(function Textarea(
   const textareaId = id || generatedId;
 
   const baseTextarea = (
-    <textarea
+    <BefTextarea
       ref={ref}
       id={textareaId}
       rows={rows}
@@ -30,15 +31,7 @@ export const Textarea = forwardRef(function Textarea(
       required={required}
       aria-invalid={!!error}
       aria-describedby={error ? `${textareaId}-error` : undefined}
-      className={`w-full bg-background border rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 transition-colors p-3
-        ${
-          error
-            ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive focus:ring-2 focus:ring-destructive/30'
-            : 'border-border focus:border-ring focus:ring-2 focus:ring-ring/20'
-        }
-        focus:outline-none disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed
-        ${className}
-      `}
+      className={className}
       {...rest}
     />
   );

@@ -215,6 +215,8 @@ function toApiClient(data) {
   const body = pick(data, ['name', 'phone', 'email', 'address', 'notes']);
   const type = data.type || data.status;
   if (type) body.type = type;
+  // the client's own login (a user id); null unlinks it
+  if (data.userId !== undefined) body.userId = data.userId === null || data.userId === '' ? null : Number(data.userId);
   return body;
 }
 

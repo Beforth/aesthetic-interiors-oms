@@ -3,10 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
-import Textarea from '../components/ui/Textarea';
 import Checkbox from '../components/ui/Checkbox';
-import Badge from '../components/ui/badge';
-import { ArrowLeftIcon, ShieldIcon, CheckIcon, LockIcon } from '../components/ui/icons';
+import { ArrowLeftIcon, LockIcon } from '../components/ui/icons';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { roleService } from '../services/roleService';
@@ -158,7 +156,7 @@ export default function NewRolePage() {
 
     const errors = {};
     if (!roleFormData.name.trim()) errors.name = 'Role name is required';
-    if (!roleFormData.key.trim()) errors.key = 'User ID is required';
+    if (!roleFormData.key.trim()) errors.key = 'Role ID is required';
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -207,274 +205,128 @@ export default function NewRolePage() {
     );
   }
 
+  const selected = roleFormData.selectedPermissions;
+  const total = SYSTEM_PERMISSIONS.length;
+
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
-      {/* Top Navigation & Header */}
+    <div className="animate-fadeIn space-y-4 pb-4">
       <div>
         <button
           type="button"
           onClick={() => navigate('/settings/users')}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground mb-2 transition-colors group cursor-pointer"
+          className="group mb-2 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeftIcon className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
-          <span>Back to Users & Roles</span>
+          <span>Users & Roles</span>
         </button>
-
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <ShieldIcon className="size-6 text-primary" />
-              <span>{isEditing ? `Edit Role: ${roleFormData.name || roleKey}` : 'Create New Role'}</span>
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {isEditing
-                ? isLockedAdmin
-                  ? 'The Owner always retains all permissions; only display name and description can be modified.'
-                  : 'Update operational title, description, and assign or revoke granular system permissions.'
-                : 'Define a custom operational role title, identifier key, and configure granular permissions across modules.'}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/settings/users')}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              loading={isSubmitting}
-              onClick={handleSubmit}
-            >
-              {isEditing ? 'Save Changes' : 'Create Role'}
-            </Button>
-          </div>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {isEditing ? `Edit role: ${roleFormData.name || roleKey}` : 'Create role'}
+        </h1>
+        <p className="mt-1 text-xs text-muted-foreground">Name the role, then tick what its members may do.</p>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-6">
-        {/* 1. Basics Card */}
-        <Card
-          title={<span className="text-sm font-semibold text-foreground">Role Information</span>}
-          subtitle="The core identity and operational naming of the system role."
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <Card>
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-4">
+            <Input
+              label="Role name"
+              required
+              value={roleFormData.name}
+              onChange={(e) => {
+                const name = e.target.value;
+                // the ID follows the name while a new role is being typed
+                const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                setRoleFormData((prev) => ({ ...prev, name, key: isEditing ? prev.key : slug }));
+                if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: undefined }));
+              }}
+              error={formErrors.name}
+            />
+            <Input
+              label="Role ID"
+              required
+              value={roleFormData.key}
+              disabled={isEditing}
+              onChange={(e) => {
+                setRoleFormData((prev) => ({ ...prev, key: e.target.value }));
+                if (formErrors.key) setFormErrors((prev) => ({ ...prev, key: undefined }));
+              }}
+              error={formErrors.key}
+            />
+            <div className="md:col-span-2">
               <Input
-                label="Role Name"
-                required
-                placeholder="e.g. Quality Inspector"
-                value={roleFormData.name}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  // Auto-generate identifier key slug for new roles
-                  const slug = name
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, '');
-                  setRoleFormData((prev) => ({
-                    ...prev,
-                    name,
-                    key: isEditing ? prev.key : slug,
-                  }));
-                  if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: undefined }));
-                }}
-                error={formErrors.name}
-              />
-
-              <Input
-                label="User ID"
-                required
-                placeholder="e.g. quality-inspector"
-                value={roleFormData.key}
-                disabled={isEditing}
-                helperText={
-                  isEditing
-                    ? 'A registered user/role ID cannot be modified.'
-                    : 'Unique system identifier code (lowercase letters, numbers and hyphens).'
-                }
-                onChange={(e) => {
-                  setRoleFormData((prev) => ({ ...prev, key: e.target.value }));
-                  if (formErrors.key) setFormErrors((prev) => ({ ...prev, key: undefined }));
-                }}
-                error={formErrors.key}
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-medium text-foreground">
-                  Role Description
-                </label>
-              </div>
-              <Textarea
-                placeholder="Brief summary of duties, responsibilities, and operational scope..."
-                rows={2}
+                label="Description"
                 value={roleFormData.description}
-                onChange={(e) =>
-                  setRoleFormData((prev) => ({ ...prev, description: e.target.value }))
-                }
+                onChange={(e) => setRoleFormData((prev) => ({ ...prev, description: e.target.value }))}
               />
             </div>
           </div>
         </Card>
 
-        {/* 2. Granular Permissions Card */}
-        <Card
-          title={
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-foreground">Assign Permissions</span>
-                <Badge variant="secondary" className="font-mono text-xs">
-                  {roleFormData.selectedPermissions.length} / {SYSTEM_PERMISSIONS.length} Selected
-                </Badge>
-              </div>
-
-              {!isLockedAdmin && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={handleSelectAll}
-                  >
-                    Select All
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={handleClearAll}
-                  >
-                    Clear All
-                  </Button>
-                </div>
-              )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            Permissions
+            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+              {isLockedAdmin ? total : selected.length} of {total}
+            </span>
+          </h2>
+          {!isLockedAdmin && (
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="xs" onClick={handleSelectAll}>Select all</Button>
+              <Button type="button" variant="ghost" size="xs" onClick={handleClearAll}>Clear all</Button>
             </div>
-          }
-          subtitle="Grant specific operational privileges across modules. Each permission takes effect immediately."
-        >
-          <div className="space-y-6">
-            {isLockedAdmin && (
-              <div className="p-3 bg-muted/60 border border-border rounded-lg text-xs text-muted-foreground flex items-center gap-2">
-                <LockIcon className="size-4 text-primary shrink-0" />
-                <span>
-                  The Owner role is permanently locked with all system permissions enabled by default.
-                </span>
-              </div>
-            )}
+          )}
+        </div>
 
-            {PERMISSION_GROUPS.map((grp) => {
-              const allCategorySelected = grp.items.every((it) =>
-                roleFormData.selectedPermissions.includes(it.id)
-              );
-              const selectedCount = grp.items.filter((it) =>
-                roleFormData.selectedPermissions.includes(it.id)
-              ).length;
-
-              return (
-                <div
-                  key={grp.category}
-                  className="rounded-xl border border-muted-foreground/35 dark:border-muted-foreground/30 bg-card p-4 space-y-3 shadow-2xs"
-                >
-                  {/* Category Header */}
-                  <div className="flex items-center justify-between gap-2 border-b border-muted-foreground/25 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold text-primary uppercase tracking-wider">
-                        {grp.category}
-                      </h3>
-                      <span className="text-[11px] text-muted-foreground font-mono">
-                        ({selectedCount}/{grp.items.length})
-                      </span>
-                    </div>
-
-                    {!isLockedAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => handleToggleCategory(grp.items)}
-                        className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer select-none"
-                      >
-                        {allCategorySelected ? 'Deselect Category' : 'Select Category'}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Permissions Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {grp.items.map((permission) => {
-                      const isChecked =
-                        isLockedAdmin ||
-                        roleFormData.selectedPermissions.includes(permission.id);
-
-                      return (
-                        <div
-                          key={permission.id}
-                          onClick={() => handleTogglePermission(permission.id)}
-                          className={`flex items-start gap-3 p-2.5 rounded-lg border transition-all cursor-pointer select-none ${
-                            isChecked
-                              ? 'border-primary/40 bg-primary/5 text-foreground'
-                              : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
-                          } ${isLockedAdmin ? 'cursor-default' : ''}`}
-                        >
-                          <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={isChecked}
-                              disabled={isLockedAdmin}
-                              onChange={() => handleTogglePermission(permission.id)}
-                            />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-semibold text-foreground leading-snug">
-                              {permission.label}
-                            </div>
-                            <div className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                              {permission.id}
-                            </div>
-                            {permission.hint && (
-                              <div className="text-[11px] text-muted-foreground mt-1 leading-tight line-clamp-2">
-                                {permission.hint}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+        {isLockedAdmin && (
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted p-3 text-xs text-muted-foreground">
+            <LockIcon className="size-4 shrink-0 text-primary" />
+            <span>The Owner always has every permission.</span>
           </div>
-        </Card>
+        )}
 
-        {/* Bottom Actions Bar */}
-        <div className="flex items-center justify-between pt-4 border-t border-border">
-          <span className="text-xs text-muted-foreground">
-            {roleFormData.selectedPermissions.length} permissions configured for this role
-          </span>
+        {/* one card per area, flowing into columns so short areas leave no gaps */}
+        <div className="gap-4 md:columns-2 xl:columns-3">
+          {PERMISSION_GROUPS.map((grp) => {
+            const count = grp.items.filter((it) => isLockedAdmin || selected.includes(it.id)).length;
+            const all = count === grp.items.length;
+            return (
+              <section key={grp.category} className="soft-card mb-4 break-inside-avoid rounded-xl border border-border bg-card">
+                <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+                  <h3 className="text-[13px] font-semibold text-foreground">
+                    {grp.category}
+                    <span className="ml-2 text-[11px] font-medium tabular-nums text-muted-foreground">{count}/{grp.items.length}</span>
+                  </h3>
+                  {!isLockedAdmin && (
+                    <button type="button" onClick={() => handleToggleCategory(grp.items)} className="cursor-pointer select-none text-[11px] font-semibold text-primary hover:underline">
+                      {all ? 'Clear' : 'Select all'}
+                    </button>
+                  )}
+                </header>
+                <ul className="p-1.5">
+                  {grp.items.map((permission) => (
+                    <li key={permission.id} className="rounded-lg px-2.5 py-1 transition-colors hover:bg-muted">
+                      <Checkbox
+                        label={<span className="text-xs font-medium text-foreground">{permission.label}</span>}
+                        checked={isLockedAdmin || selected.includes(permission.id)}
+                        disabled={isLockedAdmin}
+                        onChange={() => handleTogglePermission(permission.id)}
+                        className="[&>div]:min-h-8"
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
 
+        {/* stays in view while the permissions are scrolled */}
+        <div className="soft-card sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+          <span className="text-xs text-muted-foreground">{isLockedAdmin ? total : selected.length} permissions selected</span>
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/settings/users')}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              loading={isSubmitting}
-              onClick={handleSubmit}
-            >
-              {isEditing ? 'Save Changes' : 'Create Role'}
+            <Button type="button" variant="outline" size="sm" onClick={() => navigate('/settings/users')}>Cancel</Button>
+            <Button type="button" variant="primary" size="sm" loading={isSubmitting} onClick={handleSubmit}>
+              {isEditing ? 'Save changes' : 'Create role'}
             </Button>
           </div>
         </div>

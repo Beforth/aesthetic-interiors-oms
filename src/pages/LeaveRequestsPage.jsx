@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { leaveService } from '../services/leaveService';
@@ -12,6 +13,7 @@ import { usePagination } from '../hooks/usePagination';
 // BefUI Components
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { Badge } from '../components/ui/badge';
 
 // BefUI Icons strictly from '@/components/ui/icons'
@@ -26,6 +28,11 @@ import {
   MoreIcon,
   EyeIcon,
 } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import SelectField from '../components/ui/SelectField';
+import StepperInput from '../components/ui/StepperInput';
+import SearchInput from '../components/ui/SearchInput';
+import Textarea from '../components/ui/Textarea';
 
 export function LeaveRequestsPage() {
   const toast = useToast();
@@ -42,6 +49,8 @@ export function LeaveRequestsPage() {
 
   // Active action menu row ID
   const [openActionId, setOpenActionId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const actionMenuRef = useRef(null);
 
   // View Details Modal State
@@ -79,8 +88,15 @@ export function LeaveRequestsPage() {
         setOpenActionId(null);
       }
     };
+    const close = () => setOpenActionId(null);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
   }, []);
 
   // Filtered & Sorted Requests
@@ -162,16 +178,20 @@ export function LeaveRequestsPage() {
     setOpenActionId(null);
   };
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete leave application for ${name}?`)) {
-      try {
-        await leaveService.deleteLeave(id);
-        toast.success(`Leave application deleted`);
-      } catch (err) {
-        toast.error(err.message || 'Could not delete the request');
-      }
-      setOpenActionId(null);
+  const handleDelete = (id, name) => {
+    setOpenActionId(null);
+    setDeleteTarget({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await leaveService.deleteLeave(deleteTarget.id);
+      toast.success('Leave application deleted');
+    } catch (err) {
+      toast.error(err.message || 'Could not delete the request');
     }
+    setDeleteTarget(null);
   };
 
   const handleApplySubmit = async (e) => {
@@ -233,7 +253,7 @@ export function LeaveRequestsPage() {
       {/* 1. Header with Apply Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Leave Requests
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -254,67 +274,63 @@ export function LeaveRequestsPage() {
       {/* 2. Top Filter Bar (Directly matching UI screenshot) */}
       <div className="flex flex-wrap items-center gap-2.5">
         {/* Search */}
-        <div className="relative flex-1 min-w-[220px]">
-          <SearchIcon className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search employee, reason, department..."
+        <div className="flex-1 min-w-[220px]">
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
+            placeholder="Search employee, reason, department..."
           />
         </div>
 
         {/* All Status Dropdown */}
         <div className="relative">
-          <select
+          <SelectField
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="pl-3 pr-8 py-2 text-xs font-medium rounded-xl bg-card border border-border text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs appearance-none"
+            className="w-auto min-w-[7rem]"
           >
             <option value="ALL">All Status</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
-          </select>
-          <ArrowUpDownIcon className="size-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <option value="withdrawn">Withdrawn</option>
+          </SelectField>
         </div>
 
         {/* All Types Dropdown */}
         <div className="relative">
-          <select
+          <SelectField
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="pl-3 pr-8 py-2 text-xs font-medium rounded-xl bg-card border border-border text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs appearance-none"
+            className="w-auto min-w-[7rem]"
           >
             <option value="ALL">All Types</option>
             <option value="Privileged Leave">Privileged Leave</option>
             <option value="Medical Leave">Medical Leave</option>
             <option value="Casual Leave">Casual Leave</option>
             <option value="Leave Without Pay">Leave Without Pay</option>
-          </select>
-          <ArrowUpDownIcon className="size-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          </SelectField>
         </div>
 
         {/* From Date */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card border border-border text-xs text-muted-foreground shadow-2xs">
           <span className="uppercase text-[10px] font-bold tracking-wider">FROM</span>
-          <input
-            type="date"
+          <DateInput bare
+           
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer"
+            className="w-auto min-w-[9.5rem]"
           />
         </div>
 
         {/* To Date */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card border border-border text-xs text-muted-foreground shadow-2xs">
           <span className="uppercase text-[10px] font-bold tracking-wider">TO</span>
-          <input
-            type="date"
+          <DateInput bare
+           
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer"
+            className="w-auto min-w-[9.5rem]"
           />
         </div>
 
@@ -386,6 +402,7 @@ export function LeaveRequestsPage() {
                   const isPending = status === 'pending';
                   const isApproved = status === 'approved';
                   const isRejected = status === 'rejected';
+                  const isWithdrawn = status === 'withdrawn';
 
                   // Format date range display
                   let datesText = formatDate(item.startDate);
@@ -406,7 +423,7 @@ export function LeaveRequestsPage() {
                   }
 
                   return (
-                    <tr key={item.id} className="hover:bg-muted/40 transition-colors">
+                    <tr key={item.id} className={`hover:bg-muted/40 transition-colors ${isWithdrawn ? 'bg-muted/30 opacity-60' : ''}`}>
                       {/* Employee */}
                       <td className="py-3 px-4">
                         <span className="font-semibold text-foreground text-xs block">
@@ -455,6 +472,11 @@ export function LeaveRequestsPage() {
                             Rejected
                           </span>
                         )}
+                        {isWithdrawn && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-muted text-muted-foreground border border-border">
+                            Withdrawn
+                          </span>
+                        )}
                       </td>
 
                       {/* Applied On */}
@@ -478,50 +500,75 @@ export function LeaveRequestsPage() {
                           {/* More Options Menu */}
                           <button
                             type="button"
-                            onClick={() => setOpenActionId(openActionId === item.id ? null : item.id)}
+                            onClick={(e) => {
+                              if (openActionId === item.id) {
+                                setOpenActionId(null);
+                                return;
+                              }
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const menuWidth = 128;
+                              const openUp = window.innerHeight - rect.bottom < 160;
+                              setActionMenuAnchor({
+                                left: Math.max(
+                                  8,
+                                  Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
+                                ),
+                                top: openUp ? rect.top - 8 : rect.bottom + 6,
+                                openUp,
+                              });
+                              setOpenActionId(item.id);
+                            }}
                             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                             title="Actions"
                           >
                             <MoreIcon className="size-4" />
                           </button>
 
-                          {/* Action Popover Menu */}
-                          {openActionId === item.id && (
-                            <div
-                              ref={actionMenuRef}
-                              className="absolute right-0 top-9 w-32 py-1.5 bg-card border border-border rounded-xl shadow-lg z-30 text-xs text-left animate-in fade-in zoom-in-95 duration-150"
-                            >
-                              {isPending ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApprove(item.id, item.employeeName)}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-success hover:bg-success/10 transition-colors cursor-pointer font-medium"
-                                  >
-                                    <CheckIcon className="size-3.5" />
-                                    <span>Approve</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReject(item.id, item.employeeName)}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-destructive hover:bg-destructive/10 transition-colors cursor-pointer font-medium"
-                                  >
-                                    <XIcon className="size-3.5" />
-                                    <span>Reject</span>
-                                  </button>
-                                  <div className="my-1 border-t border-border" />
-                                </>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(item.id, item.employeeName)}
-                                className="w-full flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-destructive hover:bg-muted transition-colors cursor-pointer"
+                          {/* Action Popover Menu — portaled so the table cannot clip it */}
+                          {openActionId === item.id && actionMenuAnchor &&
+                            createPortal(
+                              <div
+                                ref={actionMenuRef}
+                                style={{
+                                  position: 'fixed',
+                                  top: actionMenuAnchor.top,
+                                  left: actionMenuAnchor.left,
+                                  transform: actionMenuAnchor.openUp ? 'translateY(-100%)' : undefined,
+                                }}
+                                className="w-32 py-1.5 bg-card border border-border rounded-xl shadow-lg z-50 text-xs text-left animate-in fade-in zoom-in-95 duration-150"
                               >
-                                <TrashIcon className="size-3.5" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
-                          )}
+                                {isPending ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApprove(item.id, item.employeeName)}
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-success hover:bg-success/10 transition-colors cursor-pointer font-medium"
+                                    >
+                                      <CheckIcon className="size-3.5" />
+                                      <span>Approve</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleReject(item.id, item.employeeName)}
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-destructive hover:bg-destructive/10 transition-colors cursor-pointer font-medium"
+                                    >
+                                      <XIcon className="size-3.5" />
+                                      <span>Reject</span>
+                                    </button>
+                                    <div className="my-1 border-t border-border" />
+                                  </>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(item.id, item.employeeName)}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-destructive hover:bg-muted transition-colors cursor-pointer"
+                                >
+                                  <TrashIcon className="size-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>,
+                              document.body
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -558,7 +605,7 @@ export function LeaveRequestsPage() {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Employee Name <span className="text-destructive">*</span>
               </label>
-              <select
+              <SelectField
                 value={applyForm.employeeName}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -570,7 +617,7 @@ export function LeaveRequestsPage() {
                   if (val === 'Neha Kulkarni') dept = 'Operations';
                   setApplyForm({ ...applyForm, employeeName: val, department: dept });
                 }}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                className="w-full"
               >
                 <option value="Amit Deshmukh">Amit Deshmukh (Interior Design)</option>
                 <option value="nilesh">nilesh (Execution)</option>
@@ -578,7 +625,7 @@ export function LeaveRequestsPage() {
                 <option value="Rohit Kumar">Rohit Kumar (Owner)</option>
                 <option value="Neha Kulkarni">Neha Kulkarni (Operations)</option>
                 <option value="Suresh Gaikwad">Suresh Gaikwad (Site Worker)</option>
-              </select>
+              </SelectField>
             </div>
 
             {/* Leave Type */}
@@ -586,16 +633,25 @@ export function LeaveRequestsPage() {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Leave Type <span className="text-destructive">*</span>
               </label>
-              <select
+              <SelectField
                 value={applyForm.leaveType}
-                onChange={(e) => setApplyForm({ ...applyForm, leaveType: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                onChange={(e) => {
+                  const leaveType = e.target.value;
+                  const isLwp = leaveType === 'Leave Without Pay';
+                  setApplyForm({
+                    ...applyForm,
+                    leaveType,
+                    paidDays: isLwp ? 0 : applyForm.durationDays,
+                    lwpDays: isLwp ? Math.max(1, applyForm.durationDays) : 0,
+                  });
+                }}
+                className="w-full"
               >
                 <option value="Privileged Leave">Privileged Leave</option>
                 <option value="Medical Leave">Medical Leave</option>
                 <option value="Casual Leave">Casual Leave</option>
                 <option value="Leave Without Pay">Leave Without Pay (LWP)</option>
-              </select>
+              </SelectField>
             </div>
 
             {/* Start & End Dates */}
@@ -604,22 +660,26 @@ export function LeaveRequestsPage() {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   From Date <span className="text-destructive">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   required
                   value={applyForm.startDate}
                   onChange={(e) => {
                     const s = e.target.value;
                     const d = calculateDays(s, applyForm.endDate);
+                    const lwp =
+                      applyForm.leaveType === 'Leave Without Pay'
+                        ? Math.max(applyForm.lwpDays || 1, d)
+                        : 0;
                     setApplyForm({
                       ...applyForm,
                       startDate: s,
                       durationDays: d,
-                      paidDays: d,
-                      lwpDays: 0,
+                      paidDays: Math.max(0, d - lwp),
+                      lwpDays: lwp,
                     });
                   }}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 />
               </div>
 
@@ -627,22 +687,26 @@ export function LeaveRequestsPage() {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   To Date <span className="text-destructive">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   required
                   value={applyForm.endDate}
                   onChange={(e) => {
                     const ed = e.target.value;
                     const d = calculateDays(applyForm.startDate, ed);
+                    const lwp =
+                      applyForm.leaveType === 'Leave Without Pay'
+                        ? Math.max(applyForm.lwpDays || 1, d)
+                        : 0;
                     setApplyForm({
                       ...applyForm,
                       endDate: ed,
                       durationDays: d,
-                      paidDays: d,
-                      lwpDays: 0,
+                      paidDays: Math.max(0, d - lwp),
+                      lwpDays: lwp,
                     });
                   }}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 />
               </div>
             </div>
@@ -657,8 +721,8 @@ export function LeaveRequestsPage() {
               </div>
               <div>
                 <label className="text-muted-foreground block text-[10px] uppercase font-bold">Paid Days</label>
-                <input
-                  type="number"
+                <StepperInput
+                 
                   min="0"
                   max={applyForm.durationDays}
                   value={applyForm.paidDays}
@@ -670,15 +734,15 @@ export function LeaveRequestsPage() {
                       lwpDays: Math.max(0, applyForm.durationDays - p),
                     });
                   }}
-                  className="w-full px-2 py-1 text-xs border border-border rounded bg-background font-mono text-foreground focus:outline-none"
+                 
                 />
               </div>
               <div>
                 <label className="text-muted-foreground block text-[10px] uppercase font-bold">LWP Days</label>
-                <input
-                  type="number"
+                <StepperInput
+                 
                   min="0"
-                  max={applyForm.durationDays}
+                  max="365"
                   value={applyForm.lwpDays}
                   onChange={(e) => {
                     const l = Number(e.target.value) || 0;
@@ -688,8 +752,9 @@ export function LeaveRequestsPage() {
                       paidDays: Math.max(0, applyForm.durationDays - l),
                     });
                   }}
-                  className="w-full px-2 py-1 text-xs border border-border rounded bg-background font-mono text-foreground focus:outline-none"
+                 
                 />
+                <span className="text-[10px] text-muted-foreground">LWP can be more than 1 day.</span>
               </div>
             </div>
 
@@ -698,12 +763,12 @@ export function LeaveRequestsPage() {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Reason
               </label>
-              <textarea
+              <Textarea
                 rows={2}
                 placeholder="Reason for leave request..."
                 value={applyForm.reason}
                 onChange={(e) => setApplyForm({ ...applyForm, reason: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs resize-none focus:ring-1 focus:ring-primary focus:outline-none"
+                className="w-full resize-none"
               />
             </div>
 
@@ -810,6 +875,11 @@ export function LeaveRequestsPage() {
                     Pending
                   </span>
                 )}
+                {selectedLeaveDetails.status?.toLowerCase() === 'withdrawn' && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-muted text-muted-foreground border border-border">
+                    Withdrawn
+                  </span>
+                )}
               </div>
             </div>
 
@@ -826,6 +896,15 @@ export function LeaveRequestsPage() {
           </div>
         </Modal>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete leave request?"
+        message={`Are you sure you want to delete the leave request for ${deleteTarget?.name || 'this employee'}? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </div>
   );
 }

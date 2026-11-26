@@ -1,43 +1,12 @@
 import React from 'react';
+import { Spinner as BefSpinner } from './befui-spinner';
+import { cn } from '../../lib/utils';
 
-/**
- * Accessible SVG loading spinner.
- *
- * @param {Object} props
- * @param {'sm'|'md'|'lg'} [props.size='md'] - Spinner size
- * @param {string} [props.className] - Tailwind classes
- */
+// BefUI's three sizes (https://befui.vercel.app/#/components/spinner); the medium one is the default
+const SIZES = { sm: 'size-3', md: 'size-4', lg: 'size-6 border-[3px]' };
+
 export function Spinner({ size = 'md', className = '' }) {
-  const sizeMap = {
-    sm: 'w-4 h-4',
-    md: 'w-5 h-5',
-    lg: 'w-8 h-8',
-  };
-
-  return (
-    <svg
-      className={`animate-spin text-current ${sizeMap[size] || sizeMap.md} ${className}`}
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      role="status"
-      aria-label="Loading"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  );
+  return <BefSpinner className={cn(SIZES[size] || SIZES.md, className)} />;
 }
 
 export default Spinner;

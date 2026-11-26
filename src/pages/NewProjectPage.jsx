@@ -26,6 +26,9 @@ import {
   PlusIcon,
   ChevronDownIcon,
 } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import MoneyInput from '../components/ui/MoneyInput';
+import NumberInput from '../components/ui/NumberInput';
 
 // 12 SRS Interior Fit-Out Stages in strict sequential order (number prefixes removed per request)
 const INITIAL_SRS_PHASES = [
@@ -399,7 +402,7 @@ export default function NewProjectPage() {
           <ArrowLeftIcon className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
           <span>Projects</span>
         </button>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {existingProject ? `Edit Project: ${existingProject.name}` : 'Add Project'}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -471,9 +474,9 @@ export default function NewProjectPage() {
                 helperText="Only 10 digits allowed, numbers only"
               />
 
-              <Input
+              <MoneyInput
                 label="Total Cost Estimate (INR)"
-                type="number"
+               
                 placeholder="e.g. 1500000"
                 value={formData.totalCost}
                 onChange={(e) =>
@@ -509,20 +512,16 @@ export default function NewProjectPage() {
                 Start date
               </label>
               <div className="relative">
-                <input
+                <DateInput
                   id="startDate"
                   name="startDate"
-                  type="date"
+                 
                   value={formData.startDate}
                   onChange={(e) => {
                     setFormData((prev) => ({ ...prev, startDate: e.target.value }));
                     if (errors.startDate) setErrors((prev) => ({ ...prev, startDate: undefined }));
                   }}
-                  className={`w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground shadow-2xs outline-none transition-[border,box-shadow] ${
-                    errors.startDate
-                      ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive'
-                      : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
-                  }`}
+                  className="w-full"
                 />
               </div>
               {errors.startDate && (
@@ -537,20 +536,16 @@ export default function NewProjectPage() {
                 End date
               </label>
               <div className="relative">
-                <input
+                <DateInput
                   id="endDate"
                   name="endDate"
-                  type="date"
+                 
                   value={formData.endDate}
                   onChange={(e) => {
                     setFormData((prev) => ({ ...prev, endDate: e.target.value }));
                     if (errors.endDate) setErrors((prev) => ({ ...prev, endDate: undefined }));
                   }}
-                  className={`w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground shadow-2xs outline-none transition-[border,box-shadow] ${
-                    errors.endDate
-                      ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive'
-                      : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
-                  }`}
+                  className="w-full"
                 />
               </div>
               {errors.endDate && (
@@ -741,35 +736,35 @@ export default function NewProjectPage() {
                           </div>
                         </td>
                         <td className="py-2 px-3">
-                          <input
-                            type="date"
+                          <DateInput
+                           
                             value={phase.startDate}
                             onChange={(e) =>
                               handleUpdatePhase(idx, 'startDate', e.target.value)
                             }
-                            className="w-full bg-background border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
+                            className="w-full"
                           />
                         </td>
                         <td className="py-2 px-3">
-                          <input
-                            type="date"
+                          <DateInput
+                           
                             value={phase.endDate}
                             onChange={(e) =>
                               handleUpdatePhase(idx, 'endDate', e.target.value)
                             }
-                            className="w-full bg-background border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
+                            className="w-full"
                           />
                         </td>
                         <td className="py-2 px-3">
                           <div className="flex items-center justify-end gap-1.5">
-                            <input
-                              type="number"
+                            <NumberInput
+                             
                               min="0"
                               value={phase.plannedHours}
                               onChange={(e) =>
                                 handleUpdatePhase(idx, 'plannedHours', e.target.value)
                               }
-                              className="w-16 bg-background border border-border rounded-md px-2 py-1.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring text-right"
+                              className="w-24"
                               placeholder="0"
                             />
                             <span className="text-[11px] text-muted-foreground font-medium shrink-0">hrs</span>

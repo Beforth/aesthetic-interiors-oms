@@ -13,6 +13,7 @@ import {
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
 import { compressImage, formatFileSize } from '../../utils/dsr';
+import Input from '../ui/Input';
 
 /**
  * BefUI compliant attachment uploader for Daily Site Reports.
@@ -24,7 +25,7 @@ export function DsrAttachmentUploader({
   onChange,
   disabled = false,
   userName = 'You',
-  maxFiles = 15,
+  maxFiles = 10, // the server keeps at most 10 files on one report
 }) {
   const photoInputRef = useRef(null);
   const pdfInputRef = useRef(null);
@@ -333,13 +334,13 @@ export function DsrAttachmentUploader({
 
                     {/* Caption input */}
                     <div className="relative">
-                      <input
+                      <Input
                         type="text"
                         disabled={disabled}
                         value={att.caption || ''}
                         onChange={(e) => updateCaption(att.id, e.target.value)}
                         placeholder={isPdf ? 'Add PDF note (e.g. site inspection report, drawing)...' : 'Add photo caption (e.g. ceiling framing, wiring)...'}
-                        className="w-full text-[11px] px-2 py-1 rounded bg-muted/60 border border-border/80 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:bg-card"
+                        className="w-full"
                       />
                     </div>
                   </div>

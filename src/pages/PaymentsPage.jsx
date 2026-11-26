@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ROLES } from '../config/roles';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { numericOnChange } from '../utils/numberInput';
 import {
   mockProjectPaymentSchedules,
   mockAgencyPayouts,
@@ -20,6 +21,7 @@ import Avatar from '../components/ui/Avatar';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import DataToolbar from '../components/ui/DataToolbar';
 import StatCard from '../components/ui/StatCard';
 import Table from '../components/ui/Table';
@@ -43,12 +45,19 @@ import {
   PrinterIcon,
   ShieldCheckIcon,
 } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import MoneyInput from '../components/ui/MoneyInput';
+import NumberInput from '../components/ui/NumberInput';
+import SelectField from '../components/ui/SelectField';
+import StepperInput from '../components/ui/StepperInput';
+import FileDrop from '../components/ui/FileDrop';
 
 export function PaymentsPage({ mode }) {
   const { currentUser } = useAuth();
   const toast = useToast();
   const toastRef = useRef(toast);
   const location = useLocation();
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     toastRef.current = toast;
@@ -321,15 +330,18 @@ export function PaymentsPage({ mode }) {
 
   const agencyTotalPages = Math.ceil(filteredAgencyPayouts.length / agencyRowsPerPage) || 1;
 
-  const handleDeleteAgencyPayout = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this agency bill record?')) return;
+  const handleDeleteAgencyPayout = (id) => setDeleteTarget({ id });
+
+  const confirmDeleteAgencyPayout = async () => {
+    if (!deleteTarget) return;
     try {
-      await paymentService.deleteAgencyPayout(id);
+      await paymentService.deleteAgencyPayout(deleteTarget.id);
       await refreshAgencyPayouts();
       toast.success('Agency bill record deleted');
     } catch (err) {
       toast.error(err?.message || 'Failed to delete agency bill record');
     }
+    setDeleteTarget(null);
   };
 
   const handleOpenAgencyPayment = () => {
@@ -624,7 +636,7 @@ export function PaymentsPage({ mode }) {
               <ArrowLeftIcon className="size-4" />
             </button>
             <div>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                 Record Client Payment
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -670,36 +682,36 @@ export function PaymentsPage({ mode }) {
                 <label className="block text-xs font-medium text-foreground mb-1.5">
                   Project & Client *
                 </label>
-                <select
+                <SelectField
                   value={paymentForm.projectId}
                   onChange={(e) => {
                     const pid = e.target.value;
                     const prj = schedules.find((s) => s.projectId === pid);
                     handleOpenPaymentModal(prj);
                   }}
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 >
                   {schedules.map((s) => (
                     <option key={s.projectId} value={s.projectId}>
                       {s.projectName} (Client: {s.clientName})
                     </option>
                   ))}
-                </select>
+                </SelectField>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">
                   Contract Budget (₹) *
                 </label>
-                <input
-                  type="number"
+                <MoneyInput
+                 
                   required
                   min="1000"
                   value={paymentForm.totalCost}
                   onChange={(e) =>
                     handleRecalculateBudget(e.target.value, paymentForm.advancePercentage)
                   }
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
+                  className="w-full"
                   placeholder="0"
                 />
               </div>
@@ -710,8 +722,8 @@ export function PaymentsPage({ mode }) {
                     Advance %
                   </label>
                   <div className="relative">
-                    <input
-                      type="number"
+                    <NumberInput
+                     
                       min="0"
                       max="100"
                       required
@@ -720,7 +732,7 @@ export function PaymentsPage({ mode }) {
                         handleRecalculateBudget(paymentForm.totalCost, e.target.value)
                       }
                       placeholder="0"
-                      className="w-full h-10 px-3 pr-7 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
+                      className="w-full"
                     />
                     <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground font-semibold">
                       %
@@ -731,14 +743,14 @@ export function PaymentsPage({ mode }) {
                   <label className="block text-xs font-medium text-foreground mb-1.5">
                     Count
                   </label>
-                  <input
-                    type="number"
+                  <StepperInput
+                   
                     min="1"
                     max="12"
                     required
                     value={paymentForm.installmentsCount}
                     onChange={(e) => handleInstallmentsCountChange(e.target.value)}
-                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                   
                   />
                 </div>
               </div>
@@ -818,9 +830,9 @@ export function PaymentsPage({ mode }) {
                           className="w-full max-w-[170px] -ml-1 px-1 py-0.5 text-xs font-semibold text-foreground bg-transparent border border-transparent hover:border-border focus:border-border rounded transition-colors focus:outline-none"
                         />
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <div className="relative w-16">
-                            <input
-                              type="number"
+                          <div className="relative w-24">
+                            <NumberInput
+                             
                               min="0"
                               max="100"
                               value={inst.percentage}
@@ -837,7 +849,7 @@ export function PaymentsPage({ mode }) {
                                 };
                                 setPaymentForm({ ...paymentForm, installments: updated });
                               }}
-                              className="w-full h-7 px-2 pr-5 border border-border rounded-md bg-background text-foreground font-mono text-[11px] focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
+                              className="w-full"
                               title="Percentage of remaining balance"
                             />
                             <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">
@@ -856,19 +868,19 @@ export function PaymentsPage({ mode }) {
                     <div className="flex flex-wrap items-center gap-2 ml-auto">
                       <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         Due
-                        <input
-                          type="date"
+                        <DateInput
+                         
                           value={inst.dueDate}
                           onChange={(e) => {
                             const updated = [...paymentForm.installments];
                             updated[idx] = { ...updated[idx], dueDate: e.target.value };
                             setPaymentForm({ ...paymentForm, installments: updated });
                           }}
-                          className="h-8 px-2 border border-border rounded-md bg-background text-foreground text-[11px] focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                          className="w-auto min-w-[9.5rem]"
                         />
                       </label>
 
-                      <select
+                      <SelectField
                         value={inst.status}
                         onChange={(e) => {
                           const updated = [...paymentForm.installments];
@@ -894,7 +906,7 @@ export function PaymentsPage({ mode }) {
                         <option value="pending">Pending</option>
                         <option value="paid">Paid</option>
                         <option value="overdue">Overdue</option>
-                      </select>
+                      </SelectField>
 
                       {paymentForm.installments.length > 1 && (
                         <button
@@ -916,15 +928,15 @@ export function PaymentsPage({ mode }) {
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground block mb-1">
                           Paid Date
                         </span>
-                        <input
-                          type="date"
+                        <DateInput
+                         
                           value={inst.paidDate}
                           onChange={(e) => {
                             const updated = [...paymentForm.installments];
                             updated[idx] = { ...updated[idx], paidDate: e.target.value };
                             setPaymentForm({ ...paymentForm, installments: updated });
                           }}
-                          className="w-full h-8 px-2 border border-border rounded-md bg-background text-foreground text-[11px] focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                          className="w-full"
                         />
                       </label>
 
@@ -932,20 +944,20 @@ export function PaymentsPage({ mode }) {
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground block mb-1">
                           Payment Mode
                         </span>
-                        <select
+                        <SelectField
                           value={inst.paymentMode}
                           onChange={(e) => {
                             const updated = [...paymentForm.installments];
                             updated[idx] = { ...updated[idx], paymentMode: e.target.value };
                             setPaymentForm({ ...paymentForm, installments: updated });
                           }}
-                          className="w-full h-8 px-2 border border-border rounded-md bg-background text-foreground text-[11px] focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                          className="w-full"
                         >
                           <option value="Bank Transfer">Bank Transfer</option>
                           <option value="UPI">UPI</option>
                           <option value="Cheque">Cheque</option>
                           <option value="Cash">Cash</option>
-                        </select>
+                        </SelectField>
                       </label>
 
                       <div>
@@ -1527,55 +1539,55 @@ export function PaymentsPage({ mode }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5">
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-foreground">Bank name</label>
-                <input
+                <Input
                   type="text"
                   required
                   value={paymentSettings.bankName}
                   onChange={(e) => setPaymentSettings({ ...paymentSettings, bankName: e.target.value })}
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-foreground">Account name</label>
-                <input
+                <Input
                   type="text"
                   required
                   value={paymentSettings.accountName}
                   onChange={(e) => setPaymentSettings({ ...paymentSettings, accountName: e.target.value })}
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-foreground">Account number</label>
-                <input
+                <Input
                   type="text"
                   required
                   value={paymentSettings.accountNumber}
                   onChange={(e) => setPaymentSettings({ ...paymentSettings, accountNumber: e.target.value })}
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full font-mono"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-foreground">IFSC code</label>
-                <input
+                <Input
                   type="text"
                   required
                   value={paymentSettings.ifscCode}
                   onChange={(e) => setPaymentSettings({ ...paymentSettings, ifscCode: e.target.value })}
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full font-mono"
                 />
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
                 <label className="block text-xs font-medium text-foreground">UPI ID / VPA</label>
-                <input
+                <Input
                   type="text"
                   value={paymentSettings.upiId}
                   onChange={(e) => setPaymentSettings({ ...paymentSettings, upiId: e.target.value })}
-                  className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full font-mono"
                   placeholder="e.g. business@bank"
                 />
               </div>
@@ -1594,41 +1606,41 @@ export function PaymentsPage({ mode }) {
               <div className="grid grid-cols-2 gap-4 p-5">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-foreground">Advance (%)</label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={paymentSettings.defaultAdvancePercent}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultAdvancePercent: parseFloat(e.target.value) || 0 })}
-                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultAdvancePercent: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-full"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-foreground">Installments</label>
-                  <input
-                    type="number"
+                  <StepperInput
+                   
                     value={paymentSettings.defaultInstallmentsCount}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultInstallmentsCount: parseInt(e.target.value, 10) || 1 })}
-                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultInstallmentsCount: numericOnChange(e.target.value, (v) => parseInt(v, 10)) })}
+                   
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-foreground">Grace period (days)</label>
-                  <input
-                    type="number"
+                  <StepperInput
+                   
                     value={paymentSettings.gracePeriodDays}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, gracePeriodDays: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, gracePeriodDays: numericOnChange(e.target.value, (v) => parseInt(v, 10)) })}
+                   
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-foreground">GST (%)</label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={paymentSettings.defaultGstPercent}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultGstPercent: parseFloat(e.target.value) || 0 })}
-                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultGstPercent: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -1645,22 +1657,22 @@ export function PaymentsPage({ mode }) {
               <div className="grid grid-cols-2 gap-4 p-5">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-foreground">TDS on contracts (%)</label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     step="0.1"
                     value={paymentSettings.tdsRateOnContracts}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, tdsRateOnContracts: parseFloat(e.target.value) || 0 })}
-                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, tdsRateOnContracts: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-full"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-foreground">Retention hold (%)</label>
-                  <input
-                    type="number"
+                  <NumberInput
+                   
                     value={paymentSettings.retentionHoldPercent}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, retentionHoldPercent: parseFloat(e.target.value) || 0 })}
-                    className="w-full h-10 px-3 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, retentionHoldPercent: numericOnChange(e.target.value, parseFloat) })}
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -1694,7 +1706,7 @@ export function PaymentsPage({ mode }) {
               <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Subcontractor Agency <span className="text-destructive">*</span>
               </label>
-              <select
+              <SelectField
                 value={agencyForm.agencyId}
                 onChange={(e) => {
                   const ag = mockAgencies.find((a) => a.id === e.target.value);
@@ -1705,14 +1717,14 @@ export function PaymentsPage({ mode }) {
                     trade: ag?.trade || agencyForm.trade,
                   });
                 }}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                className="w-full"
               >
                 {mockAgencies.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} ({a.trade})
                   </option>
                 ))}
-              </select>
+              </SelectField>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1720,38 +1732,38 @@ export function PaymentsPage({ mode }) {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Project Site <span className="text-destructive">*</span>
                 </label>
-                <select
+                <SelectField
                   value={agencyForm.projectId}
                   onChange={(e) => setAgencyForm({ ...agencyForm, projectId: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 >
                   {schedules.map((s) => (
                     <option key={s.projectId} value={s.projectId}>
                       {s.projectName}
                     </option>
                   ))}
-                </select>
+                </SelectField>
               </div>
 
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Invoice Number <span className="text-destructive">*</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   required
                   placeholder="e.g. INV-APX-2026-089"
                   value={agencyForm.invoiceNumber}
                   onChange={(e) => setAgencyForm({ ...agencyForm, invoiceNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground font-mono text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full font-mono"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
+              <MoneyInput
                 label="Bill Amount (₹)"
-                type="number"
+               
                 required
                 min="1"
                 placeholder="e.g. 1,20,000"
@@ -1759,9 +1771,9 @@ export function PaymentsPage({ mode }) {
                 onChange={(e) => setAgencyForm({ ...agencyForm, billAmount: e.target.value })}
               />
 
-              <Input
+              <MoneyInput
                 label="Amount Paying Now (₹)"
-                type="number"
+               
                 min="0"
                 placeholder="e.g. 80,000"
                 value={agencyForm.paidAmount}
@@ -1774,11 +1786,11 @@ export function PaymentsPage({ mode }) {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Bill Due Date
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   value={agencyForm.dueDate}
                   onChange={(e) => setAgencyForm({ ...agencyForm, dueDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 />
               </div>
 
@@ -1786,11 +1798,11 @@ export function PaymentsPage({ mode }) {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Payment Date
                 </label>
-                <input
-                  type="date"
+                <DateInput
+                 
                   value={agencyForm.paymentDate}
                   onChange={(e) => setAgencyForm({ ...agencyForm, paymentDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 />
               </div>
             </div>
@@ -1800,28 +1812,28 @@ export function PaymentsPage({ mode }) {
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Payment Mode
                 </label>
-                <select
+                <SelectField
                   value={agencyForm.paymentMode}
                   onChange={(e) => setAgencyForm({ ...agencyForm, paymentMode: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                  className="w-full"
                 >
                   <option value="Bank Transfer">Bank Transfer</option>
                   <option value="UPI">UPI</option>
                   <option value="Cheque">Cheque</option>
                   <option value="Cash">Cash</option>
-                </select>
+                </SelectField>
               </div>
 
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Work Stage / Description
                 </label>
-                <input
+                <Input
                   type="text"
                   placeholder="e.g. Framing & Boarding Stage Bill"
                   value={agencyForm.workStage}
                   onChange={(e) => setAgencyForm({ ...agencyForm, workStage: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  className="w-full"
                 />
               </div>
             </div>
@@ -1844,25 +1856,15 @@ export function PaymentsPage({ mode }) {
                   </button>
                 </div>
               ) : (
-                <label className="flex items-center justify-center p-3 border border-dashed border-border rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer text-xs text-muted-foreground gap-1.5">
-                  <CameraIcon className="size-3.5 text-primary" />
-                  <span>Attach invoice copy or payment slip</span>
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          setAgencyForm({ ...agencyForm, proof: ev.target.result });
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  />
-                </label>
+                <FileDrop
+                  accept="image/*,application/pdf"
+                  hint="Drop the invoice or payment slip here, or click to choose"
+                  onFile={([file]) => {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setAgencyForm((prev) => ({ ...prev, proof: ev.target.result }));
+                    reader.readAsDataURL(file);
+                  }}
+                />
               )}
             </div>
 
@@ -2057,6 +2059,15 @@ export function PaymentsPage({ mode }) {
           </Modal>
         );
       })()}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteAgencyPayout}
+        title="Delete agency bill?"
+        message="Are you sure you want to delete this agency bill record? This action cannot be undone."
+        confirmText="Delete"
+      />
     </div>
   );
 }

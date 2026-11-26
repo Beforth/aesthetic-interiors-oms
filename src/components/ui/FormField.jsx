@@ -1,7 +1,8 @@
 import React from 'react';
+import { Label } from './befui-label';
 
 /**
- * Accessible FormField wrapper that pairs labels, inputs, helpers, and error states.
+ * A label, its control and a hint or error, drawn like BefUI's Field (https://befui.vercel.app/#/components/label).
  *
  * @param {Object} props
  * @param {string} [props.label]
@@ -12,40 +13,23 @@ import React from 'react';
  * @param {React.ReactNode} props.children
  * @param {string} [props.className]
  */
-export function FormField({
-  label,
-  htmlFor,
-  required = false,
-  asteriskOnly = false,
-  error,
-  helperText,
-  children,
-  className = '',
-}) {
+export function FormField({ label, htmlFor, required = false, error, helperText, children, className = '' }) {
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
+    <div className={`grid content-start gap-1.5 ${className}`}>
       {label && (
-        <label
-          htmlFor={htmlFor}
-          className="text-xs font-semibold text-foreground flex items-center gap-1 select-none"
-        >
-          <span>{label}</span>
-          {required && (
-            <span className="text-destructive font-bold ml-0.5" title="Required">
-              *
-            </span>
-          )}
-        </label>
+        <Label htmlFor={htmlFor} required={required}>
+          {label}
+        </Label>
       )}
 
       {children}
 
       {error ? (
-        <p className="text-xs text-destructive font-medium flex items-center gap-1 mt-0.5" role="alert">
+        <p className="text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : helperText ? (
-        <p className="text-xs text-text-muted">{helperText}</p>
+        <p className="text-xs text-muted-foreground">{helperText}</p>
       ) : null}
     </div>
   );

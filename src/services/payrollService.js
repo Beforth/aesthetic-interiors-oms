@@ -540,6 +540,38 @@ const mockPayrollService = {
     return mockPayrollService.setCycleStatus(id, 'pay');
   },
 
+  async runAction(id, action) {
+    return mockPayrollService.setCycleStatus(id, action === 'regenerate' ? 'calculate' : action);
+  },
+
+  async syncEmployees(id) {
+    return { added: [], removed: [], cycle: await mockPayrollService.getCycle(id) };
+  },
+
+  async getCycle(id) {
+    return getStoredCycles().find((cycle) => sameId(cycle.id, id)) || null;
+  },
+
+  async getLines() {
+    return [];
+  },
+
+  async editLine() {
+    throw new Error('Employee changes need the backend.');
+  },
+
+  async removeLine() {
+    throw new Error('Employee changes need the backend.');
+  },
+
+  async getSalaries() {
+    return [];
+  },
+
+  async setSalary() {
+    throw new Error('Salaries need the backend.');
+  },
+
   async getStructures() {
     return getStoredStructures();
   },
@@ -610,121 +642,74 @@ function toApiSettings(data) {
   return body;
 }
 
-function toApiStatus(action, values) {
-  const body = { action };
-  const amounts = pick(values || {}, ['gross', 'deductions', 'netPay']);
-  Object.keys(amounts).forEach((key) => {
-    amounts[key] = asNumber(amounts[key]);
-  });
-  return { ...body, ...amounts };
-}
-
-function requireObjectRow(row, message) {
-  if (!row || typeof row !== 'object') throw new Error(message);
-  return row;
-}
+/**
+ * Live (backend) payroll. Errors are passed to the screen: nothing is quietly kept in the browser instead, and an
+ * empty list stays empty. The server does all the salary calculation and enforces what each status allows.
+ */
+const lineUrl = (cycleId, lineId) => `${CYCLES_URL}${cycleId}/lines/${lineId}/`;
 
 const livePayrollService = {
   async getCycles() {
-    try {
-      const rows = await apiClient.get(CYCLES_URL);
-      return Array.isArray(rows) && rows.length > 0
-        ? rows.map(normalizeCycle)
-        : mockPayrollService.getCycles();
-    } catch {
-      return mockPayrollService.getCycles();
-    }
+    return (await apiClient.get(CYCLES_URL)).map(normalizeCycle);
   },
 
   async createCycle(data) {
-    try {
-      const row = await apiClient.post(CYCLES_URL, toApiCycle(data));
-      return normalizeCycle(requireObjectRow(row, 'Payroll API returned an invalid cycle'));
-    } catch {
-      return mockPayrollService.createCycle(data);
-    }
+    return normalizeCycle(await apiClient.post(CYCLES_URL, { period: data.period }));
   },
 
   async deleteCycle(id) {
-    try {
-      await apiClient.delete(`${CYCLES_URL}${id}/`);
-      return true;
-    } catch {
-      return mockPayrollService.deleteCycle(id);
-    }
+    await apiClient.delete(`${CYCLES_URL}${id}/`);
+    return true;
   },
 
-  async setCycleStatus(id, action, values = {}) {
-    try {
-      const row = await apiClient.post(
-        `${CYCLES_URL}${id}/status/`,
-        toApiStatus(action, values)
-      );
-      return normalizeCycle(requireObjectRow(row, 'Payroll API returned an invalid cycle'));
-    } catch {
-      return mockPayrollService.setCycleStatus(id, action, values);
-    }
+  /** `action`: calculate, regenerate, approve or pay. */
+  async runAction(id, action) {
+    return normalizeCycle(await apiClient.post(`${CYCLES_URL}${id}/status/`, { action }));
   },
 
-  async calculateCycle(id, values) {
-    return livePayrollService.setCycleStatus(id, 'calculate', values);
+  async syncEmployees(id) {
+    const result = await apiClient.post(`${CYCLES_URL}${id}/sync/`, {});
+    return { ...result, cycle: normalizeCycle(result.cycle) };
   },
 
-  async approveCycle(id) {
-    return livePayrollService.setCycleStatus(id, 'approve');
+  async getCycle(id) {
+    return normalizeCycle(await apiClient.get(`${CYCLES_URL}${id}/`));
   },
 
-  async payCycle(id) {
-    return livePayrollService.setCycleStatus(id, 'pay');
+  getLines: (cycleId) => apiClient.get(`${CYCLES_URL}${cycleId}/lines/`),
+  editLine: (cycleId, lineId, changes) => apiClient.patch(lineUrl(cycleId, lineId), changes),
+
+  async removeLine(cycleId, lineId) {
+    await apiClient.delete(lineUrl(cycleId, lineId));
+    return true;
   },
+
+  getSalaries: () => apiClient.get('/payroll/salaries/'),
+  setSalary: (userId, monthlySalary, structureId) =>
+    apiClient.put(`/payroll/salaries/${userId}/`, {
+      monthlySalary,
+      structureId: structureId ? Number(structureId) : null,
+    }),
 
   async getStructures() {
-    try {
-      const rows = await apiClient.get(STRUCTURES_URL);
-      return Array.isArray(rows) && rows.length > 0
-        ? rows.map(normalizeStructure)
-        : mockPayrollService.getStructures();
-    } catch {
-      return mockPayrollService.getStructures();
-    }
+    return (await apiClient.get(STRUCTURES_URL)).map(normalizeStructure);
   },
 
   async createStructure(data) {
-    try {
-      const row = await apiClient.post(STRUCTURES_URL, toApiStructure(data));
-      return normalizeStructure(requireObjectRow(row, 'Payroll API returned an invalid structure'));
-    } catch {
-      return mockPayrollService.createStructure(data);
-    }
+    return normalizeStructure(await apiClient.post(STRUCTURES_URL, toApiStructure(data)));
   },
 
   async deleteStructure(id) {
-    try {
-      await apiClient.delete(`${STRUCTURES_URL}${id}/`);
-      return true;
-    } catch {
-      return mockPayrollService.deleteStructure(id);
-    }
+    await apiClient.delete(`${STRUCTURES_URL}${id}/`);
+    return true;
   },
 
   async getSettings() {
-    try {
-      const row = await apiClient.get(SETTINGS_URL);
-      return row && typeof row === 'object' && Object.keys(row).length > 0
-        ? normalizeSettings(row)
-        : mockPayrollService.getSettings();
-    } catch {
-      return mockPayrollService.getSettings();
-    }
+    return normalizeSettings(await apiClient.get(SETTINGS_URL));
   },
 
   async saveSettings(data) {
-    try {
-      const row = await apiClient.patch(SETTINGS_URL, toApiSettings(data));
-      return normalizeSettings(requireObjectRow(row, 'Payroll API returned invalid settings'));
-    } catch {
-      return mockPayrollService.saveSettings(data);
-    }
+    return normalizeSettings(await apiClient.patch(SETTINGS_URL, toApiSettings(data)));
   },
 };
 

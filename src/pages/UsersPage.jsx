@@ -24,6 +24,11 @@ export function formatDobToPassword(dob) {
 import PageHeader from '../components/ui/PageHeader';
 import Card from '../components/ui/Card';
 import Tabs from '../components/ui/Tabs';
+import ShiftsSettings from '../components/domain/ShiftsSettings';
+import { ResetPasswordModal } from '../components/domain/PasswordModals';
+import { shiftService } from '../services/shiftService';
+import payrollService from '../services/payrollService';
+import { formatTo12HourTime } from '../components/ui/TimePicker';
 import Table from '../components/ui/Table';
 import Pagination from '../components/ui/Pagination';
 import SearchInput from '../components/ui/SearchInput';
@@ -37,6 +42,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Input from '../components/ui/Input';
 import Icon from '../components/ui/Icon';
 import Checkbox from '../components/ui/Checkbox';
+import MoneyInput from '../components/ui/MoneyInput';
 
 // The role editor's checkboxes come straight from the permission catalog in config/permissions.js, grouped by
 // module. That catalog mirrors the backend's list (accounts/defaults.py), so a role can be given exactly the
@@ -68,6 +74,8 @@ export function UsersPage() {
   // What each part of Settings needs (mirrors the list at the top of backend accounts/defaults.py):
   const canManageUsers = isOwner || hasPermission('users.manage'); // Users tab: add, edit, activate, delete
   const canChangeRoles = isOwner || hasPermission('roles.change'); // create custom roles
+  const canManageShifts = isOwner || hasPermission('geofence.manage'); // Shifts tab: named shifts and their timing
+  const canManageSalary = hasPermission('leave.approve'); // whoever runs payroll sets monthly salaries
   const isAdmin = isOwner || canManageUsers;
 
   // Open the first tab this person is allowed to use
@@ -97,8 +105,14 @@ export function UsersPage() {
     role: ROLES.WORKER,
     password: '',
     status: 'active',
+    shiftId: '',
   });
   const [formErrors, setFormErrors] = useState({});
+  // Shifts a person can be put on (Settings > Shifts). Empty when none are set up or this admin cannot read them.
+  const [shifts, setShifts] = useState([]);
+
+  // The edited person's monthly salary, which payroll uses. Null until read, and for anyone without one (clients).
+  const [salary, setSalary] = useState(null);
 
   // View User Modal State
   const [viewingUser, setViewingUser] = useState(null);
@@ -123,6 +137,7 @@ export function UsersPage() {
   const [roleFormErrors, setRoleFormErrors] = useState({});
   const [editingRole, setEditingRole] = useState(null); // the role being edited, or null when creating
   const [deleteRoleTarget, setDeleteRoleTarget] = useState(null);
+  const [resetTarget, setResetTarget] = useState(null);
   const [deleteRoleLoading, setDeleteRoleLoading] = useState(false);
 
   // Pagination State
@@ -217,6 +232,7 @@ export function UsersPage() {
 
   const handleOpenAdd = () => {
     setEditingUser(null);
+    setSalary(null);
     setFormData({
       name: '',
       email: '',
@@ -227,8 +243,10 @@ export function UsersPage() {
       role: ROLES.WORKER,
       password: '',
       status: 'active',
+      shiftId: '',
     });
     setFormErrors({});
+    loadShifts();
     setIsModalOpen(true);
   };
 
@@ -244,10 +262,41 @@ export function UsersPage() {
       role: user.role === 'admin' ? ROLES.ADMIN : user.role,
       password: '',
       status: user.status || 'active',
+      shiftId: user.shiftId ? String(user.shiftId) : '',
     });
     setFormErrors({});
+    loadShifts();
+    loadSalary(user);
     setIsModalOpen(true);
   };
+
+  const loadSalary = async (user) => {
+    setSalary(null);
+    if (!canManageSalary || user.role === ROLES.CLIENT) return;
+    try {
+      const row = ((await payrollService.getSalaries()) || []).find((r) => String(r.userId) === String(user.id));
+      if (!row) return;
+      const saved = Number(row.monthlySalary) || 0;
+      setSalary({ userId: String(user.id), value: saved ? String(saved) : '', saved, structureId: row.structureId });
+    } catch (err) {
+      toast.error(err.message || 'Could not read the monthly salary');
+    }
+  };
+
+  // a slow reply for someone opened earlier must not show on the person open now
+  const salaryShown = Boolean(salary && editingUser && salary.userId === String(editingUser.id) && formData.role !== ROLES.CLIENT);
+
+  // Read fresh each time the form opens, so a shift added in the Shifts tab is offered straight away.
+  const loadShifts = async () => {
+    try {
+      setShifts((await shiftService.listShifts()) || []);
+    } catch {
+      setShifts([]);
+    }
+  };
+
+  // Staff work a shift; a client does not. Required whenever there are shifts to choose from.
+  const needsShift = formData.role !== ROLES.CLIENT && shifts.length > 0;
 
   const validateUserForm = () => {
     const errors = {};
@@ -270,8 +319,18 @@ export function UsersPage() {
       if (pwdErr) errors.password = pwdErr;
     }
 
+    if (needsShift && !formData.shiftId) errors.shiftId = 'Choose the shift this person works';
+
+    if (salaryShown && !(Number(salary.value || 0) >= 0)) errors.salary = 'Enter an amount of 0 or more';
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  // A client has no shift; for everyone else send the chosen one (and its name, which the local demo store shows).
+  const shiftFields = () => {
+    const chosen = formData.role === ROLES.CLIENT ? null : shifts.find((s) => String(s.id) === String(formData.shiftId));
+    return { shiftId: chosen ? chosen.id : null, shiftName: chosen ? chosen.name : null };
   };
 
   const handleUserSubmit = async (e) => {
@@ -280,12 +339,23 @@ export function UsersPage() {
 
     try {
       if (editingUser) {
-        const payload = { ...formData };
+        const payload = { ...formData, ...shiftFields() };
         if (!payload.password) delete payload.password;
         await userService.updateUser(editingUser.id, payload);
+        if (salaryShown && Number(salary.value || 0) !== salary.saved) {
+          try {
+            await payrollService.setSalary(editingUser.id, Number(salary.value || 0), salary.structureId);
+          } catch (err) {
+            // the profile is saved; stay on the form so the salary can be tried again
+            setFormErrors({ salary: err.errors?.monthlySalary?.[0] || err.message || 'Could not save the salary' });
+            toast.error('User details saved, but the monthly salary was not');
+            fetchUsers();
+            return;
+          }
+        }
         toast.success(`User ${formData.name} updated successfully`);
       } else {
-        await userService.createUser(formData);
+        await userService.createUser({ ...formData, ...shiftFields() });
         toast.success(`User ${formData.name} created successfully`);
       }
       setIsModalOpen(false);
@@ -469,6 +539,16 @@ export function UsersPage() {
       ),
     },
     {
+      key: 'shift',
+      header: 'Shift',
+      render: (u) =>
+        u.shiftName ? (
+          <span className="text-sm text-foreground">{u.shiftName}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">{u.role === ROLES.CLIENT ? '—' : 'Not assigned'}</span>
+        ),
+    },
+    {
       key: 'status',
       header: 'Status',
       render: (u) => <StatusBadge status={u.status} size="sm" />,
@@ -560,7 +640,7 @@ export function UsersPage() {
         title="Users & Roles"
         subtitle="Team members, roles, and system access"
         actions={
-          (canChangeRoles || canManageUsers) && (
+          activeTab !== 'shifts' && (canChangeRoles || canManageUsers) && (
             <div className="flex items-center gap-2">
               {canChangeRoles && (
                 <Button
@@ -596,6 +676,7 @@ export function UsersPage() {
           ...(canManageUsers || canChangeRoles
             ? [{ id: 'roles', label: 'Roles', icon: 'shield', count: roles.length }]
             : []),
+          ...(canManageShifts ? [{ id: 'shifts', label: 'Shifts', icon: 'clock' }] : []),
         ]}
         activeTab={activeTab}
         onChange={setActiveTab}
@@ -724,6 +805,8 @@ export function UsersPage() {
             </div>
           )}
         </Card>
+      ) : activeTab === 'shifts' && canManageShifts ? (
+        <ShiftsSettings canEdit={canManageShifts} />
       ) : null}
 
       {/* View User Modal */}
@@ -801,7 +884,8 @@ export function UsersPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingUser ? `Edit User: ${editingUser.name}` : 'Add New User'}
-        subtitle="Configure personnel profile, credentials, and access role"
+        subtitle="Profile, role and sign-in details"
+        size="lg"
         footer={
           <>
             <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
@@ -813,60 +897,54 @@ export function UsersPage() {
           </>
         }
       >
-        <form onSubmit={handleUserSubmit} className="space-y-4">
+        <form onSubmit={handleUserSubmit} className="grid grid-cols-1 items-start gap-x-4 gap-y-4 sm:grid-cols-2">
           <Input
             label="Full Name"
             required
             leadingIcon="user"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e.g. Rahul Sharma"
             error={formErrors.name}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Email Address"
-              required
-              leadingIcon="mail"
-              type="email"
-              value={formData.email}
-              onChange={(e) => {
-                const val = e.target.value;
-                setFormData({ ...formData, email: val });
-                if (formErrors.email) {
-                  setFormErrors((prev) => ({
-                    ...prev,
-                    email: validateEmail(val, { required: true, fieldLabel: 'Email address' }),
-                  }));
-                }
-              }}
-              placeholder="rahul@aesthetic.demo"
-              error={formErrors.email}
-              helperText="Must contain @ and domain"
-            />
+          <Input
+            label="Email Address"
+            required
+            leadingIcon="mail"
+            type="email"
+            value={formData.email}
+            onChange={(e) => {
+              const val = e.target.value;
+              setFormData({ ...formData, email: val });
+              if (formErrors.email) {
+                setFormErrors((prev) => ({
+                  ...prev,
+                  email: validateEmail(val, { required: true, fieldLabel: 'Email address' }),
+                }));
+              }
+            }}
+            error={formErrors.email}
+          />
 
-            <Input
-              label="Phone Number"
-              required
-              leadingIcon="phone"
-              type="tel"
-              maxLength={10}
-              value={formData.phone}
-              onChange={(e) => {
-                const clean = sanitizePhone(e.target.value);
-                setFormData({ ...formData, phone: clean });
-                if (formErrors.phone) {
-                  setFormErrors((prev) => ({
-                    ...prev,
-                    phone: validatePhone(clean, { required: true, fieldLabel: 'Phone number' }),
-                  }));
-                }
-              }}
-              placeholder="9845012345"
-              error={formErrors.phone}
-            />
-          </div>
+          <Input
+            label="Phone Number"
+            required
+            leadingIcon="phone"
+            type="tel"
+            maxLength={10}
+            value={formData.phone}
+            onChange={(e) => {
+              const clean = sanitizePhone(e.target.value);
+              setFormData({ ...formData, phone: clean });
+              if (formErrors.phone) {
+                setFormErrors((prev) => ({
+                  ...prev,
+                  phone: validatePhone(clean, { required: true, fieldLabel: 'Phone number' }),
+                }));
+              }
+            }}
+            error={formErrors.phone}
+          />
 
           <Input
             label="Birthdate"
@@ -878,7 +956,7 @@ export function UsersPage() {
               setFormData({ ...formData, birthday: e.target.value });
               if (formErrors.birthday) setFormErrors((prev) => ({ ...prev, birthday: undefined }));
             }}
-            placeholder="YYYY-MM-DD"
+            placeholder=" "
             error={formErrors.birthday}
           />
 
@@ -889,38 +967,95 @@ export function UsersPage() {
             onChange={(e) => setFormData((prev) => ({ ...prev, role: e.target.value }))}
             options={roleSelectOptions}
             error={formErrors.role}
-            helperText="Controls system permissions and navigation visibility"
           />
 
-          <Input
-            label={editingUser ? 'Reset Password (optional)' : 'Password'}
-            required={!editingUser}
-            leadingIcon="lock"
-            type="text"
-            value={formData.password}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            placeholder={editingUser ? 'Leave blank to keep existing password' : 'Enter password (min 8 characters)'}
-            helperText="At least 8 characters; not too common and not only numbers"
-            error={formErrors.password}
-          />
+          {formData.role !== ROLES.CLIENT && shifts.length > 0 && (
+            <Select
+              label="Shift"
+              required
+              leadingIcon="clock"
+              value={formData.shiftId}
+              onChange={(e) => setFormData((prev) => ({ ...prev, shiftId: e.target.value }))}
+              options={[
+                { value: '', label: 'Select a shift' },
+                ...shifts
+                  // a retired shift is listed only for the person who is still on it
+                  .filter((s) => s.isActive || String(s.id) === String(formData.shiftId))
+                  .map((s) => ({
+                    value: String(s.id),
+                    label: `${s.name} (${formatTo12HourTime(s.startTime)} – ${formatTo12HourTime(s.endTime)})${s.isActive ? '' : ' - inactive'}`,
+                  })),
+              ]}
+              error={formErrors.shiftId}
+            />
+          )}
 
           <Input
             label="Job Title"
             leadingIcon="briefcase"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            placeholder="e.g. Senior Site Supervisor"
           />
 
+          {salaryShown && (
+            <MoneyInput
+              label="Monthly Salary (₹)"
+             
+             
+              min="0"
+             
+             
+              value={salary.value}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSalary((prev) => ({ ...prev, value }));
+                if (formErrors.salary) setFormErrors((prev) => ({ ...prev, salary: undefined }));
+              }}
+              helperText="Used by payroll. 0 leaves them out of pay runs."
+              error={formErrors.salary}
+            />
+          )}
+
+          <div className={salaryShown ? 'sm:col-span-2' : undefined}>
           <Input
             label="Internal Notes"
             leadingIcon="file-text"
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            placeholder="Skills, assigned properties, certifications..."
           />
+          </div>
+
+          <div className="sm:col-span-2">
+          {editingUser ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Password</p>
+                <p className="text-xs text-muted-foreground">Forgot it? Set a new one for {editingUser.name}.</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" leadingIcon="lock" onClick={() => setResetTarget(editingUser)}>
+                Reset password
+              </Button>
+            </div>
+          ) : (
+            <Input
+              label="Password"
+              required
+              leadingIcon="lock"
+              type="password"
+              autoComplete="new-password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              placeholder="Enter password (min 8 characters)"
+              helperText="At least 8 characters; not too common and not only numbers"
+              error={formErrors.password}
+            />
+          )}
+          </div>
         </form>
       </Modal>
+
+      {/* Reset a staff member's password (the admin confirms with their own password) */}
+      <ResetPasswordModal isOpen={Boolean(resetTarget)} onClose={() => setResetTarget(null)} user={resetTarget} />
 
       {/* Deactivate/Reactivate Confirmation Dialog */}
       {/* Delete Role Confirmation Dialog */}

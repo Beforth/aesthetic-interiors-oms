@@ -1,3 +1,7 @@
+// A theme colour that also accepts Tailwind's opacity suffix (bg-primary/10), which BefUI relies on.
+const tone = (name, fallback) =>
+  `color-mix(in srgb, var(--${name}${fallback ? `, ${fallback}` : ''}) calc(<alpha-value> * 100%), transparent)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
@@ -8,73 +12,74 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: 'var(--background, #ffffff)',
-        foreground: 'var(--foreground, #0f172a)',
+        background: tone('background', '#ffffff'),
+        panel: tone('panel', '#f3f5fb'),
+        foreground: tone('foreground', '#0f172a'),
         primary: {
-          DEFAULT: 'var(--primary)',
-          foreground: 'var(--primary-foreground)',
+          DEFAULT: tone('primary'),
+          foreground: tone('primary-foreground'),
         },
         secondary: {
-          DEFAULT: 'var(--secondary, #f1f5f9)',
-          foreground: 'var(--secondary-foreground, #0f172a)',
+          DEFAULT: tone('secondary', '#f1f5f9'),
+          foreground: tone('secondary-foreground', '#0f172a'),
         },
         accent: {
-          DEFAULT: 'var(--accent)',
-          foreground: 'var(--accent-foreground)',
+          DEFAULT: tone('accent'),
+          foreground: tone('accent-foreground'),
         },
         card: {
-          DEFAULT: 'var(--card, #ffffff)',
-          foreground: 'var(--card-foreground, #0f172a)',
+          DEFAULT: tone('card', '#ffffff'),
+          foreground: tone('card-foreground', '#0f172a'),
         },
         popover: {
-          DEFAULT: 'var(--popover, #ffffff)',
-          foreground: 'var(--popover-foreground, #0f172a)',
+          DEFAULT: tone('popover', '#ffffff'),
+          foreground: tone('popover-foreground', '#0f172a'),
         },
         muted: {
-          DEFAULT: 'var(--muted, #f8fafc)',
-          foreground: 'var(--muted-foreground, #64748b)',
+          DEFAULT: tone('muted', '#f8fafc'),
+          foreground: tone('muted-foreground', '#64748b'),
         },
         destructive: {
-          DEFAULT: 'var(--destructive, #e11d48)',
+          DEFAULT: tone('destructive', '#e11d48'),
           foreground: '#ffffff',
         },
-        border: 'var(--border, #e2e8f0)',
-        input: 'var(--input, #e2e8f0)',
-        ring: 'var(--ring)',
+        border: tone('border', '#e2e8f0'),
+        input: tone('input', '#e2e8f0'),
+        ring: tone('ring'),
         brand: {
-          50: '#EEF2FF',
-          100: '#E0E7FF',
-          200: '#C7D2FE',
-          300: '#A5B4FC',
-          400: '#818CF8',
-          500: '#6366F1',
-          600: '#4F46E5', // Main Primary #4f46e5
-          700: '#4338CA', // Accent Foreground #4338ca
-          800: '#3730A3',
-          900: '#312E81',
-          espresso: '#1E1B4B',
-          umber: '#312E81',
-          bark: '#3730A3',
-          clay: '#6366F1',
+          50: '#EFF6FF',
+          100: '#DBEAFE',
+          200: '#BFDBFE',
+          300: '#93C5FD',
+          400: '#60A5FA',
+          500: '#3B82F6',
+          600: '#2563EB', // Main Primary #2563eb
+          700: '#1D4ED8', // Accent Foreground #1d4ed8
+          800: '#1E40AF',
+          900: '#1E3A8A',
+          espresso: '#172554',
+          umber: '#1E3A8A',
+          bark: '#1E40AF',
+          clay: '#3B82F6',
           canvas: '#F8FAFC',
         },
-        surface: 'var(--card, #FFFFFF)',
-        'text-main': 'var(--foreground, #0F172A)',
-        'text-muted': 'var(--muted-foreground, #64748B)',
+        surface: tone('card', '#FFFFFF'),
+        'text-main': tone('foreground', '#0F172A'),
+        'text-muted': tone('muted-foreground', '#64748B'),
         success: {
-          DEFAULT: 'var(--success, #059669)',
+          DEFAULT: tone('success', '#059669'),
           light: '#ECFDF5',
         },
         warning: {
-          DEFAULT: 'var(--warning, #d97706)',
+          DEFAULT: tone('warning', '#d97706'),
           light: '#FFFBEB',
         },
         danger: {
-          DEFAULT: 'var(--destructive, #e11d48)',
+          DEFAULT: tone('destructive', '#e11d48'),
           light: '#FEF2F2',
         },
         info: {
-          DEFAULT: 'var(--info, #2563eb)',
+          DEFAULT: tone('info', '#2563eb'),
           light: '#F0F9FF',
         },
       },
@@ -88,7 +93,29 @@ export default {
         full: '9999px',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: ['Onest', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // figures use the same font as everything else (with equal-width digits, see index.css)
+        mono: ['Onest', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      transitionTimingFunction: {
+        spring: 'var(--ease-spring)',
+      },
+      keyframes: {
+        'bef-pop': { from: { opacity: '0', transform: 'scale(0.97) translateY(2px)' }, to: { opacity: '1', transform: 'none' } },
+        'bef-pop-out': { to: { opacity: '0', transform: 'scale(0.97)' } },
+        'bef-fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'bef-fade-out': { to: { opacity: '0' } },
+        'bef-shimmer': { from: { backgroundPosition: '200% 0' }, to: { backgroundPosition: '-200% 0' } },
+        'bef-toast': { from: { opacity: '0', transform: 'translateY(8px) scale(0.98)' }, to: { opacity: '1', transform: 'none' } },
+        'icon-draw': { from: { strokeDashoffset: '1px' }, to: { strokeDashoffset: '0' } },
+      },
+      animation: {
+        pop: 'bef-pop var(--dur-fast) var(--ease-out)',
+        'pop-out': 'bef-pop-out var(--dur-fast) var(--ease-out) forwards',
+        'fade-out': 'bef-fade-out var(--dur-fast) var(--ease-out) forwards',
+        'delayed-in': 'bef-fade-in var(--dur-fast) 150ms both',
+        shimmer: 'bef-shimmer 1.6s linear infinite',
+        toast: 'bef-toast var(--dur-base) var(--ease-out)',
       },
       minHeight: {
         touch: '44px',

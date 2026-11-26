@@ -17,6 +17,7 @@ import Card from '../components/ui/Card';
 import StatCard from '../components/ui/StatCard';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import StarRating from '../components/ui/StarRating';
 import Textarea from '../components/ui/Textarea';
 import PermissionGate from '../components/ui/PermissionGate';
 import { Badge } from '../components/ui/Badge';
@@ -26,7 +27,6 @@ import {
   UsersIcon,
   BriefcaseIcon,
   PlusIcon,
-  StarIcon,
   XIcon,
   ArrowLeftIcon,
 } from '../components/ui/icons';
@@ -37,6 +37,8 @@ import {
   validateRequired,
   validatePincode,
 } from '../utils/validators';
+import MoneyInput from '../components/ui/MoneyInput';
+import StepperInput from '../components/ui/StepperInput';
 
 const TRADE_OPTIONS = [
   { value: 'Ceiling', label: 'Ceiling (Gypsum / False Ceiling)' },
@@ -77,14 +79,10 @@ function AgencyRatingBadge({ value, compact = false }) {
   if (!Number.isFinite(rating) || rating <= 0) {
     return <span className="text-[11px] italic text-muted-foreground">Not rated</span>;
   }
-  return (
-    <Badge variant="warning" size="sm" title={`Agency rating: ${rating.toFixed(1)} / 5`}>
-      <StarIcon className="size-3" />
-      {rating.toFixed(1)}{!compact && <span className="text-muted-foreground"> / 5</span>}
-    </Badge>
-  );
+  return <StarRating value={rating} readOnly size={compact ? 'xs' : 'sm'} showScore />;
 }
 
+const ADD_TRADE_OPTION = '__add_trade_category__';
 const CUSTOM_TRADES_KEY = 'osm_custom_trades';
 
 function getStoredCustomTrades() {
@@ -113,6 +111,7 @@ function saveCustomTrade(newTrade) {
 const DEFAULT_FORM = {
   name: '',
   trade: 'Ceiling',
+  additionalTrades: [],
   ownerName: '',
   contactPerson: '',
   phone: '',
@@ -169,10 +168,34 @@ export function AgenciesPage() {
     const tradeObj = { value: trimmed, label: trimmed };
     const updated = saveCustomTrade(tradeObj);
     setCustomTrades(updated);
-    setFormData((prev) => ({ ...prev, trade: trimmed }));
+    setFormData((prev) => {
+      // Picking "+ Add" from the dropdown leaves the placeholder selected; replace it
+      // with the real category once it has been created. The side "+" keeps the
+      // current primary trade and only appends an extra one.
+      const trade = prev.trade === ADD_TRADE_OPTION ? trimmed : prev.trade;
+      const alreadyAdded = trade === trimmed || (prev.additionalTrades || []).includes(trimmed);
+      return {
+        ...prev,
+        trade,
+        additionalTrades: alreadyAdded
+          ? prev.additionalTrades || []
+          : [...(prev.additionalTrades || []), trimmed],
+      };
+    });
     setNewTradeName('');
     setIsAddTradeModalOpen(false);
-    toast.success(`Trade category "${trimmed}" added and selected.`);
+    toast.success(`Trade category "${trimmed}" added. Use + again to add more.`);
+  };
+
+  const closeAddTradeModal = () => {
+    // Cancelling after choosing "+ Add" must not keep the placeholder as the trade.
+    setFormData((prev) =>
+      prev.trade === ADD_TRADE_OPTION
+        ? { ...prev, trade: TRADE_OPTIONS[0]?.value || 'Ceiling' }
+        : prev
+    );
+    setNewTradeName('');
+    setIsAddTradeModalOpen(false);
   };
 
   // Full Page Form view state instead of cramped popup
@@ -307,6 +330,7 @@ export function AgenciesPage() {
       ...DEFAULT_FORM,
       city: '',
       skills: [],
+      additionalTrades: [],
       stages: [
         {
           stageOrder: 2,
@@ -326,6 +350,9 @@ export function AgenciesPage() {
     setFormData({
       name: agency.name || '',
       trade: agency.trade || 'Ceiling',
+      additionalTrades: Array.isArray(agency.additionalTrades)
+        ? [...agency.additionalTrades]
+        : [],
       ownerName: agency.ownerName || agency.contactPerson || '',
       contactPerson: agency.contactPerson || agency.ownerName || '',
       phone: agency.phone || '',
@@ -374,6 +401,12 @@ export function AgenciesPage() {
   };
 
   const handleTradeChange = (newTrade) => {
+    if (newTrade === ADD_TRADE_OPTION) {
+      setNewTradeName('');
+      setIsAddTradeModalOpen(true);
+      return;
+    }
+
     const suggested = TRADE_SKILLS_CATALOG[newTrade] || [];
     const matchedStage = FITOUT_12_STAGES.find((s) => s.trade === newTrade);
 
@@ -709,7 +742,7 @@ export function AgenciesPage() {
               <ArrowLeftIcon className="size-3.5" />
               <span>Back to Agencies Directory</span>
             </button>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {editingAgency ? `Edit Agency: ${editingAgency.name}` : 'Register New Agency'}
             </h1>
           </div>
@@ -778,18 +811,51 @@ export function AgenciesPage() {
                           required
                           value={formData.trade}
                           onChange={(e) => handleTradeChange(e.target.value)}
-                          options={allTradeOptions}
+                          options={[
+                            ...allTradeOptions,
+                            { value: ADD_TRADE_OPTION, label: '+ Add new trade category' },
+                          ]}
                         />
                       </div>
                       <button
                         type="button"
-                        onClick={() => setIsAddTradeModalOpen(true)}
-                        title="Add new trade category"
+                        onClick={() => {
+                          setNewTradeName('');
+                          setIsAddTradeModalOpen(true);
+                        }}
+                        title="Add trade category (can add multiple)"
                         className="p-2 h-9 rounded-lg border border-border bg-card hover:bg-muted text-foreground transition-colors cursor-pointer flex items-center justify-center shrink-0 mb-0.5"
                       >
                         <PlusIcon className="size-4" />
                       </button>
                     </div>
+                    {(formData.additionalTrades || []).length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {formData.additionalTrades.map((trade) => (
+                          <span
+                            key={trade}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-medium"
+                          >
+                            {trade}
+                            <button
+                              type="button"
+                              title={`Remove ${trade}`}
+                              onClick={() =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  additionalTrades: (prev.additionalTrades || []).filter(
+                                    (t) => t !== trade
+                                  ),
+                                }))
+                              }
+                              className="text-primary hover:text-destructive cursor-pointer"
+                            >
+                              <XIcon className="size-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <Input
@@ -917,7 +983,7 @@ export function AgenciesPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="text"
                     placeholder="Type artisan skill (e.g. Gypsum Board, CNC Cutting, PU Polishing) and press Enter..."
                     value={skillInput}
@@ -928,7 +994,7 @@ export function AgenciesPage() {
                         handleAddSkill();
                       }
                     }}
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="flex-1"
                   />
                   <Button type="button" variant="outline" size="sm" onClick={() => handleAddSkill()}>
                     <PlusIcon className="size-3.5 mr-1" />
@@ -965,12 +1031,12 @@ export function AgenciesPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <Input
+                  <StepperInput
                     label="Number of Workers"
-                    type="number"
+                   
                     min={1}
                     max={200}
-                    placeholder="e.g. 12"
+                   
                     value={formData.teamSize}
                     onChange={(e) => setFormData({ ...formData, teamSize: e.target.value })}
                   />
@@ -982,9 +1048,9 @@ export function AgenciesPage() {
                     options={RATE_UNIT_OPTIONS}
                   />
 
-                  <Input
+                  <MoneyInput
                     label="Standard Rate (₹)"
-                    type="number"
+                   
                     min={0}
                     placeholder="e.g. 45"
                     value={formData.baseRate}
@@ -997,6 +1063,21 @@ export function AgenciesPage() {
                     onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
                     options={PAYMENT_TERMS_OPTIONS}
                   />
+                </div>
+
+                <div className="flex flex-col gap-1.5 pt-1">
+                  <span className="text-xs font-medium text-foreground">Agency Rating</span>
+                  <StarRating
+                    value={Number(formData.rating) || 0}
+                    onChange={(rating) =>
+                      setFormData((prev) => ({ ...prev, rating }))
+                    }
+                    size="md"
+                    showScore
+                  />
+                  <span className="text-[11px] text-muted-foreground">
+                    Rate this agency from 0 to 5. The rating is shown in the agency directory.
+                  </span>
                 </div>
               </div>
 
@@ -1035,12 +1116,12 @@ export function AgenciesPage() {
                   <label className="block text-xs font-semibold text-foreground mb-1.5 select-none">
                     Internal Remarks & Notes
                   </label>
-                  <textarea
+                  <Textarea
                     rows={2}
                     placeholder="Enter internal supervisor remarks, reliability notes, or equipment specifications..."
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    className="w-full rounded-lg border border-border bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -1067,7 +1148,7 @@ export function AgenciesPage() {
         {/* Add New Trade Category Modal (in form view) */}
         <Modal
           isOpen={isAddTradeModalOpen}
-          onClose={() => setIsAddTradeModalOpen(false)}
+          onClose={closeAddTradeModal}
           title="Add New Trade Category"
           size="sm"
           footer={
@@ -1075,7 +1156,7 @@ export function AgenciesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsAddTradeModalOpen(false)}
+                onClick={closeAddTradeModal}
               >
                 Cancel
               </Button>
@@ -1557,7 +1638,7 @@ export function AgenciesPage() {
       {/* Add New Trade Category Modal (Directory view) */}
       <Modal
         isOpen={isAddTradeModalOpen}
-        onClose={() => setIsAddTradeModalOpen(false)}
+        onClose={closeAddTradeModal}
         title="Add New Trade Category"
         size="sm"
         footer={
@@ -1565,7 +1646,7 @@ export function AgenciesPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsAddTradeModalOpen(false)}
+              onClick={closeAddTradeModal}
             >
               Cancel
             </Button>

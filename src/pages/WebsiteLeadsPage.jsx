@@ -13,6 +13,7 @@ import { Table } from '../components/ui/Table';
 import { Badge } from '../components/ui/badge';
 import StatCard from '../components/ui/StatCard';
 import Modal from '../components/ui/Modal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import {
   EyeIcon,
   GlobeIcon,
@@ -22,6 +23,7 @@ import {
   TrashIcon,
   UsersIcon,
 } from '../components/ui/icons';
+import MoneyInput from '../components/ui/MoneyInput';
 
 const LEAD_STATUSES = [
   'New',
@@ -79,6 +81,7 @@ export function WebsiteLeadsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [viewing, setViewing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const reload = useCallback(async () => {
     try {
@@ -149,16 +152,19 @@ export function WebsiteLeadsPage() {
     }
   };
 
-  const handleDelete = async (lead) => {
-    if (!window.confirm(`Delete the lead for ${lead.name}?`)) return;
+  const handleDelete = (lead) => setDeleteTarget(lead);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await leadService.deleteLead(lead.id);
+      await leadService.deleteLead(deleteTarget.id);
       toast.success('Lead deleted');
       setViewing(null);
       await reload();
     } catch {
       toast.error('Failed to delete lead');
     }
+    setDeleteTarget(null);
   };
 
   const columns = [
@@ -280,7 +286,7 @@ export function WebsiteLeadsPage() {
             <Input label="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
             <Input label="Project type" value={form.projectType} onChange={(event) => setForm({ ...form, projectType: event.target.value })} />
             <Input label="Location" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} />
-            <Input label="Estimated budget" type="number" value={form.estimatedBudget} onChange={(event) => setForm({ ...form, estimatedBudget: event.target.value })} />
+            <MoneyInput label="Estimated budget" value={form.estimatedBudget} onChange={(event) => setForm({ ...form, estimatedBudget: event.target.value })} />
             <Select label="Status" value={form.status} options={LEAD_STATUSES.map((status) => ({ value: status, label: status }))} onChange={(event) => setForm({ ...form, status: event.target.value })} />
             <Select label="Source" value={form.source} options={LEAD_SOURCES.map((source) => ({ value: source, label: source }))} onChange={(event) => setForm({ ...form, source: event.target.value })} />
           </div>
@@ -332,6 +338,15 @@ export function WebsiteLeadsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete lead?"
+        message={`Are you sure you want to delete the lead for ${deleteTarget?.name || 'this person'}? This action cannot be undone.`}
+        confirmText="Delete"
+      />
     </div>
   );
 }

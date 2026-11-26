@@ -31,18 +31,18 @@ export function Button({
   ...rest
 }) {
   const baseClasses =
-    'inline-flex items-center justify-center font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20 select-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-2xs whitespace-nowrap';
+    'inline-flex items-center justify-center font-semibold rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-ring/20 select-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-2xs whitespace-nowrap';
 
   const sizeClasses = {
-    xs: 'text-[11px] px-2.5 py-1.5 gap-1',
-    sm: 'text-xs px-3 py-2 gap-1.5',
-    md: 'text-xs px-4 py-2 gap-1.5',
-    lg: 'text-sm px-5 py-2.5 gap-2',
+    xs: 'text-[11px] px-3 py-1.5 gap-1',
+    sm: 'text-xs px-4 py-2.5 gap-1.5',
+    md: 'text-[13px] px-5 py-2.5 gap-1.5',
+    lg: 'text-sm px-6 py-3 gap-2',
   };
 
   const variantClasses = {
     primary:
-      'bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/95 border border-transparent shadow-2xs',
+      'surface-brand text-primary-foreground hover:brightness-110 active:brightness-95 border border-transparent shadow-md shadow-primary/20',
     secondary:
       'bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/90 border border-border shadow-2xs',
     outline:

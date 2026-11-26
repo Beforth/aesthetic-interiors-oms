@@ -1,68 +1,42 @@
 import React, { forwardRef, useId } from 'react';
-import Icon from './Icon';
+import { Checkbox as BefCheckbox } from './befui-checkbox';
+import { cn } from '../../lib/utils';
 
 /**
- * Checkbox control with 44px mobile touch target.
+ * BefUI's checkbox (https://befui.vercel.app/#/components/checkbox) with a label and the project's `onChange(event)`:
+ * the event carries `target.checked`. The whole row keeps a 44px touch target on phones.
  */
 export const Checkbox = forwardRef(function Checkbox(
-  {
-    label,
-    description,
-    error,
-    checked = false,
-    onChange,
-    disabled = false,
-    className = '',
-    id,
-    ...rest
-  },
+  { label, description, error, checked = false, onChange, disabled = false, className = '', id, name, value, ...rest },
   ref
 ) {
   const generatedId = useId();
   const checkboxId = id || generatedId;
 
   return (
-    <div className={`flex flex-col gap-1 ${className}`}>
-      <label
-        htmlFor={checkboxId}
-        className={`inline-flex items-center gap-2.5 cursor-pointer select-none min-h-[44px] sm:min-h-0 ${
-          disabled ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
-      >
-        <div className="relative flex items-center justify-center">
-          <input
-            ref={ref}
-            id={checkboxId}
-            type="checkbox"
-            checked={checked}
-            onChange={onChange}
-            disabled={disabled}
-            className="sr-only peer"
-            {...rest}
-          />
-          <div
-            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors
-              ${
-                checked
-                  ? 'bg-primary border-primary text-primary-foreground'
-                  : 'bg-card border-border peer-focus:border-ring'
-              }
-              peer-focus:ring-2 peer-focus:ring-ring/20
-            `}
-          >
-            {checked && <Icon name="check" size={14} className="stroke-[3]" />}
-          </div>
-        </div>
-
+    <div className={cn('flex flex-col gap-1', className)}>
+      <div className="flex min-h-[44px] items-center gap-2.5 sm:min-h-0">
+        <BefCheckbox
+          ref={ref}
+          id={checkboxId}
+          // a slightly darker edge so the empty box is easy to see
+          className="border-slate-300"
+          name={name}
+          value={value}
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={(next) => onChange?.({ target: { id: checkboxId, name, value, checked: next === true } })}
+          {...rest}
+        />
         {(label || description) && (
-          <div className="flex flex-col text-sm leading-tight">
+          <label htmlFor={checkboxId} className={cn('flex cursor-pointer select-none flex-col text-sm leading-tight', disabled && 'cursor-not-allowed opacity-50')}>
             {label && <span className="font-medium text-foreground">{label}</span>}
             {description && <span className="text-xs text-muted-foreground">{description}</span>}
-          </div>
+          </label>
         )}
-      </label>
+      </div>
 
-      {error && <span className="text-xs text-destructive font-medium">{error}</span>}
+      {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );
 });

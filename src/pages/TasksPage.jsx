@@ -40,6 +40,8 @@ import {
   ArrowLeftIcon,
   PlayIcon,
 } from '../components/ui/icons';
+import SearchInput from '../components/ui/SearchInput';
+import Textarea from '../components/ui/Textarea';
 
 const TASK_KANBAN_COLUMNS = [
   { id: 'todo', title: 'To Do', tone: 'default' },
@@ -591,25 +593,12 @@ export function TasksPage() {
       <div className="relative z-30 py-2">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* 1. Live Search Input */}
-          <div className="relative flex items-center">
-            <SearchIcon className="size-3.5 text-muted-foreground absolute left-3 pointer-events-none" />
-            <input
-              type="text"
+          <div className="flex items-center">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search tasks, assignees..."
-              className="w-full h-9 rounded-lg border border-border bg-background pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary hover:border-muted-foreground/40 transition-colors shadow-2xs"
             />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
-                title="Clear search"
-              >
-                <XIcon className="size-3" />
-              </button>
-            )}
           </div>
 
           {/* 2. Project Filter Dropdown (Cascaded to Assignees and Location) */}
@@ -1072,7 +1061,7 @@ export function TasksPage() {
             <label className="block text-xs font-medium text-foreground mb-1.5">
               Task Title <span className="text-destructive">*</span>
             </label>
-            <input
+            <Input
               type="text"
               required
               value={formData.title}
@@ -1081,10 +1070,7 @@ export function TasksPage() {
                 if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: '' }));
               }}
               placeholder="e.g. Master bedroom veneer grain continuity inspection"
-              className={cn(
-                'w-full h-9 rounded-lg border bg-background px-3 text-xs text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs',
-                formErrors.title ? 'border-destructive ring-1 ring-destructive' : 'border-border'
-              )}
+              className="w-full" aria-invalid={Boolean(formErrors.title)}
             />
             {formErrors.title && (
               <p className="mt-1 text-[11px] text-destructive">{formErrors.title}</p>
@@ -1096,12 +1082,12 @@ export function TasksPage() {
             <label className="block text-xs font-medium text-foreground mb-1.5">
               Description
             </label>
-            <textarea
+            <Textarea
               rows={2}
               value={formData.description}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               placeholder="Add specific execution details, material references, or notes..."
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground resize-none transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs"
+              className="w-full resize-none"
             />
           </div>
 

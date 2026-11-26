@@ -37,6 +37,9 @@ import AssigneePicker from '../components/domain/AssigneePicker';
 import AgencySelect from '../components/domain/AgencySelect';
 import PermissionGate from '../components/ui/PermissionGate';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ShareProjectLinkModal from '../components/domain/ShareProjectLinkModal';
+import MoneyInput from '../components/ui/MoneyInput';
+import SelectField from '../components/ui/SelectField';
 
 
 const DETAIL_TASK_KANBAN_COLUMNS = [
@@ -56,6 +59,8 @@ export function ProjectDetailPage() {
   const canUpdateStatus = usePermission('stages.updateStatus');
   const canEditProjectStages = usePermission('stages.editProjectStages');
   const canManageTasks = usePermission('tasks.create');
+  const canShareWithClient = usePermission('dsr.manageClientLink');
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const canCreateProject = usePermission('projects.create');
   const canManageProject =
     role === ROLES.MANAGER || role === ROLES.ADMIN || role === ROLES.OWNER ||
@@ -508,6 +513,11 @@ export function ProjectDetailPage() {
             >
               All Projects
             </Button>
+            {canShareWithClient && (
+              <Button variant="outline" size="sm" leadingIcon="link" onClick={() => setIsShareOpen(true)}>
+                Share with client
+              </Button>
+            )}
             {canManageProject && (
               <Button variant="outline" size="sm" leadingIcon="edit" onClick={openEditProject}>
                 Edit
@@ -521,6 +531,10 @@ export function ProjectDetailPage() {
           </div>
         }
       />
+
+      {canShareWithClient && (
+        <ShareProjectLinkModal isOpen={isShareOpen} onClose={() => setIsShareOpen(false)} project={project} />
+      )}
 
       {/* Navigation Tabs */}
       <Tabs
@@ -799,7 +813,7 @@ export function ProjectDetailPage() {
                         </td>
                         <td className="py-3.5 px-3 text-center">
                           {canUpdateStatus ? (
-                            <select
+                            <SelectField
                               value={normalizedStatus}
                               onChange={(e) => handleQuickStatusChange(stage, e.target.value)}
                               className={cn(
@@ -817,7 +831,7 @@ export function ProjectDetailPage() {
                               <option value="in progress" className="bg-card text-foreground">In Progress</option>
                               <option value="late" className="bg-card text-destructive font-semibold">Late / Due</option>
                               <option value="done" className="bg-card text-foreground">Complete</option>
-                            </select>
+                            </SelectField>
                           ) : (
                             <Badge
                               variant={
@@ -1010,7 +1024,7 @@ export function ProjectDetailPage() {
             <label className="text-xs font-semibold text-text-main">
               Execution Status
             </label>
-            <select
+            <SelectField
               value={
                 stageFormData.status === 'done' || stageFormData.status === 'completed'
                   ? 'done'
@@ -1019,13 +1033,13 @@ export function ProjectDetailPage() {
                   : 'not started'
               }
               onChange={(e) => setStageFormData({ ...stageFormData, status: e.target.value })}
-              className="w-full rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-2xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
+              className="w-full"
             >
               <option value="not started">Not Started</option>
               <option value="in progress">In Progress</option>
               <option value="late">Late / Due</option>
               <option value="done">Complete</option>
-            </select>
+            </SelectField>
           </div>
         </form>
       </Modal>
@@ -1161,7 +1175,7 @@ export function ProjectDetailPage() {
             <Input label="Due Date" type="date" value={projectForm.endDate} onChange={(e) => setProjectForm({ ...projectForm, endDate: e.target.value })} />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Total Cost Estimate (₹)" type="number" value={projectForm.totalCost} onChange={(e) => setProjectForm({ ...projectForm, totalCost: e.target.value })} />
+            <MoneyInput label="Total Cost Estimate (₹)" value={projectForm.totalCost} onChange={(e) => setProjectForm({ ...projectForm, totalCost: e.target.value })} />
             <Select
               label="Project Status"
               value={projectForm.status}

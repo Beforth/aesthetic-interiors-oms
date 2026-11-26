@@ -59,7 +59,7 @@ export function Table({
         'w-full',
         isClean
           ? 'text-card-foreground'
-          : 'rounded-xl border border-border overflow-hidden bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)]',
+          : 'rounded-xl border border-border overflow-hidden bg-card text-card-foreground soft-card',
         className
       )}
     >

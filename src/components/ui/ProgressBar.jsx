@@ -30,8 +30,8 @@ export function ProgressBar({
   };
 
   const fillClasses = {
-    brand: 'bg-primary',
-    primary: 'bg-primary',
+    brand: 'surface-brand',
+    primary: 'surface-brand',
     success: 'bg-success',
     warning: 'bg-warning',
     danger: 'bg-destructive',

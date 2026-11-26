@@ -95,7 +95,7 @@ export function Sidebar({ onNavigate, className = '' }) {
                   label: sub.label,
                   active: isSubActive,
                   onClick: () => {
-                    navigate(sub.path);
+                    navigate(sub.path, { state: { fresh: Date.now() } });
                     if (onNavigate) onNavigate();
                   },
                 };
@@ -111,7 +111,7 @@ export function Sidebar({ onNavigate, className = '' }) {
               active={isItemPathActive || isAnySubActive}
               items={subItemsList}
               onClick={() => {
-                navigate(item.path);
+                navigate(item.path, { state: { fresh: Date.now() } });
                 if (onNavigate) onNavigate();
               }}
             />
@@ -127,7 +127,7 @@ export function Sidebar({ onNavigate, className = '' }) {
       <SidebarHeader className={cn('flex items-center', isCollapsed ? 'justify-center px-2' : 'justify-between gap-2')}>
         {!isCollapsed && (
           <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+            <span className="surface-brand grid size-9 shrink-0 place-items-center rounded-lg text-sm font-bold text-primary-foreground shadow-sm">
               A
             </span>
             <div className="overflow-hidden min-w-0">

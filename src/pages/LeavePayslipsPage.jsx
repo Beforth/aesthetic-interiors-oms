@@ -19,6 +19,9 @@ import Modal from '../components/ui/Modal';
 import Icon from '../components/ui/Icon';
 import Pagination from '../components/ui/Pagination';
 import { CalendarDaysIcon, ClockIcon, CheckCircleIcon, ReceiptIcon } from '../components/ui/icons';
+import DateInput from '../components/ui/DateInput';
+import SelectField from '../components/ui/SelectField';
+import Textarea from '../components/ui/Textarea';
 
 const LEAVE_BALANCE_URL = '/reports/leave-balance/';
 const PAYMENT_SHEET_URL = '/reports/payment-sheet/';
@@ -646,49 +649,49 @@ export function LeavePayslipsPage() {
         <form onSubmit={handleApplyLeave} className="space-y-4 text-xs">
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-text-muted uppercase">Leave Type</label>
-            <select
+            <SelectField
               value={applyForm.leaveType}
               onChange={(e) => setApplyForm({ ...applyForm, leaveType: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main"
+              className="w-full"
             >
               <option value="Privileged Leave">Privileged Leave (7 days remaining)</option>
               <option value="Medical Leave">Medical Leave (10 days remaining)</option>
               <option value="Leave Without Pay">Leave Without Pay (33 days remaining)</option>
-            </select>
+            </SelectField>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-text-muted uppercase">From Date</label>
-              <input
-                type="date"
+              <DateInput
+               
                 required
                 value={applyForm.startDate}
                 onChange={(e) => setApplyForm({ ...applyForm, startDate: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+                className="w-full"
               />
             </div>
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-text-muted uppercase">To Date</label>
-              <input
-                type="date"
+              <DateInput
+               
                 required
                 value={applyForm.endDate}
                 onChange={(e) => setApplyForm({ ...applyForm, endDate: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+                className="w-full"
               />
             </div>
           </div>
 
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-text-muted uppercase">Reason for Leave</label>
-            <textarea
+            <Textarea
               rows={3}
               required
               value={applyForm.reason}
               onChange={(e) => setApplyForm({ ...applyForm, reason: e.target.value })}
               placeholder="Provide reason and site handover arrangement..."
-              className="w-full px-3 py-2 border border-border rounded-lg text-text-main"
+              className="w-full"
             />
           </div>
 
@@ -823,15 +826,15 @@ export function LeavePayslipsPage() {
 
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-text-muted uppercase">Salary Month</label>
-            <select
+            <SelectField
               value={generateMonth}
               onChange={(e) => setGenerateMonth(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg bg-white text-text-main font-medium"
+              className="w-full"
             >
               <option value="October 2026">October 2026 (Current Cycle)</option>
               <option value="September 2026">September 2026</option>
               <option value="November 2026">November 2026</option>
-            </select>
+            </SelectField>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-50 border border-border text-[11px] text-text-muted space-y-1">

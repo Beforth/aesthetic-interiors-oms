@@ -69,12 +69,12 @@ export function OverallProgressGraph({
               <linearGradient id="blobGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="var(--primary, #2563eb)" stopOpacity="0.20" />
                 <stop offset="50%" stopColor="var(--primary, #2563eb)" stopOpacity="0.15" />
-                <stop offset="100%" stopColor="var(--accent, #6366f1)" stopOpacity="0.10" />
+                <stop offset="100%" stopColor="var(--accent, #3b82f6)" stopOpacity="0.10" />
               </linearGradient>
 
               <linearGradient id="blobGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="var(--primary, #2563eb)" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="var(--accent, #6366f1)" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="var(--accent, #3b82f6)" stopOpacity="0.18" />
               </linearGradient>
 
               <linearGradient id="progressArcGrad" x1="0%" y1="0%" x2="100%" y2="100%">

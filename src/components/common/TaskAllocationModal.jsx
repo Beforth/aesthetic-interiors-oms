@@ -10,6 +10,7 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import FormMultiAssigneeSelect from './FormMultiAssigneeSelect';
+import Textarea from '../ui/Textarea';
 
 export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
   const toast = useToast();
@@ -163,7 +164,7 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
           <label className="block text-xs font-medium text-foreground mb-1.5">
             Task Title <span className="text-destructive">*</span>
           </label>
-          <input
+          <Input
             type="text"
             required
             value={formData.title}
@@ -172,10 +173,7 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
               if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: '' }));
             }}
             placeholder="e.g. Master bedroom veneer grain continuity inspection"
-            className={cn(
-              'w-full h-9 rounded-lg border bg-background px-3 text-xs text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs',
-              formErrors.title ? 'border-destructive ring-1 ring-destructive' : 'border-border'
-            )}
+            className="w-full" aria-invalid={Boolean(formErrors.title)}
             autoFocus
           />
           {formErrors.title && (
@@ -188,12 +186,12 @@ export function TaskAllocationModal({ isOpen, onClose, onTaskAllocated }) {
           <label className="block text-xs font-medium text-foreground mb-1.5">
             Description
           </label>
-          <textarea
+          <Textarea
             rows={2}
             value={formData.description}
             onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
             placeholder="Add specific execution details, material references, or notes..."
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground resize-none transition-colors focus:outline-none focus:ring-2 focus:ring-ring shadow-2xs"
+            className="w-full resize-none"
           />
         </div>
 

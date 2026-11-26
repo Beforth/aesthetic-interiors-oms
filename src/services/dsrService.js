@@ -61,6 +61,16 @@ async function toFile(attachment) {
   return new File([blob], attachment.name || 'photo', { type: attachment.type || blob.type });
 }
 
+/** The report itself is saved by now; say so if only its photos failed, so it is not entered a second time. */
+async function withPhotos(entryId, attachments, saved) {
+  try {
+    return await dsrService.addPhotos(entryId, attachments, saved);
+  } catch (err) {
+    const reason = err.errors?.files?.[0] || err.message || 'upload failed';
+    throw Object.assign(new Error(`Report saved, but the photos did not upload (${reason}). Open the report to add them.`), { entrySaved: true });
+  }
+}
+
 export const dsrService = {
   /**
    * Entries between two dates (either may be empty). People with `dsr.viewAll` get everyone's; the backend gives
@@ -73,12 +83,12 @@ export const dsrService = {
 
   async createEntry(values, projects) {
     const created = await apiClient.post(ENTRY_URL, toApi(values, projects));
-    return this.addPhotos(created.id, values.attachments, fromApi(created));
+    return withPhotos(created.id, values.attachments, fromApi(created));
   },
 
   async updateEntry(id, values, projects) {
     const updated = await apiClient.patch(`${ENTRY_URL}${id}/`, toApi(values, projects));
-    return this.addPhotos(id, values.attachments, fromApi(updated));
+    return withPhotos(id, values.attachments, fromApi(updated));
   },
 
   async deleteEntry(id) {

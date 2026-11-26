@@ -7,6 +7,7 @@ import { usePagination } from '../hooks/usePagination';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { TimePicker } from '../components/ui/TimePicker';
 import { Drawer } from '../components/ui/Drawer';
 import { Table } from '../components/ui/Table';
 import { DataToolbar } from '../components/ui/DataToolbar';
@@ -24,7 +25,7 @@ import {
   WalletIcon,
 } from '../components/ui/icons';
 import { apiClient } from '../services/apiClient';
-import { attendanceService } from '../services/attendanceService';
+import { attendanceService, parseTimeToMinutes } from '../services/attendanceService';
 import { projectService } from '../services/projectService';
 import {
   getLocalReportRows,
@@ -97,8 +98,19 @@ const DAY_STATUS_OPTIONS = [
   { value: 'Half Day', label: 'Half day' },
   { value: 'Overtime', label: 'Overtime' },
   { value: 'Absent', label: 'Absent' },
+  { value: 'Leave', label: 'On leave' },
   { value: 'Unmarked Working Days', label: 'Not marked' },
 ];
+
+const DEFAULT_ATTENDANCE_SETTINGS = {
+  shiftStart: '09:00',
+  shiftEnd: '18:00',
+  graceMinutes: 15,
+  halfDayBelowMinutes: 240,
+  overtimeMinMinutes: 30,
+};
+
+const TIMELESS_STATUSES = new Set(['Absent', 'Leave', 'Unmarked Working Days']);
 
 function toMonthValue(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -132,7 +144,7 @@ function normalizeStatusLabel(value) {
     'half day': 'Half Day',
     overtime: 'Overtime',
     absent: 'Absent',
-    leave: 'Absent',
+    leave: 'Leave',
     unmarked: 'Unmarked Working Days',
     'not-marked': 'Unmarked Working Days',
     'not marked': 'Unmarked Working Days',
@@ -149,6 +161,119 @@ function statusTone(status) {
   if (value === 'overtime') return 'bg-primary/10 text-primary border-primary/20';
   if (value === 'absent' || value === 'leave') return 'bg-destructive/10 text-destructive border-destructive/20';
   return 'bg-muted text-muted-foreground border-border';
+}
+
+function needsTiming(status) {
+  return !TIMELESS_STATUSES.has(status);
+}
+
+function toClockMinutes(value) {
+  const minutes = parseTimeToMinutes(value);
+  return minutes === null ? null : ((minutes % 1440) + 1440) % 1440;
+}
+
+function toClock(minutes) {
+  const safe = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safe / 60) % 24;
+  return `${String(hours).padStart(2, '0')}:${String(safe % 60).padStart(2, '0')}`;
+}
+
+/** Fill the timing inputs with times that actually produce the chosen status in the reports. */
+function timingDefaults(status, settings, existing = {}) {
+  const cfg = { ...DEFAULT_ATTENDANCE_SETTINGS, ...(settings || {}) };
+  const shiftStart = toClockMinutes(cfg.shiftStart) ?? 540;
+  const shiftEnd = toClockMinutes(cfg.shiftEnd) ?? 1080;
+  const grace = Number(cfg.graceMinutes ?? 15) || 0;
+  const halfDayBelow = Number(cfg.halfDayBelowMinutes ?? 240) || 240;
+  const overtimeMin = Number(cfg.overtimeMinMinutes ?? 30) || 30;
+  const existingIn = toClockMinutes(existing.checkIn);
+  const existingOut = toClockMinutes(existing.checkOut);
+  const lateLimit = shiftStart + grace;
+
+  if (!needsTiming(status)) return { checkInTime: '', checkOutTime: '' };
+
+  if (status === 'Half Day') {
+    const checkIn = existingIn ?? shiftStart;
+    return {
+      checkInTime: toClock(checkIn),
+      checkOutTime: toClock(checkIn + Math.max(30, halfDayBelow - 30)),
+    };
+  }
+
+  if (status === 'Overtime') {
+    const checkIn = existingIn !== null && existingIn <= lateLimit ? existingIn : shiftStart;
+    return {
+      checkInTime: toClock(checkIn),
+      checkOutTime: toClock(shiftEnd + Math.max(60, overtimeMin)),
+    };
+  }
+
+  if (status === 'Late') {
+    const checkIn = existingIn !== null && existingIn > lateLimit ? existingIn : lateLimit + 1;
+    const checkOut = existingOut !== null && existingOut > checkIn ? existingOut : shiftEnd;
+    return { checkInTime: toClock(checkIn), checkOutTime: toClock(checkOut) };
+  }
+
+  // Present: never keep short or late times that would make the report read half day or late.
+  const checkIn = existingIn !== null && existingIn <= lateLimit ? existingIn : shiftStart;
+  const checkOut = existingOut !== null && existingOut - checkIn >= halfDayBelow ? existingOut : shiftEnd;
+  return {
+    checkInTime: toClock(checkIn),
+    checkOutTime: toClock(Math.max(checkOut, checkIn + halfDayBelow)),
+  };
+}
+
+function timingDescription(status) {
+  if (status === 'Present') return 'Enter the full shift timings. A short day is read as a half day.';
+  if (status === 'Late') return 'Check in after the grace period so the day reads as late.';
+  if (status === 'Half Day') return 'Enter a check-out before the half-day limit.';
+  if (status === 'Overtime') return 'Enter a check-out past the shift end so the overtime hours are counted.';
+  return 'Choose a worked status to enter its timings.';
+}
+
+function timingError(editor) {
+  if (!editor || !needsTiming(editor.status)) return '';
+  const checkIn = toClockMinutes(editor.checkInTime);
+  const checkOut = toClockMinutes(editor.checkOutTime);
+  if (checkIn === null || checkOut === null) {
+    return `Enter check-in and check-out times for ${editor.status.toLowerCase()}.`;
+  }
+  if (checkOut <= checkIn) return 'Check-out must be after check-in.';
+  return '';
+}
+
+function renderTimingFields(editor, onChange, disabled) {
+  if (!needsTiming(editor.status)) {
+    return (
+      <p className="text-[11px] text-muted-foreground rounded-lg border border-border bg-muted/40 px-3 py-2">
+        No timings are needed for {editor.status.toLowerCase()}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-3">
+        <TimePicker
+          label="Check in"
+          required
+          value={editor.checkInTime}
+          onChange={(value) => onChange('checkInTime', value)}
+          disabled={disabled}
+          placeholder="Select time"
+        />
+        <TimePicker
+          label="Check out"
+          required
+          value={editor.checkOutTime}
+          onChange={(value) => onChange('checkOutTime', value)}
+          disabled={disabled}
+          placeholder="Select time"
+        />
+      </div>
+      <p className="text-[11px] text-muted-foreground">{timingDescription(editor.status)}</p>
+    </div>
+  );
 }
 
 function formatMoney(value) {
@@ -474,6 +599,22 @@ export function ReportsPage() {
   const [error, setError] = useState('');
   const [dayDrawer, setDayDrawer] = useState(null);
   const [savingDay, setSavingDay] = useState(false);
+  const [attendanceSettings, setAttendanceSettings] = useState(DEFAULT_ATTENDANCE_SETTINGS);
+
+  // The report drawers pre-fill timings from the same shift/rules the backend uses to classify a day.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve(attendanceService.getAttendanceSettings())
+      .then((settings) => {
+        if (!cancelled && settings) setAttendanceSettings({ ...DEFAULT_ATTENDANCE_SETTINGS, ...settings });
+      })
+      .catch(() => {
+        if (!cancelled) setAttendanceSettings(DEFAULT_ATTENDANCE_SETTINGS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const monthOptions = useMemo(
     () =>
@@ -601,9 +742,15 @@ export function ReportsPage() {
     )
       .then((days) => {
         if (!cancelled) {
+          const loadedDays = Array.isArray(days) ? days : [];
+          const edits = {};
+          loadedDays.forEach((day) => {
+            const status = normalizeStatusLabel(day.status);
+            edits[day.date] = { status, ...timingDefaults(status, attendanceSettings, day), dirty: false };
+          });
           setDayDrawer((previous) =>
             previous && previous.token === dayDrawerToken
-              ? { ...previous, days: Array.isArray(days) ? days : [], daysLoading: false }
+              ? { ...previous, days: loadedDays, edits, daysLoading: false, timingError: '' }
               : previous
           );
         }
@@ -615,6 +762,7 @@ export function ReportsPage() {
               ? {
                   ...previous,
                   days: [],
+                  edits: {},
                   daysLoading: false,
                   daysError: cause?.response?.data?.detail || cause?.message || 'Unable to load days.',
                 }
@@ -626,7 +774,7 @@ export function ReportsPage() {
     return () => {
       cancelled = true;
     };
-  }, [dayDrawerToken]);
+  }, [dayDrawerToken, attendanceSettings]);
 
   const handleExportCsv = () => {
     if (!hasLiveData(activeReportId)) {
@@ -726,37 +874,105 @@ export function ReportsPage() {
       category: metric.category,
       month: selectedMonth,
       days: [],
+      edits: {},
       daysLoading: true,
       daysError: '',
+      timingError: '',
     });
   };
 
   const openDailyStatus = (row) => {
+    const status = normalizeStatusLabel(row.status);
     setDayDrawer({
       mode: 'day',
       token: ++drawerSequence.current,
       userId: row.id,
       row,
       name: row.name,
-      status: normalizeStatusLabel(row.status),
+      status,
+      ...timingDefaults(status, attendanceSettings, row),
+      timingError: '',
     });
   };
 
-  const changeDayStatus = (day, status) => {
+  const chooseDailyStatus = (status) => {
+    setDayDrawer((previous) =>
+      previous
+        ? {
+            ...previous,
+            status,
+            ...timingDefaults(status, attendanceSettings, previous.row),
+            timingError: '',
+          }
+        : previous
+    );
+  };
+
+  const updateDayEdit = (date, patch) => {
+    setDayDrawer((previous) => {
+      if (!previous || previous.mode !== 'days') return previous;
+      const current = previous.edits?.[date] || {};
+      return {
+        ...previous,
+        edits: { ...previous.edits, [date]: { ...current, ...patch, dirty: true } },
+        timingError: '',
+      };
+    });
+  };
+
+  const chooseDayStatus = (day, status) => {
+    updateDayEdit(day.date, { status, ...timingDefaults(status, attendanceSettings, day), dirty: true });
+  };
+
+  const saveSummaryDays = () => {
     if (!dayDrawer || dayDrawer.mode !== 'days') return;
+
+    const pending = Object.entries(dayDrawer.edits || {}).filter(([, edit]) => edit.dirty);
+    if (!pending.length) {
+      toast.info('No attendance changes to save.');
+      return;
+    }
+
+    const invalid = pending.find(([date, edit]) => Boolean(timingError(edit)));
+    if (invalid) {
+      const message = `${formatDateLabel(invalid[0])}: ${timingError(invalid[1])}`;
+      setDayDrawer((previous) => (previous ? { ...previous, timingError: message } : previous));
+      toast.error(message);
+      return;
+    }
+
+    const dayByDate = new Map((dayDrawer.days || []).map((day) => [day.date, day]));
     setSavingDay(true);
-    Promise.resolve(
-      attendanceService.setDayStatus({
-        userId: dayDrawer.userId,
-        date: day.date,
-        recordId: day.recordId,
-        status,
+    Promise.all(
+      pending.map(([date, edit]) => {
+        const day = dayByDate.get(date);
+        return Promise.resolve(
+          attendanceService.setDayStatus({
+            userId: dayDrawer.userId,
+            date,
+            recordId: day?.recordId,
+            status: edit.status,
+            checkInTime: edit.checkInTime,
+            checkOutTime: edit.checkOutTime,
+          })
+        );
       })
     )
       .then(() => {
-        toast.success(`Updated ${formatDateLabel(day.date)} to ${status}`);
+        toast.success(`Updated ${pending.length} attendance day${pending.length === 1 ? '' : 's'}`);
         setRefreshKey((value) => value + 1);
-        setDayDrawer((previous) => (previous ? { ...previous, token: ++drawerSequence.current } : previous));
+        setDayDrawer((previous) =>
+          previous
+            ? {
+                ...previous,
+                token: ++drawerSequence.current,
+                edits: {},
+                daysLoading: true,
+                daysError: '',
+                timingError: '',
+              }
+            : previous
+        );
       })
       .catch((cause) => {
         toast.error(cause?.response?.data?.detail || cause?.message || 'Unable to update attendance.');
@@ -766,6 +982,14 @@ export function ReportsPage() {
 
   const saveDailyStatus = () => {
     if (!dayDrawer || dayDrawer.mode !== 'day') return;
+
+    const invalid = timingError(dayDrawer);
+    if (invalid) {
+      setDayDrawer((previous) => (previous ? { ...previous, timingError: invalid } : previous));
+      toast.error(invalid);
+      return;
+    }
+
     setSavingDay(true);
     Promise.resolve(
       attendanceService.setDayStatus({
@@ -773,6 +997,8 @@ export function ReportsPage() {
         date: selectedDate,
         recordId: dayDrawer.row.recordId,
         status: dayDrawer.status,
+        checkInTime: dayDrawer.checkInTime,
+        checkOutTime: dayDrawer.checkOutTime,
       })
     )
       .then(() => {
@@ -1228,94 +1454,138 @@ export function ReportsPage() {
       <Drawer
         isOpen={Boolean(dayDrawer)}
         onClose={() => setDayDrawer(null)}
-        title={dayDrawer?.mode === 'days' ? 'Attendance days' : 'Mark attendance'}
+        title={dayDrawer?.mode === 'days' ? 'Edit attendance days' : 'Mark attendance'}
         subtitle={
           dayDrawer?.mode === 'days'
             ? `${dayDrawer.name} · ${monthLabel(dayDrawer.month)} · ${dayDrawer.label}`
             : `${dayDrawer?.name || ''} · ${formatDateLabel(selectedDate)}`
         }
         placement="right"
-        size="sm"
+        size="md"
         footer={
-          dayDrawer?.mode === 'day' ? (
+          dayDrawer ? (
             <>
               <button
                 type="button"
                 onClick={() => setDayDrawer(null)}
                 className="px-5 py-2.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
-                Cancel
+                {dayDrawer.mode === 'days' ? 'Close' : 'Cancel'}
               </button>
               <button
                 type="button"
-                onClick={saveDailyStatus}
-                disabled={savingDay}
+                onClick={dayDrawer.mode === 'days' ? saveSummaryDays : saveDailyStatus}
+                disabled={
+                  savingDay ||
+                  (dayDrawer.mode === 'days' &&
+                    !Object.values(dayDrawer.edits || {}).some((edit) => edit.dirty))
+                }
                 className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
               >
-                {savingDay ? 'Saving…' : 'Save'}
+                {savingDay
+                  ? 'Saving…'
+                  : dayDrawer.mode === 'days'
+                    ? `Save changes${
+                        Object.values(dayDrawer.edits || {}).some((edit) => edit.dirty)
+                          ? ` (${Object.values(dayDrawer.edits).filter((edit) => edit.dirty).length})`
+                          : ''
+                      }`
+                    : 'Save'}
               </button>
             </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setDayDrawer(null)}
-              className="px-5 py-2.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          )
+          ) : null
         }
       >
-        {dayDrawer?.mode === 'days' && (
-          <div className="space-y-3 py-1">
-            {dayDrawer.daysLoading ? (
-              <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <Spinner size="lg" />
-              </div>
-            ) : dayDrawer.daysError ? (
-              <Alert type="danger" title="Unable to load days">
-                {dayDrawer.daysError}
-              </Alert>
-            ) : dayDrawer.days.length === 0 ? (
-              <EmptyState icon="folder" title="No days found" description="There are no days behind this number." />
-            ) : (
-              dayDrawer.days.map((day) => (
-                <div key={`${day.date}-${day.recordId || 'new'}`} className="rounded-lg border border-border bg-card p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-semibold text-foreground">{formatDateLabel(day.date)}</span>
-                    <span className="text-[11px] font-mono text-muted-foreground">
-                      {day.checkIn || '—'} → {day.checkOut || '—'}
-                    </span>
-                  </div>
-                  <Select
-                    aria-label={`Status for ${formatDateLabel(day.date)}`}
-                    value={normalizeStatusLabel(day.status)}
-                    onChange={(event) => changeDayStatus(day, event.target.value)}
-                    options={DAY_STATUS_OPTIONS}
-                    disabled={savingDay}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              ))
-            )}
-          </div>
-        )}
+        <div className="space-y-3 py-1">
+          {dayDrawer?.timingError && (
+            <Alert type="danger" title="Check the attendance timings">
+              {dayDrawer.timingError}
+            </Alert>
+          )}
 
-        {dayDrawer?.mode === 'day' && (
-          <div className="space-y-2 py-1">
-            <label className="text-xs font-semibold text-muted-foreground block">Status</label>
-            <Select
-              aria-label="Attendance status"
-              value={dayDrawer.status}
-              onChange={(event) => setDayDrawer((previous) => (previous ? { ...previous, status: event.target.value } : previous))}
-              options={DAY_STATUS_OPTIONS}
-              className="h-9 text-xs"
-            />
-            <p className="text-xs text-muted-foreground">
-              Choose “Not marked” to remove the attendance record for this date.
-            </p>
-          </div>
-        )}
+          {dayDrawer?.mode === 'days' && (
+            <>
+              {dayDrawer.daysLoading ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <Spinner size="lg" />
+                </div>
+              ) : dayDrawer.daysError ? (
+                <Alert type="danger" title="Unable to load days">
+                  {dayDrawer.daysError}
+                </Alert>
+              ) : !dayDrawer.days?.length ? (
+                <EmptyState icon="folder" title="No days found" description="There are no days behind this number." />
+              ) : (
+                dayDrawer.days.map((day) => {
+                  const editor = dayDrawer.edits?.[day.date] || {
+                    status: normalizeStatusLabel(day.status),
+                    ...timingDefaults(normalizeStatusLabel(day.status), attendanceSettings, day),
+                    dirty: false,
+                  };
+                  return (
+                    <div
+                      key={`${day.date}-${day.recordId || 'new'}`}
+                      className={cn(
+                        'rounded-lg border bg-card p-3 space-y-3',
+                        editor.dirty ? 'border-primary/40 bg-primary/5' : 'border-border'
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold text-foreground">{formatDateLabel(day.date)}</span>
+                        <span className="text-[11px] font-mono text-muted-foreground">
+                          {day.checkIn || '—'} → {day.checkOut || '—'}
+                        </span>
+                      </div>
+                      <Select
+                        aria-label={`Status for ${formatDateLabel(day.date)}`}
+                        value={editor.status}
+                        onChange={(event) => chooseDayStatus(day, event.target.value)}
+                        options={DAY_STATUS_OPTIONS}
+                        disabled={savingDay}
+                        className="h-9 text-xs"
+                      />
+                      {renderTimingFields(
+                        editor,
+                        (field, value) => updateDayEdit(day.date, { [field]: value }),
+                        savingDay
+                      )}
+                      {editor.dirty && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                          Unsaved change
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </>
+          )}
+
+          {dayDrawer?.mode === 'day' && (
+            <div className="space-y-3 py-1">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground block">Status</label>
+                <Select
+                  aria-label="Attendance status"
+                  value={dayDrawer.status}
+                  onChange={(event) => chooseDailyStatus(event.target.value)}
+                  options={DAY_STATUS_OPTIONS}
+                  disabled={savingDay}
+                  className="h-9 text-xs"
+                />
+              </div>
+              {renderTimingFields(
+                dayDrawer,
+                (field, value) =>
+                  setDayDrawer((previous) => (previous ? { ...previous, [field]: value, timingError: '' } : previous)),
+                savingDay
+              )}
+              <p className="text-xs text-muted-foreground">
+                Choose “Not marked” to remove the attendance record for this date.
+              </p>
+            </div>
+          )}
+        </div>
       </Drawer>
     </div>
   );

@@ -1,9 +1,11 @@
-import React, { forwardRef, useId } from 'react';
+import React, { forwardRef, useId, useState } from 'react';
 import Icon from './Icon';
 import FormField from './FormField';
+import DateInput from './DateInput';
+import { Input as BefInput } from './befui-input';
 
 /**
- * befui Input component conforming to https://befui.vercel.app/
+ * BefUI's input (https://befui.vercel.app/#/components/input) with the project's label, error and icon props.
  */
 export const Input = forwardRef(function Input(
   {
@@ -24,40 +26,48 @@ export const Input = forwardRef(function Input(
 ) {
   const generatedId = useId();
   const inputId = id || generatedId;
+  // Password fields get an eye button that shows or hides what was typed
+  const isPassword = type === 'password';
+  const [visible, setVisible] = useState(false);
+
+  const trailing = isPassword ? (
+    <button
+      type="button"
+      tabIndex={-1}
+      disabled={disabled}
+      aria-label={visible ? 'Hide password' : 'Show password'}
+      aria-pressed={visible}
+      onClick={() => setVisible((prev) => !prev)}
+      className="flex cursor-pointer items-center rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus:outline-none disabled:cursor-not-allowed"
+    >
+      <Icon name={visible ? 'eye-off' : 'eye'} size={15} />
+    </button>
+  ) : trailingIcon ? (
+    <span className="pointer-events-none flex items-center pr-1 text-muted-foreground">
+      <Icon name={trailingIcon} size={15} />
+    </span>
+  ) : undefined;
+
+  if (type === 'date') {
+    return (
+      <DateInput {...rest} id={inputId} label={label} error={error} helperText={helperText} required={required} disabled={disabled} className={className} />
+    );
+  }
 
   const baseInput = (
-    <div className="relative flex items-center w-full">
-      {leadingIcon && (
-        <div className="absolute left-3 text-muted-foreground pointer-events-none flex items-center">
-          <Icon name={leadingIcon} size={15} />
-        </div>
-      )}
-      <input
-        ref={ref}
-        id={inputId}
-        type={type}
-        disabled={disabled}
-        required={required}
-        aria-invalid={!!error}
-        aria-describedby={error ? `${inputId}-error` : undefined}
-        className={`w-full rounded-lg border bg-background px-3 text-sm shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border,box-shadow] text-foreground placeholder:text-muted-foreground/70 disabled:cursor-not-allowed disabled:opacity-50 h-9
-          ${leadingIcon ? 'pl-9' : ''}
-          ${trailingIcon ? 'pr-9' : ''}
-          ${
-            error
-              ? 'border-2 border-destructive bg-destructive/5 ring-2 ring-destructive/20 focus:border-destructive focus:ring-2 focus:ring-destructive/30'
-              : 'border-border hover:border-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20'
-          }
-          ${className}
-        `}
-        {...rest}
-      />
-      {trailingIcon && (
-        <div className="absolute right-3 text-muted-foreground pointer-events-none flex items-center">
-          <Icon name={trailingIcon} size={15} />
-        </div>
-      )}
-    </div>
+    <BefInput
+      ref={ref}
+      id={inputId}
+      type={isPassword && visible ? 'text' : type}
+      disabled={disabled}
+      required={required}
+      aria-invalid={!!error}
+      aria-describedby={error ? `${inputId}-error` : undefined}
+      leftIcon={leadingIcon ? <Icon name={leadingIcon} size={15} /> : undefined}
+      rightSlot={trailing}
+      className={className}
+      {...rest}
+    />
   );
 
   if (label || helperText || error) {

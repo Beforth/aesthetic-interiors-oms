@@ -15,13 +15,25 @@ import Button from '../components/ui/Button';
 import { Avatar } from '../components/ui/avatar';
 import Modal from '../components/ui/Modal';
 import TaskAllocationModal from '../components/common/TaskAllocationModal';
-import { Leaderboard } from '../components/ui/leaderboard';
-import { Building2Icon, CalendarCheckIcon, CakeIcon } from '../components/ui/icons';
-import OverallProgressGraph from '../components/domain/OverallProgressGraph';
+import { Building2Icon, CalendarCheckIcon, TrendingIcon, TriangleAlertIcon, CalendarIcon } from '../components/ui/icons';
+import Card from '../components/ui/Card';
+import ProjectStems from '../components/domain/dashboard/ProjectStems';
+import StatCard from '../components/ui/StatCard';
 import HRWorkforceOverview from '../components/domain/HRWorkforceOverview';
+import HolidaySpotlight from '../components/domain/HolidaySpotlight';
+import ProjectList from '../components/domain/dashboard/ProjectList';
 
 const HEADER_ACTION_CLASS =
-  'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors shadow-2xs cursor-pointer';
+  'inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-full bg-card text-foreground border border-border hover:border-brand-300 transition-colors cursor-pointer';
+
+const isPresent = (a) => {
+  const s = String(a.status || '').toLowerCase();
+  const hasPunch = Boolean(a.checkInTime && a.checkInTime !== '-' && a.checkInTime !== '—');
+  return s === 'present' || s === 'late' || s === 'overtime' || s === 'half-day' || hasPunch;
+};
+
+/** Rupees in a few characters: lakhs and crores. */
+const shortRupees = (v) => (v >= 10000000 ? `₹${(v / 10000000).toFixed(2)} Cr` : v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : formatCurrency(v));
 
 export function DashboardPage() {
   const { currentUser, role, hasPermission } = useAuth();
@@ -32,7 +44,6 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isBirthdaysModalOpen, setIsBirthdaysModalOpen] = useState(false);
-  const [hoveredProject, setHoveredProject] = useState(null);
 
   const loadDashboardData = async () => {
     try {
@@ -107,17 +118,7 @@ export function DashboardPage() {
     return attendance.length > 0 ? attendance.length : users.filter((u) => u.role !== 'client').length;
   }, [attendance, users]);
 
-  const presentCount = useMemo(() => {
-    return attendance.filter((a) => {
-      const s = String(a.status || '').toLowerCase();
-      const hasPunch = Boolean(a.checkInTime && a.checkInTime !== '-' && a.checkInTime !== '—');
-      return s === 'present' || s === 'late' || s === 'overtime' || s === 'half-day' || hasPunch;
-    }).length;
-  }, [attendance]);
-
-  const absentCount = useMemo(() => {
-    return Math.max(0, totalStaffCount - presentCount);
-  }, [totalStaffCount, presentCount]);
+  const presentCount = useMemo(() => attendance.filter(isPresent).length, [attendance]);
 
   const currentMonth = new Date().getMonth();
   const currentMonthName = new Date().toLocaleString('en-US', { month: 'long' });
@@ -161,293 +162,193 @@ export function DashboardPage() {
       .sort((a, b) => a.birthDay - b.birthDay);
   }, [users, currentMonth, currentMonthShort, todayDate]);
 
-  // Compute Leaderboard ranking items for Project Execution & Process Tracker
-  const projectLeaderboardItems = useMemo(() => {
-    return activeProjects.map((proj) => {
-      const projProgress = calculateProgress(proj.stages || []);
-      const currentStage =
-        (proj.stages || []).find((s) => s.status === 'in progress') ||
-        (proj.stages || []).find((s) => s.status === 'pending') || {
-          name: 'Stage Initiation',
-          order: 1,
-        };
-      const completedCount = (proj.stages || []).filter((s) => s.status === 'completed').length;
+  // ---------------------------------------------------------------- figures for the charts
+  const liveProjects = useMemo(
+    () =>
+      activeProjects.map((p) => {
+        const target = p.targetDate || p.endDate || '';
+        const days = target ? Math.round((new Date(`${target}T00:00:00`) - new Date(new Date().toDateString())) / 86400000) : null;
+        return { id: p.id, name: p.name, client: p.clientName || 'Private client', progress: calculateProgress(p.stages || []), cost: Number(p.totalCost || p.budget || 0), target, days };
+      }),
+    [activeProjects]
+  );
 
-      return {
-        name: proj.name,
-        value: projProgress,
-        delta: completedCount > 0 ? completedCount : undefined,
-        subtitle: `Stage ${currentStage.order || '1'}: ${currentStage.name} • Client: ${proj.clientName || 'Private'} • Val: ${formatCurrency(proj.totalCost || proj.budget || 0)}`,
-        onClick: () => navigate(`/projects/${proj.id}`),
-        onMouseEnter: () => setHoveredProject({ name: proj.name, progress: projProgress }),
-        onMouseLeave: () => setHoveredProject(null),
-      };
-    });
-  }, [activeProjects, navigate]);
+  const portfolio = useMemo(() => {
+    const stages = activeProjects.flatMap((p) => p.stages || []);
+    const done = stages.filter((s) => s.status === 'done' || s.status === 'completed').length;
+    const average = liveProjects.length ? Math.round(liveProjects.reduce((sum, p) => sum + p.progress, 0) / liveProjects.length) : projects.length ? 100 : 0;
+    return { average, stagesDone: done, stagesTotal: stages.length, value: liveProjects.reduce((sum, p) => sum + p.cost, 0) };
+  }, [activeProjects, liveProjects, projects.length]);
 
-  // Calculate aggregate portfolio execution metrics for the Overall Progress graph
-  const overallPortfolioStats = useMemo(() => {
-    if (projects.length === 0) {
-      return {
-        percentage: 0,
-        activeCount: 0,
-        completedCount: 0,
-        totalMilestones: 0,
-        completedMilestones: 0,
-      };
-    }
+  const overdue = useMemo(() => liveProjects.filter((p) => p.days !== null && p.days < 0).sort((a, b) => a.days - b.days), [liveProjects]);
+  const upcoming = useMemo(() => liveProjects.filter((p) => p.days !== null && p.days >= 0).sort((a, b) => a.days - b.days), [liveProjects]);
 
-    let totalProgressSum = 0;
-    let totalMilestones = 0;
-    let completedMilestones = 0;
+  const chartItems = liveProjects
+    .slice()
+    .sort((a, b) => (a.target || '9999').localeCompare(b.target || '9999'))
+    .map((p) => ({ id: p.id, name: p.name, value: p.progress }));
+  const chartTop = Math.min(100, Math.max(20, Math.ceil(Math.max(0, ...chartItems.map((item) => item.value)) / 20) * 20));
 
-    activeProjects.forEach((p) => {
-      const prog = calculateProgress(p.stages || []);
-      totalProgressSum += prog;
-      const stages = p.stages || [];
-      totalMilestones += stages.length;
-      completedMilestones += stages.filter((s) => s.status === 'completed').length;
-    });
+  const userFirstName = currentUser?.name ? currentUser.name.trim().split(/\s+/)[0] : 'Partner';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const todayText = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const attendancePercent = totalStaffCount ? Math.round((presentCount / totalStaffCount) * 100) : 0;
+  const canSeeProjects = hasPermission('projects.viewAll');
+  const canSeeAttendance = hasPermission('attendance.viewBoard');
+  const canSeeHr = hasPermission('dashboard.hrOverview');
 
-    const avgProgress =
-      activeProjects.length > 0
-        ? Math.round(totalProgressSum / activeProjects.length)
-        : 100;
-
-    return {
-      percentage: avgProgress,
-      activeCount: activeProjects.length,
-      completedCount: completedProjects.length,
-      totalMilestones,
-      completedMilestones,
-    };
-  }, [projects, activeProjects, completedProjects]);
-
-  const userFirstName = currentUser?.name
-    ? currentUser.name.trim().split(/\s+/)[0]
-    : 'Partner';
+  const daysText = (days) => (days === 0 ? 'Due today' : days === 1 ? '1 day left' : `${days} days left`);
 
   return (
-    <div className="space-y-6">
-      {/* Top Welcome Header - Solid Clean Indigo Canvas */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-brand-900 text-white shadow-xs">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-            Welcome back, {userFirstName}!
+    <div className="rise space-y-4">
+      {/* Greeting, the date and the main actions */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground">
+            {greeting}, <span className="text-primary">{userFirstName}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-brand-200 mt-1">
-            Daily operations, projects, and workforce overview
+          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+            <CalendarIcon className="size-3.5 text-primary" />
+            {todayText}
           </p>
         </div>
-
-        {/* Header Action Buttons (No Logout button here - logout is located at user avatar icon in topbar) */}
-        <div className="flex items-center gap-2.5 flex-wrap self-start md:self-center">
-          {hasPermission('tasks.create') && (
-          <button
-            type="button"
-            onClick={() => setIsTaskModalOpen(true)}
-            className={HEADER_ACTION_CLASS}
-          >
-            <Icon name="plus" size={14} />
-            <span>Allocate Task</span>
-          </button>
-          )}
-
+        <div className="flex flex-wrap items-center gap-2">
           {hasPermission('attendance.markOwn') && (
-          <Link
-            to="/attendance"
-            className={HEADER_ACTION_CLASS}
-          >
-            <span className="size-2 rounded-full bg-success animate-pulse" />
-            <span>Mark Attendance</span>
-          </Link>
+            <Link to="/attendance" className={HEADER_ACTION_CLASS}>
+              <span className="size-2 rounded-full bg-success" />
+              <span>Mark Attendance</span>
+            </Link>
           )}
-
-          {hasPermission('projects.create') && (
-          <Link
-            to="/projects"
-            className={HEADER_ACTION_CLASS}
-          >
-            <Icon name="plus" size={14} />
-            <span>New Site</span>
-          </Link>
+          {hasPermission('tasks.create') && (
+            <Button variant="primary" size="sm" leadingIcon="plus" onClick={() => setIsTaskModalOpen(true)}>
+              Allocate Task
+            </Button>
           )}
         </div>
       </div>
 
-      {/* 3 Fresh Clean Stat Cards - Solid Modern Styling */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: Active Projects (Brand Indigo) */}
-        {hasPermission('projects.viewAll') && (
-        <div className="flex flex-col p-4 rounded-2xl bg-surface border border-border hover:border-brand-300 shadow-2xs transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Total Projects
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 border border-brand-200 flex items-center justify-center">
-              <Building2Icon className="size-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">{projects.length}</span>
-          </div>
-          <p className="text-[11px] text-text-muted mt-auto pt-1 truncate">
-            {activeProjects.length} live sites • {completedProjects.length} delivered
-          </p>
-        </div>
-        )}
-
-        {/* Card 2: Today's Attendance (Emerald) */}
-        {hasPermission('attendance.viewBoard') && (
-        <div className="flex flex-col p-4 rounded-2xl bg-surface border border-border hover:border-emerald-300 shadow-2xs transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Today's Attendance
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center">
-              <CalendarCheckIcon className="size-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">{presentCount}</span>
-            <span className="text-xs text-text-muted font-medium">Present / {totalStaffCount} Staff</span>
-          </div>
-          <p className="text-[11px] text-text-muted mt-auto pt-1 truncate">
-            {absentCount} absent from attendance muster
-          </p>
-        </div>
-        )}
-
-        {/* Card 3: Upcoming Employee Birthdays */}
-        {hasPermission('dashboard.birthdays') && (
-        <div className="flex flex-col p-4 rounded-2xl bg-surface border border-border hover:border-pink-300 shadow-2xs transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Birthdays ({currentMonthName})
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 border border-pink-200 flex items-center justify-center">
-              <CakeIcon className="size-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-text-main">
-              {monthlyBirthdays.length}
-            </span>
-          </div>
-          <div className="mt-auto pt-1 text-[11px] text-text-muted truncate">
-            {monthlyBirthdays.length > 0 ? (
-              <div className="flex items-center gap-1.5 truncate">
-                <span className="font-semibold text-text-main truncate">
-                  {monthlyBirthdays[0].name} ({monthlyBirthdays[0].displayDate})
-                </span>
-                {monthlyBirthdays.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsBirthdaysModalOpen(true)}
-                    className="text-pink-600 font-medium hover:underline shrink-0 cursor-pointer"
-                  >
-                    +{monthlyBirthdays.length - 1} more
-                  </button>
-                )}
-              </div>
-            ) : (
-              <span>No employee birthdays in {currentMonthName}</span>
-            )}
-          </div>
-        </div>
-        )}
-
-      </div>
-
-      {hasPermission('projects.viewAll') && (
-      <>
-      {/* Main Grid: Left Column (Project Process + Graphs + Tasks), Right Column (Today's Attendance + Operational Notes) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (2 Cols wide) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* SECTION 1: Project Execution & Process Tracker */}
-          <div className="p-5 bg-surface rounded-2xl border border-border shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-text-main flex items-center gap-2">
-                  <span className="size-2.5 rounded-full bg-primary" />
-                  <span>Project Tracker</span>
-                </h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Real-time milestone velocity ranking, progress bars, and hand-off status
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Link
-                  to="/projects"
-                  className="text-xs text-brand-600 hover:text-brand-700 font-semibold underline-offset-2 hover:underline self-start sm:self-auto cursor-pointer"
-                >
-                  All Projects →
-                </Link>
-              </div>
-            </div>
-
-            {activeProjects.length === 0 ? (
-              <div className="p-8 text-center text-xs text-text-muted bg-brand-50/50 rounded-xl">
-                No active projects found.
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  'pr-1 scrollbar-thin transition-all',
-                  activeProjects.length > 4
-                    ? 'max-h-[296px] overflow-y-auto'
-                    : 'overflow-visible'
-                )}
-              >
-                <Leaderboard
-                  items={projectLeaderboardItems}
-                  format={(val) => `${val}%`}
-                  maxValue={100}
-                  className="gap-2.5"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column (1 Col wide): Overall Portfolio Progress */}
-        <div className="space-y-6">
-          {/* OVERALL PORTFOLIO PROGRESS: Fluid Organic Progress Visualizer */}
-          <OverallProgressGraph
-            percentage={hoveredProject ? hoveredProject.progress : overallPortfolioStats.percentage}
-            previewProjectName={hoveredProject ? hoveredProject.name : null}
-            activeCount={overallPortfolioStats.activeCount}
-            completedCount={overallPortfolioStats.completedCount}
-            totalMilestones={overallPortfolioStats.totalMilestones}
-            completedMilestones={overallPortfolioStats.completedMilestones}
+      {/* Headline figures; the first is filled blue */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {canSeeProjects && (
+          <StatCard
+            label="Work done"
+            icon={<TrendingIcon />}
+            value={`${portfolio.average}%`}
+            progress={portfolio.average}
+            onClick={() => navigate('/projects')}
           />
-        </div>
+        )}
+        {canSeeProjects && (
+          <StatCard
+            label="Live sites"
+            icon={<Building2Icon />}
+            value={activeProjects.length}
+            subtext={`${shortRupees(portfolio.value)} in contracts`}
+            onClick={() => navigate('/projects')}
+          />
+        )}
+        {canSeeAttendance && (
+          <StatCard
+            label="Present today"
+            icon={<CalendarCheckIcon />}
+            value={`${presentCount}/${totalStaffCount}`}
+            subtext={`${attendancePercent}% of staff`}
+            onClick={() => navigate('/attendance')}
+          />
+        )}
+        {canSeeProjects && (
+          <StatCard
+            label="Overdue sites"
+            icon={<TriangleAlertIcon />}
+            value={overdue.length}
+            subtext={overdue.length ? `Oldest by ${Math.abs(overdue[0].days)} days` : 'All on time'}
+            subtextClassName={overdue.length ? 'text-destructive' : ''}
+            onClick={() => navigate('/projects')}
+          />
+        )}
       </div>
-      </>
+
+      {/* Every live site against the average */}
+      {canSeeProjects && (
+        <Card title="Site progress" subtitle={`Blue sites are at or above the ${portfolio.average}% average`}>
+          {chartItems.length === 0 ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">{loading ? 'Loading sites…' : 'No live sites yet.'}</p>
+          ) : (
+            <ProjectStems
+              items={chartItems}
+              max={chartTop}
+              average={portfolio.average}
+              format={(v) => `${Math.round(v)}%`}
+              onSelect={(item) => navigate(`/projects/${item.id}`)}
+            />
+          )}
+        </Card>
       )}
 
-      {hasPermission('dashboard.hrOverview') && (
-      <>
-      {/* Workforce & HR Operations (Recent Employees, Total Employees, Leave Applications, Holidays) */}
-      <div className="border-t border-border/80 pt-6 space-y-4">
-        <div>
-          <h2 className="text-base font-bold text-text-main flex items-center gap-2">
-            <span className="size-2.5 rounded-full bg-info" />
-            <span>Workforce & HR Operations</span>
-          </h2>
-          <p className="text-xs text-text-muted mt-0.5">
-            Staff directory arrivals, leave workflow statuses, and upcoming holiday schedule
-          </p>
-        </div>
-        <HRWorkforceOverview
-          users={users}
-          totalEmployees={users.filter((u) => u.role !== 'client' && u.status !== 'inactive').length}
-          onDataRefresh={loadDashboardData}
-        />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {canSeeProjects && (
+          <ProjectList
+            title="Next handovers"
+            projects={upcoming}
+            empty="No handovers coming up."
+            chip={(p) => daysText(p.days)}
+          />
+        )}
+
+        {canSeeProjects && (
+          <ProjectList
+            title="Needs attention"
+            tone="bad"
+            projects={overdue}
+            empty="Nothing is overdue."
+            chip={(p) => `${Math.abs(p.days)}d late`}
+          />
+        )}
+
+        {(canSeeHr || hasPermission('dashboard.birthdays')) && (
+          <div className="flex flex-col gap-4">
+            {canSeeHr && <HolidaySpotlight />}
+          {hasPermission('dashboard.birthdays') && (
+            <Card
+              className="flex-1"
+              title={`Birthdays in ${currentMonthName}`}
+              headerAction={
+                monthlyBirthdays.length > 0 && (
+                  <button type="button" onClick={() => setIsBirthdaysModalOpen(true)} className="cursor-pointer text-xs font-semibold text-primary hover:underline">
+                    View all
+                  </button>
+                )
+              }
+            >
+              {monthlyBirthdays.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">No birthdays in {currentMonthName}.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {monthlyBirthdays.slice(0, 3).map((u) => (
+                    <li key={u.id} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Avatar name={u.name} size="sm" className="shrink-0" />
+                        <span className="truncate text-[13px] font-semibold text-foreground">{u.name}</span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        {u.birthDay === todayDate ? 'Today' : u.displayDate}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
+          </div>
+        )}
       </div>
-      </>
+
+      {canSeeHr && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold text-foreground">Workforce &amp; HR</h2>
+          <HRWorkforceOverview users={users} onDataRefresh={loadDashboardData} />
+        </div>
       )}
 
       {/* Task Allocation Modal Dialog */}

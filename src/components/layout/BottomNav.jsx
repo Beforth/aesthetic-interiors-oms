@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getBottomNavForUser } from '../../config/navigation';
 import Icon from '../ui/Icon';
@@ -9,6 +9,7 @@ import Icon from '../ui/Icon';
  * Visible on mobile viewports (< 1024px).
  */
 export function BottomNav() {
+  const location = useLocation();
   const { hasPermission } = useAuth();
   const bottomItems = getBottomNavForUser(hasPermission);
 
@@ -23,6 +24,7 @@ export function BottomNav() {
         <NavLink
           key={item.id}
           to={item.path}
+          state={{ fresh: location.key }}
           className={({ isActive }) => `
             flex flex-col items-center justify-center flex-1 py-1.5 px-1 min-h-[44px] text-[11px] font-medium transition-colors select-none
             ${

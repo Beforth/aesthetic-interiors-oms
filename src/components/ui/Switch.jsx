@@ -1,63 +1,25 @@
 import React, { forwardRef, useId } from 'react';
+import { Switch as BefSwitch } from './befui-switch';
+import { cn } from '../../lib/utils';
 
-/**
- * Switch / Toggle toggle control.
- */
+/** BefUI's switch (https://befui.vercel.app/#/components/switch) with a label; `onChange` receives true or false. */
 export const Switch = forwardRef(function Switch(
-  {
-    label,
-    description,
-    checked = false,
-    onChange,
-    disabled = false,
-    className = '',
-    id,
-    ...rest
-  },
+  { label, description, checked = false, onChange, disabled = false, className = '', id, ...rest },
   ref
 ) {
   const generatedId = useId();
   const switchId = id || generatedId;
 
   return (
-    <label
-      htmlFor={switchId}
-      className={`inline-flex items-center gap-3 cursor-pointer select-none min-h-[44px] sm:min-h-0 ${
-        disabled ? 'opacity-50 cursor-not-allowed' : ''
-      } ${className}`}
-    >
-      <div className="relative">
-        <input
-          ref={ref}
-          id={switchId}
-          type="checkbox"
-          role="switch"
-          aria-checked={checked}
-          checked={checked}
-          onChange={(e) => onChange && onChange(e.target.checked)}
-          disabled={disabled}
-          className="sr-only peer"
-          {...rest}
-        />
-        <div
-          className={`w-11 h-6 rounded-full transition-colors ${
-            checked ? 'bg-primary' : 'bg-muted-foreground/30'
-          } peer-focus:ring-2 peer-focus:ring-ring/20`}
-        />
-        <div
-          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-card rounded-full shadow-sm transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </div>
-
+    <div className={cn('inline-flex min-h-[44px] items-center gap-3 sm:min-h-0', className)}>
+      <BefSwitch ref={ref} id={switchId} checked={checked} disabled={disabled} onCheckedChange={(next) => onChange?.(next)} {...rest} />
       {(label || description) && (
-        <div className="flex flex-col text-sm leading-tight">
+        <label htmlFor={switchId} className={cn('flex cursor-pointer select-none flex-col text-sm leading-tight', disabled && 'cursor-not-allowed opacity-50')}>
           {label && <span className="font-medium text-foreground">{label}</span>}
           {description && <span className="text-xs text-muted-foreground">{description}</span>}
-        </div>
+        </label>
       )}
-    </label>
+    </div>
   );
 });
 
